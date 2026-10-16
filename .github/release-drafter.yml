@@ -1,0 +1,43 @@
+# The draft of the next release (.github/workflows/release-drafter.yml): its number and the list of what
+# went into develop since the last release, from the pull requests' labels. The labels come from the
+# title (autolabeler below) and can be changed by hand. Publishing the draft releases (release.yml).
+name-template: 'v$RESOLVED_VERSION'
+tag-template: 'v$RESOLVED_VERSION'
+commitish: develop
+categories:
+  - title: Breaking
+    labels: [breaking]
+  - title: New
+    labels: [feature]
+  - title: Fixed
+    labels: [fix]
+exclude-labels: [intern]
+change-template: '- $TITLE (#$NUMBER)'
+change-title-escapes: '\<*_&'
+# The type in front of a title says which list it is in; the list itself does without it.
+replacers:
+  - search: '/^- (feat|fix|chore|refactor|docs|test|ci|build|perf|style)(\([^)]*\))?!?: /gm'
+    replace: '- '
+# A feature raises the minor number, fixes alone the patch number; the major number only when a feature
+# or a format to save in goes away (label breaking, from "feat!:" or set by hand).
+version-resolver:
+  major:
+    labels: [breaking]
+  minor:
+    labels: [feature]
+  patch:
+    labels: [fix]
+  default: patch
+autolabeler:
+  - label: breaking
+    title: ['/^[a-z]+(\([^)]*\))?!:/']
+  - label: feature
+    title: ['/^feat(\([^)]*\))?:/']
+  - label: fix
+    title: ['/^fix(\([^)]*\))?:/']
+  - label: intern
+    title: ['/^(chore|refactor|docs|test|ci|build|perf|style)(\([^)]*\))?:/']
+template: |
+  $CHANGES
+
+  All changes: https://github.com/$OWNER/$REPOSITORY/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION

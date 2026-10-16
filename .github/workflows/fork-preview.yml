@@ -46,7 +46,7 @@ jobs:
             --jq "map(select(.head.sha == \"$SHA\")) | .[0].number // empty")
           echo "number=$number" >> "$GITHUB_OUTPUT"
           echo "Pull request: ${number:-none open at $SHA}"
-      # Our own main branch: the Worker and its configuration never come from the fork.
+      # Our own default branch (develop): the Worker and its configuration never come from the fork.
       - if: steps.pr.outputs.number
         uses: actions/checkout@v4
       - if: steps.pr.outputs.number

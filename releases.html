@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>heatstitch: what is new</title>
+    <meta name="description" content="What changed in each version of heatstitch, the free embroidery software in your browser: new tools, stitch types and fixes." />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://heatstitch.app/releases.html" />
+    <meta name="theme-color" content="#0b1424" />
+    <meta name="color-scheme" content="light dark" />
+    <link rel="icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="heatstitch" />
+    <meta property="og:url" content="https://heatstitch.app/releases.html" />
+    <meta property="og:title" content="heatstitch: what is new" />
+    <meta property="og:description" content="What changed in each version of heatstitch." />
+    <meta property="og:image" content="https://heatstitch.app/og-image.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="An embroidered cat in heatstitch, shown three ways: realistic threads, sewing order and density heatmap" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:locale:alternate" content="de_DE" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="https://heatstitch.app/og-image.jpg" />
+    <meta name="twitter:image:alt" content="An embroidered cat in heatstitch, shown three ways: realistic threads, sewing order and density heatmap" />
+  </head>
+  <body>
+    <header class="doc-top" id="top">
+      <a class="doc-brand" href="./">
+        <img src="/favicon.svg" alt="" width="26" height="26" />
+        <span>heatstitch</span>
+      </a>
+      <nav>
+        <a class="doc-link" href="docs.html"><span lang="de">Anleitung</span><span lang="en">Guide</span></a>
+        <a class="doc-open" href="./"><span lang="de">App öffnen</span><span lang="en">Open the app</span></a>
+        <select id="lang" aria-label="Language">
+          <option value="de">Deutsch</option>
+          <option value="en">English</option>
+        </select>
+      </nav>
+    </header>
+
+    <main class="doc releases">
+      <!-- Both languages are written here; the build makes releases.html (English) and de/releases.html (German) with one each.
+           The versions come from CHANGELOG.md (src/build/changelog.ts). -->
+      <p class="lang-hint" id="lang-hint" hidden></p>
+      <article lang="de">
+        <h1>Neu in heatstitch</h1>
+        <p class="lead">Was sich mit jeder Version geändert hat, die neueste zuerst. heatstitch aktualisiert sich von selbst: Gibt es eine neue Version, fragt die App, ob sie neu laden soll.</p>
+        <!-- releases de -->
+      </article>
+      <article lang="en">
+        <h1>What is new in heatstitch</h1>
+        <p class="lead">What changed with each version, newest first. heatstitch updates itself: when there is a new version, the app asks whether to reload.</p>
+        <!-- releases en -->
+      </article>
+    </main>
+    <footer class="doc-foot">
+      <a href="privacy.html"><span lang="de">Datenschutz</span><span lang="en">Privacy</span></a>
+    </footer>
+    <script type="module" src="/src/releasesPage.ts"></script>
+  </body>
+</html>

@@ -708,14 +708,20 @@ single stitches and the density check;
 designs or writers: `UPDATE_DEMOS=1 npm test`. The guide images live in `public/guide/` and are not
 precached.
 
-## Deployment
+## Deployment and releases
 
 `.github/workflows/deploy.yml` tests and builds every push. The site is served by Cloudflare at
 <https://heatstitch.app/>, as the static assets of a Worker (`wrangler.jsonc`, `cloudflare/worker.js`):
-every file at exactly its path, `/` and `/de/` get their `index.html`. Pushes to `main` deploy there;
-every pull request gets a preview version at `https://pr-N-heatstitch.<account>.workers.dev` (linked
-in a PR comment), an address of its own that never reaches heatstitch.app. Fork pull requests get theirs
-from `.github/workflows/fork-preview.yml`.
+every file at exactly its path, `/` and `/de/` get their `index.html`. Work goes into `develop`, which
+is live at <https://beta.heatstitch.app/> after every merge (a second Worker, `env.beta` in
+`wrangler.jsonc`, with its own storage). heatstitch.app only changes with a release: publishing the
+draft release on GitHub (kept up to date by `.github/workflows/release-drafter.yml`) tags the version,
+and `.github/workflows/release.yml` builds that commit, deploys it and moves `main` to it. Versions
+follow Semantic Versioning, the notes for users are in [CHANGELOG.md](CHANGELOG.md) and on the page
+*What is new* (`releases.html`); see [CONTRIBUTING.md](CONTRIBUTING.md#releases). Every pull request
+gets a preview version at `https://pr-N-heatstitch.<account>.workers.dev` (linked in a PR comment), an
+address of its own that never reaches heatstitch.app. Fork pull requests get theirs from
+`.github/workflows/fork-preview.yml`.
 
 The old address <https://pfedan.github.io/heatstitch/> (the `gh-pages` branch, *Settings → Pages →
 Deploy from a branch*) carries the moving page from `tools/moved/`. Browsers keep stored files per
@@ -724,7 +730,8 @@ heatstitch.app in a small window, which writes it there. Its `sw.js` replaces th
 so installed copies update too, and every old link goes to the same page at the new address.
 
 One-time setup: the repository secrets `CLOUDFLARE_API_TOKEN` (template *Edit Cloudflare Workers*)
-and `CLOUDFLARE_ACCOUNT_ID`. The first deploy creates the Worker and connects heatstitch.app.
+and `CLOUDFLARE_ACCOUNT_ID`. The first deploy creates the Worker and connects heatstitch.app; the first
+push to `develop` does the same for heatstitch-beta and beta.heatstitch.app.
 
 ## Format notes
 

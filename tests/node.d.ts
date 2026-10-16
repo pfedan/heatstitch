@@ -9,6 +9,9 @@ declare module 'node:fs' {
   export function readFileSync(path: URL | string, encoding: 'utf8'): string;
   export function writeFileSync(path: URL | string, data: Uint8Array | string): void;
 }
+declare module 'node:child_process' {
+  export function execFileSync(file: string, args: string[], opts: { encoding: 'utf8'; stdio?: unknown }): string;
+}
 declare module 'node:os' {
   export function tmpdir(): string;
 }

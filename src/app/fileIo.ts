@@ -17,6 +17,7 @@ import { SUPPORTED_EXTENSIONS } from '../parsers';
 import { toast } from '../shell/ui';
 import { initFilesArea } from '../areas/files/files';
 import { imageTarget } from './imageTarget';
+import { APP_CHANNEL } from '../ui/version';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -183,7 +184,9 @@ export function bindFileIo(app: FileIoApp) {
       project = await decodeProject(new Uint8Array(await file.arrayBuffer()));
     } catch (err) {
       console.warn('Could not open the project', err);
-      app.files.addError(file.name, t(err instanceof ProjectError && err.reason === 'newer' ? 'project.error.newer' : 'project.error.invalid'));
+      const newer = err instanceof ProjectError && err.reason === 'newer';
+      // On heatstitch.app a newer file most likely comes from the beta, which is ahead of the last release.
+      app.files.addError(file.name, t(!newer ? 'project.error.invalid' : APP_CHANNEL === 'release' ? 'project.error.newer.release' : 'project.error.newer'));
       if (app.settings.mode === 'image') app.setMode('flow');
       return;
     }

@@ -8,14 +8,27 @@ import { watchPage } from './src/build/watchPage';
 import { sitemap } from './src/build/sitemap';
 import { videoByKey, VIDEOS, watchPath } from './src/videos/catalog';
 import { APP_NAVIGATION, APP_PAGES } from './src/build/pageCache';
+import { expandReleases, parseChangelog, shownReleases } from './src/build/changelog';
+import { buildChannel, buildVersion } from './src/build/version';
 
-// The site lives at the root of heatstitch.app; pull request previews get their own address
-// (see .github/workflows/deploy.yml), so every build uses the same base. PREVIEW=1 marks a preview build.
+// The site lives at the root of heatstitch.app; the beta (beta.heatstitch.app) and pull request previews
+// get their own address (see .github/workflows/deploy.yml), so every build uses the same base.
+// CHANNEL says which one a build is for (release, beta, preview, dev; PREVIEW=1 is preview), see src/build/version.ts.
 const base = '/';
-const isPreview = !!process.env.PREVIEW;
+const channel = buildChannel(process.env);
+const isPreview = channel === 'preview';
+const version = buildVersion(process.env);
 
 const pageOf = (file: string): Page =>
-  file.endsWith('docs.html') ? 'docs' : file.endsWith('videos.html') ? 'videos' : file.endsWith('privacy.html') ? 'privacy' : 'app';
+  file.endsWith('docs.html')
+    ? 'docs'
+    : file.endsWith('videos.html')
+      ? 'videos'
+      : file.endsWith('releases.html')
+        ? 'releases'
+        : file.endsWith('privacy.html')
+          ? 'privacy'
+          : 'app';
 
 /**
  * The app and the guide once per language: English at their address, German under de/ (see
@@ -28,7 +41,7 @@ const langPages: Plugin = {
   generateBundle: {
     order: 'post',
     handler(_, bundle) {
-      for (const file of ['index.html', 'docs.html', 'videos.html', 'privacy.html']) {
+      for (const file of ['index.html', 'docs.html', 'videos.html', 'releases.html', 'privacy.html']) {
         const asset = bundle[file];
         if (asset?.type !== 'asset') throw new Error(`lang-pages: ${file} is not in the build`);
         const html = String(asset.source);
@@ -66,7 +79,7 @@ const langPages: Plugin = {
         res.end(sitemap());
         return;
       }
-      const m = /^\/de\/(index\.html|docs\.html|videos\.html|privacy\.html)?(?:[?#]|$)/.exec(path);
+      const m = /^\/de\/(index\.html|docs\.html|videos\.html|releases\.html|privacy\.html)?(?:[?#]|$)/.exec(path);
       if (!m) return next();
       const file = m[1] ?? 'index.html';
       const html = await server.transformIndexHtml(`/${file}`, new TextDecoder().decode(readFileSync(new URL(file, import.meta.url))), req.originalUrl);
@@ -82,13 +95,36 @@ const videoPages: Plugin = {
   transformIndexHtml: { order: 'pre', handler: (html) => expandVideos(html) },
 };
 
+/**
+ * The release notes (releases.html) from CHANGELOG.md. The beta and the previews show what is not
+ * released yet on top; a release build shows the notes waiting under [Unreleased] as its own version.
+ */
+const releasePages: Plugin = {
+  name: 'release-pages',
+  transformIndexHtml: {
+    order: 'pre',
+    handler(html) {
+      if (!html.includes('<!-- releases ')) return html;
+      const all = parseChangelog(readFileSync(new URL('CHANGELOG.md', import.meta.url), 'utf8'));
+      const today = new Date().toISOString().slice(0, 10);
+      return expandReleases(html, shownReleases(all, { unreleased: channel !== 'release', version: channel === 'release' ? version : undefined, today }));
+    },
+  },
+};
+
 export default defineConfig({
   base,
+  // The version and where the build runs, for the app's menu and the beta's badge (src/ui/version.ts).
+  define: {
+    'import.meta.env.APP_VERSION': JSON.stringify(version),
+    'import.meta.env.APP_CHANNEL': JSON.stringify(channel),
+  },
   plugins: [
     videoPages,
+    releasePages,
     langPages,
-    // Search engines should only index the real site, not the previews.
-    isPreview && {
+    // Search engines should only index the real site, not the beta or the previews.
+    (isPreview || channel === 'beta') && {
       name: 'preview-noindex',
       transformIndexHtml: (html: string) =>
         html.replace('<meta name="robots" content="index, follow" />', '<meta name="robots" content="noindex" />'),
@@ -162,7 +198,7 @@ export default defineConfig({
   ],
   build: {
     rollupOptions: {
-      input: { main: 'index.html', docs: 'docs.html', videos: 'videos.html', privacy: 'privacy.html', watch: 'video.html' },
+      input: { main: 'index.html', docs: 'docs.html', videos: 'videos.html', releases: 'releases.html', privacy: 'privacy.html', watch: 'video.html' },
     },
   },
   worker: { format: 'es' },

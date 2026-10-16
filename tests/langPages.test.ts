@@ -4,7 +4,7 @@ import { hreflangLinks, langPage, SITE, type Page } from '../src/build/langPages
 import { email } from '../src/privacyContact';
 
 const read = (f: string) => new TextDecoder().decode(readFileSync(new URL(`../${f}`, import.meta.url)));
-const source: Record<Page, string> = { app: read('index.html'), docs: read('docs.html'), videos: read('videos.html'), privacy: read('privacy.html') };
+const source: Record<Page, string> = { app: read('index.html'), docs: read('docs.html'), videos: read('videos.html'), releases: read('releases.html'), privacy: read('privacy.html') };
 const head = (html: string) => html.slice(0, html.indexOf('</head>'));
 const meta = (html: string, key: string) => new RegExp(`<meta (?:name|property)="${key}" content="([^"]*)"`).exec(html)?.[1];
 
