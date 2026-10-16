@@ -30,6 +30,14 @@ export class Viewport {
     this.scale = next;
   }
 
+  /**
+   * The stage changed from w0 x h0 to w x h pixels (a panel opened or closed, the mode changed):
+   * keep the world point at its center where it was, so what was in the middle stays there.
+   */
+  resized(w0: number, h0: number, w: number, h: number): void {
+    this.pan((w - w0) / 2, (h - h0) / 2);
+  }
+
   pan(dx: number, dy: number): void {
     this.offsetX += dx;
     this.offsetY += dy;
