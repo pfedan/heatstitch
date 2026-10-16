@@ -32,6 +32,7 @@ import { drawDivider, drawPanels } from './render/compare';
 import { STITCH, type Pattern, type ThreadColor } from './model/pattern';
 import type { Measurement } from './validation/measure';
 import { initUpdateNotice } from './ui/updateNotice';
+import { initVersion } from './ui/version';
 import { bindFileIo } from './app/fileIo';
 import { installDevConsole } from './dev/console';
 import { ImageMode } from './ui/imageMode';
@@ -89,6 +90,7 @@ import { geoUse, sewnAlong } from './model/geo';
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
 initUpdateNotice($('update-notice'));
+initVersion($<HTMLAnchorElement>('releases-link'), $('app-version'), $<HTMLAnchorElement>('beta-badge'));
 const stage = $<HTMLElement>('stage');
 const canvas = $<HTMLCanvasElement>('canvas');
 const ctx = canvas.getContext('2d')!;

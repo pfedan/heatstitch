@@ -10,7 +10,7 @@
  */
 
 export type Lang = 'de' | 'en';
-export type Page = 'app' | 'docs' | 'videos' | 'privacy';
+export type Page = 'app' | 'docs' | 'videos' | 'releases' | 'privacy';
 
 export const SITE = 'https://heatstitch.app/';
 
@@ -42,6 +42,12 @@ const DE: Record<Page, { title: string; description: string; ogTitle: string; og
       'Kurze Videos mit Stimme zeigen heatstitch Schritt für Schritt: die Oberfläche, ein erstes Stickmuster, Schrift, Bilder zu Stichen, Objekte und Reihenfolge, Stickdateien öffnen und prüfen, Dichte beheben, Sprünge und Schnitte, Speichern, Füllungen, Satin und einzelne Stiche.',
     ogTitle: 'heatstitch in Videos: kurze Anleitungen zum Sticken',
     ogDescription: 'Kurze Videos von zwei bis drei Minuten, mit den Dateien zum Mitmachen: vom ersten Stickmuster bis zur fertigen Stickdatei.',
+  },
+  releases: {
+    title: 'heatstitch: Neu in heatstitch',
+    description: 'Was sich mit jeder Version von heatstitch geändert hat, der kostenlosen Sticksoftware im Browser: neue Werkzeuge, Sticharten und Fehlerbehebungen.',
+    ogTitle: 'heatstitch: Neu in heatstitch',
+    ogDescription: 'Was sich mit jeder Version von heatstitch geändert hat.',
   },
   privacy: {
     title: 'heatstitch: Datenschutz',
@@ -113,7 +119,7 @@ function german(html: string, page: Page): string {
     out = setMeta(out, 'twitter:title', t.ogTitle);
     out = setMeta(out, 'twitter:description', t.ogDescription);
   }
-  // "./" (the app), "docs.html" (the guide), "videos.html", "privacy.html" and the pages of the videos
+  // "./" (the app), "docs.html" (the guide), "videos.html", "releases.html", "privacy.html" and the pages of the videos
   // ("videos/<key>.html") stay in de/; files of the site are one folder up.
-  return out.replace(/(\s(?:href|src)=")(?!https?:|\/|#|data:|mailto:|\.\/|(?:docs|videos|privacy)\.html|videos\/)([^"]+")/g, '$1../$2');
+  return out.replace(/(\s(?:href|src)=")(?!https?:|\/|#|data:|mailto:|\.\/|(?:docs|videos|releases|privacy)\.html|videos\/)([^"]+")/g, '$1../$2');
 }

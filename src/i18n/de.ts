@@ -17,6 +17,9 @@ import { de as library } from './areas/library';
 export const deBase = {
   'app.docs': 'Anleitung',
   'app.privacy': 'Datenschutz',
+  'app.releases': 'Was ist neu',
+  'beta.badge': 'Beta',
+  'beta.hint': 'Neuester Entwicklungsstand. Deine Entwürfe hier sind getrennt von heatstitch.app.',
   'files.title': 'Dateien',
   'files.privacy': 'Deine Dateien verlassen nie dein Gerät.',
   'files.privacy.detail': 'Alles bleibt in deinem Browser. Kein Server, kein Tracking.',
@@ -366,6 +369,7 @@ export const deBase = {
   'save.project.hint': 'Speichert alles zum Weiterarbeiten, ohne den Rückgängig-Verlauf.',
   'project.error.invalid': 'Keine heatstitch-Projektdatei oder beschädigt',
   'project.error.newer': 'Mit einer neueren heatstitch-Version gespeichert; bitte die Seite neu laden',
+  'project.error.newer.release': 'Mit einer neueren heatstitch-Version gespeichert, etwa der Beta; öffne die Datei auf beta.heatstitch.app',
   'compare.title': 'Vergleich',
   'compare.start': 'Mit Original vergleichen (c)',
   'compare.stop': 'Vergleich beenden (c)',

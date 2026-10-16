@@ -59,7 +59,7 @@ describe('the page of each video (for search engines)', () => {
   it('the sitemap lists every page and, on the page of each video, the video with its thumbnail', () => {
     const xml = sitemap();
     expect(xml).toContain('xmlns:video="http://www.google.com/schemas/sitemap-video/1.1"');
-    for (const page of ['', 'de/', 'docs.html', 'de/docs.html', 'videos.html', 'de/videos.html']) expect(xml).toContain(`<loc>https://heatstitch.app/${page}</loc>`);
+    for (const page of ['', 'de/', 'docs.html', 'de/docs.html', 'videos.html', 'de/videos.html', 'releases.html', 'de/releases.html']) expect(xml).toContain(`<loc>https://heatstitch.app/${page}</loc>`);
     for (const v of VIDEOS)
       for (const lang of ['en', 'de'] as const) {
         const loc = `<loc>https://heatstitch.app/${watchPath(v.key, lang)}</loc>`;
@@ -70,6 +70,6 @@ describe('the page of each video (for search engines)', () => {
         expect(entry).toMatch(/<video:title>[^<]+<\/video:title>/);
         expect(entry).toMatch(/<video:description>[^<]+<\/video:description>/);
       }
-    expect(xml.split('<url>').length - 1).toBe(6 + 2 * VIDEOS.length);
+    expect(xml.split('<url>').length - 1).toBe(8 + 2 * VIDEOS.length);
   });
 });

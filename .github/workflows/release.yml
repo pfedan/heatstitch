@@ -1,0 +1,123 @@
+name: Release
+
+# Publishing a release on GitHub puts that version on https://heatstitch.app. The release is the draft
+# that release-drafter.yml keeps up to date with every merge into develop; publishing it creates the tag
+# vX.Y.Z on the newest develop commit (or on main for a hotfix, see CONTRIBUTING). This then:
+#   1. waits for the checks of that commit ("CI and Pages") and stops if they failed,
+#   2. builds exactly that commit with its version (src/build/version.ts) and puts it on heatstitch.app,
+#   3. writes the release's notes from CHANGELOG.md on top of the list of pull requests,
+#   4. moves main to the release.
+# A pre-release (vX.Y.Z-rc.N, "Set as a pre-release") only goes to beta.heatstitch.app, to try this out.
+# Everything happens here and not through a push to main: a push made with this workflow's token
+# starts no other workflow.
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+    env:
+      TAG: ${{ github.event.release.tag_name }}
+      PRERELEASE: ${{ github.event.release.prerelease }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 0
+
+      - name: Check the version
+        run: |
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
+            echo "::error::The tag $TAG is not a version like v1.2.0. Delete this release and its tag, then publish it again with a tag like that."
+            exit 1
+          fi
+
+      # Only a commit whose checks passed goes live: the run of the push that brought it into develop (or
+      # main, for a hotfix). One still going is waited for.
+      - name: Wait for the checks of this commit
+        run: |
+          sha=$(git rev-parse HEAD)
+          run=$(gh run list --workflow deploy.yml --commit "$sha" --event push --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          if [ -z "$run" ]; then
+            echo "::error::No checks ran for $sha on develop or main. A release has to point at a commit of develop (or of main for a hotfix)."
+            exit 1
+          fi
+          if ! gh run watch "$run" --exit-status --interval 30 > /dev/null; then
+            echo "::error::The checks of $sha failed (run $run). Fix them on develop, delete this release and its tag, and publish again."
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+        env:
+          CHANNEL: ${{ github.event.release.prerelease && 'beta' || 'release' }}
+          HEATSTITCH_VERSION: ${{ github.event.release.tag_name }}
+
+      - name: Put it on heatstitch.app
+        if: ${{ !github.event.release.prerelease }}
+        run: npx --yes wrangler@4.149.0 deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Put the pre-release on beta.heatstitch.app
+        if: ${{ github.event.release.prerelease }}
+        run: npx --yes wrangler@4.149.0 deploy --env beta
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      # Only once heatstitch.app is up: the old address becomes the moving page (tools/moved/), which takes
+      # stored designs along and sends every old link to the same page there. Rewritten whole each time.
+      - if: ${{ !github.event.release.prerelease }}
+        run: node tools/moved/build.mjs dist-moved
+      - if: ${{ !github.event.release.prerelease }}
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: dist-moved
+          branch: gh-pages
+          clean: true
+          single-commit: true
+
+      # The notes for people who use heatstitch, in German and English, from this version's section of
+      # CHANGELOG.md (or [Unreleased], if nobody gave it its number yet), above release-drafter's list.
+      - name: Write the release notes
+        run: |
+          section() { awk -v v="$1" '/^## \[/ { if (f) exit; f = index($0, "## [" v "]") == 1; next } f' CHANGELOG.md; }
+          notes=$(section "${TAG#v}")
+          [ -n "$(printf '%s' "$notes" | tr -d '[:space:]')" ] || notes=$(section Unreleased)
+          body=$(gh release view "$TAG" --json body --jq .body)
+          case "$body" in *'<!-- changelog -->'*) exit 0 ;; esac
+          printf '%s\n\n<!-- changelog -->\n\n---\n\n%s\n' "$notes" "$body" > notes.md
+          gh release edit "$TAG" --notes-file notes.md
+
+      # main is always the newest release: moved ahead to it, or after a hotfix (main went its own way)
+      # with a merge, which keeps everyone's checkout of main valid.
+      - name: Move main to the release
+        if: ${{ !github.event.release.prerelease }}
+        run: |
+          git fetch origin main
+          if git merge-base --is-ancestor origin/main HEAD; then
+            git push origin HEAD:refs/heads/main
+          else
+            git checkout -B main origin/main
+            git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+              merge --no-ff "$TAG" -m "Release $TAG"
+            git push origin main
+          fi

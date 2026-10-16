@@ -50,8 +50,9 @@ scripts/        Test helpers outside Vitest (pystitch oracle, test timings)
 docs/           Terms (terms.md), session recording, screencast scripts, screenshots
 design-system/  The UI design system (MASTER.md) and interface concept
 cloudflare/     The Worker that serves the site and the page of closed PR previews
-index.html, docs.html, videos.html, video.html
-                The app, the guide, the video page and the per-video template
+index.html, docs.html, videos.html, video.html, releases.html
+                The app, the guide, the video page, the per-video template and what is new
+CHANGELOG.md    The release notes, both languages (releases.html, GitHub releases)
 ```
 
 ## The data model (`src/model/`)
@@ -237,16 +238,21 @@ shapes, rungs, editing, validation zones, the hoop, measuring and the compare vi
 
 ## Guide, videos and build
 
-`docs.html` (guide), `videos.html`, `video.html` and `privacy.html` (privacy policy) are
-separate pages with their own entry scripts (`src/docs.ts`, `src/videosPage.ts`, `src/videoWatch.ts`,
-`src/privacyPage.ts`). The Vite build
+`docs.html` (guide), `videos.html`, `video.html`, `releases.html` (what is new) and `privacy.html`
+(privacy policy) are separate pages with their own entry scripts (`src/docs.ts`, `src/videosPage.ts`,
+`src/videoWatch.ts`, `src/releasesPage.ts`, `src/privacyPage.ts`). The Vite build
 (`vite.config.ts`) writes every page once per language: English at the root, German under `de/`
 (`src/build/langPages.ts`), plus one page per video and `sitemap.xml`. `vite-plugin-pwa` makes the
 app installable and offline capable.
 
+`releases.html` (what is new) is written from `CHANGELOG.md` by `src/build/changelog.ts`. The build
+also sets the version and where it runs (`src/build/version.ts`: release, beta, preview or dev, from
+the git tag and `CHANNEL`), which the app shows in its menu and as the beta badge (`src/ui/version.ts`).
+
 `.github/workflows/deploy.yml` runs the tests (sharded, plus browser tests, the pystitch oracle and
-the correction benchmark), builds the site and deploys it to Cloudflare (`wrangler.jsonc`). Every
-pull request gets a preview at its own address; see CONTRIBUTING.
+the correction benchmark), builds the site and deploys `develop` to beta.heatstitch.app (Cloudflare,
+`wrangler.jsonc`). heatstitch.app gets a published release (`release.yml`). Every pull request gets a
+preview at its own address; see CONTRIBUTING.
 
 ## Tests (`tests/`)
 

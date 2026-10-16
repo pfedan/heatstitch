@@ -1,0 +1,85 @@
+name: Release draft
+
+# Keeps the draft of the next release (.github/release-drafter.yml) and the pull request titles it is
+# made from: every title starts with a type, as in Conventional Commits, which sets the label that decides
+# the list and the version number:
+#   feat: ...     feature  (minor)        fix: ...    fix  (patch)
+#   feat!: ...    breaking (major)        chore:, refactor:, docs:, test:, ci:, build:, perf:, style:  intern
+# A label can be changed by hand afterwards.
+
+on:
+  push:
+    branches: [develop]
+  pull_request:
+    types: [opened, reopened, edited, synchronize]
+  # Labels on fork pull requests need this repository's token; nothing from the fork is checked out or run.
+  pull_request_target:
+    types: [opened, reopened, edited, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  # A check of its own, so it can be required: the title's type is missing or unknown.
+  title:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          if [[ "$TITLE" =~ ^(feat|fix|chore|refactor|docs|test|ci|build|perf|style)(\([^\)]+\))?!?:\ [^\ ] ]]; then
+            echo "Title: $TITLE"
+          else
+            echo "::error::The title has to start with its type, for example \"feat: Fill gap tool\" or \"fix: Keep the design centered\". Types: feat, fix (feat!: when something goes away), chore, refactor, docs, test, ci, build, perf, style."
+            exit 1
+          fi
+
+  label:
+    if: github.event_name == 'pull_request_target'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Make sure the labels exist
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh label create feature --color 1f883d --description "New feature: raises the minor version" --force
+          gh label create fix --color d4a72c --description "Fix: raises the patch version" --force
+          gh label create breaking --color cf222e --description "A feature or format goes away: raises the major version" --force
+          gh label create intern --color 8c959f --description "Not in the release notes: tests, CI, refactoring" --force
+      - uses: release-drafter/release-drafter@v6
+        with:
+          disable-releaser: true
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+  draft:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: release-draft
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: read
+    steps:
+      - name: Make sure the labels exist
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh label create feature --color 1f883d --description "New feature: raises the minor version" --force
+          gh label create fix --color d4a72c --description "Fix: raises the patch version" --force
+          gh label create breaking --color cf222e --description "A feature or format goes away: raises the major version" --force
+          gh label create intern --color 8c959f --description "Not in the release notes: tests, CI, refactoring" --force
+      - uses: release-drafter/release-drafter@v6
+        with:
+          disable-autolabeler: true
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

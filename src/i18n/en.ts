@@ -19,6 +19,9 @@ import { en as library } from './areas/library';
 const enBase: Record<keyof typeof deBase, string> = {
   'app.docs': 'Guide',
   'app.privacy': 'Privacy',
+  'app.releases': 'What is new',
+  'beta.badge': 'Beta',
+  'beta.hint': 'Newest state of development. Your designs here are kept apart from heatstitch.app.',
   'files.title': 'Files',
   'files.privacy': 'Your files never leave your device.',
   'files.privacy.detail': 'Everything stays in your browser. No server, no tracking.',
@@ -368,6 +371,7 @@ const enBase: Record<keyof typeof deBase, string> = {
   'save.project.hint': 'Saves everything to continue later, without the undo history.',
   'project.error.invalid': 'Not a heatstitch project file, or damaged',
   'project.error.newer': 'Saved with a newer heatstitch version; please reload the page',
+  'project.error.newer.release': 'Saved with a newer heatstitch version, such as the beta; open the file on beta.heatstitch.app',
   'compare.title': 'Compare',
   'compare.start': 'Compare with original (c)',
   'compare.stop': 'Stop comparing (c)',

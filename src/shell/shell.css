@@ -53,6 +53,28 @@ symbol .fill {
   margin: 0 4px 0 2px;
 }
 
+/* Only on beta.heatstitch.app (src/ui/version.ts): says where you are, leads to what is new in the beta. */
+.beta-badge {
+  flex: none;
+  padding: 1px 6px;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  text-decoration: none;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.beta-badge:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.beta-badge[hidden] {
+  display: none;
+}
+
 .design-switch,
 .save-switch,
 .more-switch {
@@ -216,6 +238,13 @@ kbd {
 
 .pop-row .i {
   color: var(--muted);
+}
+
+.pop-row .app-version {
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 
 .lang-row select {

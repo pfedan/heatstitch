@@ -89,10 +89,12 @@
       <symbol id="i-keyboard" viewBox="0 0 20 20"><rect x="2.5" y="5.5" width="15" height="9" rx="1.5" /><path d="M5.5 8.5h1m2.5 0h1m2.5 0h1M5.5 11.5h9" /></symbol>
       <symbol id="i-book" viewBox="0 0 20 20"><path d="M4 4.5h4.5A2 2 0 0 1 10 6v10a2 2 0 0 0-1.5-1.5H4zM16 4.5h-4.5A2 2 0 0 0 10 6v10a2 2 0 0 1 1.5-1.5H16z" /></symbol>
       <symbol id="i-shield" viewBox="0 0 20 20"><path d="M10 2.5 16 5v4.5c0 4-2.6 6.6-6 8-3.4-1.4-6-4-6-8V5z" /></symbol>
+      <symbol id="i-sparkle" viewBox="0 0 20 20"><path d="M9 3.5 10.4 8 15 9.5l-4.6 1.5L9 15.5 7.6 11 3 9.5 7.6 8zM15 2.5v3M13.5 4h3" /></symbol>
     </svg>
     <header class="topbar">
       <div class="topbar-start">
         <img class="brand-mark" src="/favicon.svg" alt="heatstitch" width="24" height="24" />
+        <a class="beta-badge" id="beta-badge" href="releases.html#beta" data-i18n="beta.badge" data-i18n-title="beta.hint" hidden></a>
         <div class="design-switch">
           <button type="button" id="design-button" class="design-button" data-i18n-title="shell.designs.hint">
             <span class="design-name" id="design-name" data-i18n="shell.designs"></span>
@@ -233,6 +235,7 @@
           </button>
           <div class="popover more-pop" id="more-pop" role="menu" hidden>
             <a class="pop-row doc-link" id="doc-link" href="docs.html"><svg class="i" aria-hidden="true"><use href="#i-book" /></svg><span data-i18n="app.docs">Guide</span></a>
+            <a class="pop-row doc-link" id="releases-link" href="releases.html"><svg class="i" aria-hidden="true"><use href="#i-sparkle" /></svg><span data-i18n="app.releases">What is new</span><small class="app-version" id="app-version"></small></a>
             <a class="pop-row doc-link" id="privacy-link" href="privacy.html"><svg class="i" aria-hidden="true"><use href="#i-shield" /></svg><span data-i18n="app.privacy">Privacy</span></a>
             <button type="button" class="pop-row" id="keys-open"><svg class="i" aria-hidden="true"><use href="#i-keyboard" /></svg><span data-i18n="shell.keys.title"></span><kbd>?</kbd></button>
             <label class="pop-row lang-row">

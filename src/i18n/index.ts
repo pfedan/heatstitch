@@ -30,6 +30,11 @@ export function videosUrl(l: Lang, hash = ''): string {
 }
 
 /** Where the privacy page is in this language. */
+/** Where the release notes are in this language, with a version's hash carried over (#v1-2-0). */
+export function releasesUrl(l: Lang, hash = ''): string {
+  return `${import.meta.env.BASE_URL}${l === 'de' ? 'de/' : ''}releases.html${hash}`;
+}
+
 export function privacyUrl(l: Lang): string {
   return `${import.meta.env.BASE_URL}${l === 'de' ? 'de/' : ''}privacy.html`;
 }

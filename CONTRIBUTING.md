@@ -39,11 +39,13 @@ For a map of the codebase (layers, data model, data flow, workers, tests) read
 
 ## Making a change
 
-1. Fork the repository (or create a branch if you have write access) and branch off `main`.
+1. Fork the repository (or create a branch if you have write access) and branch off `develop`, the
+   default branch. `main` only follows the releases.
 2. Keep a pull request to one topic. Refactorings that are not needed for the change go in their own PR.
 3. Run `npm test` and `npm run build` before pushing. CI runs exactly these two.
-4. Open the pull request against `main`. Describe what a user sees before and after, and add a
-   screenshot for visible changes.
+4. Open the pull request against `develop`. Start its title with its type (see below), describe what a
+   user sees before and after, and add a screenshot for visible changes. A change a user notices also
+   gets a line in both languages under `[Unreleased]` in [CHANGELOG.md](CHANGELOG.md).
 5. Pull requests are merged with a merge commit or squashed; please don't force-push once a
    review has started.
 
@@ -56,10 +58,24 @@ For a map of the codebase (layers, data model, data flow, workers, tests) read
   small and work offline.
 - Files never leave the user's machine. Don't add network calls, analytics or uploads.
 
-### Commits
+### Commits and pull request titles
 
 Write the subject in the imperative, in English, under about 70 characters
 (for example `Pick examples from a small dropdown`). Add a body when the reason is not obvious.
+
+A pull request's title starts with its type, as in [Conventional Commits](https://www.conventionalcommits.org/):
+`feat: Pick examples from a small dropdown`. A check fails on a title without one. The type sets the
+label that decides where the change goes in the release notes and which number the next version gets:
+
+| Title starts with | Label | Next version |
+|---|---|---|
+| `feat:` | `feature` | minor (1.4.0 → 1.5.0) |
+| `fix:` | `fix` | patch (1.4.0 → 1.4.1) |
+| `feat!:` (something users rely on goes away) | `breaking` | major (1.4.0 → 2.0.0) |
+| `chore:`, `refactor:`, `docs:`, `test:`, `ci:`, `build:`, `perf:`, `style:` | `intern` | not in the notes |
+
+A label can be changed by hand on the pull request. A new project file format is a feature, not a
+breaking change: newer versions open older files.
 
 ## Tests
 
@@ -132,12 +148,37 @@ forks get theirs once their run has been approved (`.github/workflows/fork-previ
 is closed, its address shows a short note that leads to heatstitch.app instead (`cloudflare/closed/`).
 
 A preview has an address of its own, so it shares nothing with heatstitch.app: no stored files, no
-settings, no service worker. `PREVIEW=1` (set by the workflow) marks the build: it ships no service
-worker, so a reload always shows the latest push, and it is marked `noindex`. To build one locally:
+settings, no service worker. `CHANNEL=preview` (or `PREVIEW=1`, set by the workflow) marks the build: it
+ships no service worker, so a reload always shows the latest push, and it is marked `noindex`. The beta
+is built with `CHANNEL=beta` (`noindex`, a badge beside the logo), a release with `CHANNEL=release` and
+`HEATSTITCH_VERSION`. To build a preview locally:
 
 ```sh
 PREVIEW=1 npm run build
 ```
+
+## Releases
+
+heatstitch follows [Semantic Versioning](https://semver.org/). Work goes into `develop`, which is live at
+<https://beta.heatstitch.app/> after every merge; heatstitch.app only changes with a release.
+
+- **The draft.** With every merge into `develop`, `.github/workflows/release-drafter.yml` updates a draft
+  release on GitHub: its version (from the labels since the last release) and the list of pull requests.
+- **The notes.** [CHANGELOG.md](CHANGELOG.md) holds the notes for people who use heatstitch, in German and
+  English, under `[Unreleased]` until the release. The build makes the page *What is new*
+  (`releases.html`, `de/releases.html`) from it; the beta shows `[Unreleased]` there as *New in the beta*.
+- **Releasing.** Before publishing, rename `[Unreleased]` to the draft's version with today's date and put
+  an empty `[Unreleased]` on top (a small `docs:` pull request). Then publish the draft. Publishing tags
+  the newest `develop` commit; `.github/workflows/release.yml` waits for its checks, builds it with its
+  version, deploys it to heatstitch.app, puts the CHANGELOG section on top of the release's list and moves
+  `main` to it. A release published without renaming still works: it shows the `[Unreleased]` notes under
+  its number, and the next notes pull request does the renaming.
+- **A pre-release** (a tag like `v1.2.0-rc.1`, marked *pre-release*) goes to the beta only, to try the
+  release workflow out.
+- **A hotfix**, when heatstitch.app needs a fix and `develop` is not ready to release: the fix is merged
+  into `develop` as usual, then cherry-picked onto a branch from the last release tag, merged into `main`
+  through a pull request, and released with the next patch number and `main` as the target. The next
+  regular release merges `develop` into `main`.
 
 ## English and German
 

@@ -1,6 +1,7 @@
 // heatstitch.app: the built site as static assets of a Worker (cloudflare/worker.js), deployed by
-// .github/workflows/deploy.yml. Pull request previews are versions with an alias, at
-// https://pr-N-heatstitch.<account>.workers.dev; they never reach heatstitch.app.
+// .github/workflows/release.yml when a release is published. Pull request previews are versions with an
+// alias, at https://pr-N-heatstitch.<account>.workers.dev; they never reach heatstitch.app. The beta
+// (env beta below) is a Worker of its own at beta.heatstitch.app, deployed from develop by deploy.yml.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "heatstitch",
@@ -18,5 +19,15 @@
   "routes": [{ "pattern": "heatstitch.app", "custom_domain": true }],
   // The site is only at heatstitch.app; workers.dev only carries the previews.
   "workers_dev": false,
-  "preview_urls": true
+  "preview_urls": true,
+  "env": {
+    // beta.heatstitch.app: develop after every merge. The same Worker and assets, its own address and so
+    // its own storage; no previews (those stay versions of the main Worker).
+    "beta": {
+      "name": "heatstitch-beta",
+      "routes": [{ "pattern": "beta.heatstitch.app", "custom_domain": true }],
+      "workers_dev": false,
+      "preview_urls": false
+    }
+  }
 }

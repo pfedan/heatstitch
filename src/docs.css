@@ -1497,3 +1497,33 @@ figure img:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
+/* Release notes (releases.html): one section per version, newest first, no contents rail. */
+.doc.releases article {
+  display: block;
+}
+
+.releases .release {
+  margin: 28px 0 0;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+
+.releases .release h2 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  margin: 0 0 8px;
+}
+
+.releases .release time,
+.releases .release-note {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: normal;
+}
+
+.releases #beta h2 {
+  color: var(--accent);
+}
