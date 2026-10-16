@@ -16,6 +16,8 @@ How it is kept (see [CONTRIBUTING.md](CONTRIBUTING.md#releases)):
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-16
+
 ### Deutsch
 
 Die erste Version mit Versionsnummer. Von hier an steht auf dieser Seite, was jede neue Version bringt.
