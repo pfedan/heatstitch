@@ -3789,3 +3789,38 @@ button.mini-sw.thread-sw {
   background: var(--muted);
   pointer-events: none;
 }
+
+/* Drawing the angle on the stage: beside the dial, pressed while the line tool is on. */
+.angle-drag {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: 7px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--muted);
+}
+
+.angle-drag svg {
+  width: 18px;
+  height: 18px;
+}
+
+.angle-drag:hover {
+  color: var(--ink);
+}
+
+.angle-drag[aria-pressed='true'] {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+/* While the angle is drawn, the stage takes a line, not a move. */
+.stage.angle-drawing canvas#canvas,
+.stage.angle-drawing canvas#canvas.panning {
+  cursor: crosshair;
+}

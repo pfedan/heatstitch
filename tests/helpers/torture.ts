@@ -1,6 +1,7 @@
 import { expect } from 'vitest';
 import { digitizeDefaults, digitizeShapes } from '../../src/digitize/digitize';
 import { appendDesign, pasteDesign } from '../../src/model/appendDesign';
+import { SWATCH_FONT, testSwatch } from '../../src/model/swatch';
 import { digitizedFile } from '../../src/model/digitized';
 import { addShape } from '../../src/model/addShape';
 import { blendRuns, blendSettings, followerLinks, partHolders, recolorBlock, sameRegion, shareBorders, syncBorders } from '../../src/model/border';
@@ -1208,6 +1209,15 @@ export const MOTIF_OPS: Op[] = [
     },
   },
   {
+    // A test swatch (fills or satin rings with their nominal edges and labels) put in like a design.
+    name: 'put in a test swatch',
+    run: (d, r) => {
+      const sw = testSwatch({ fabric: pick(r, ['woven', 'terry', 'knit'] as const), thread: '40' }, r() < 0.5 ? 'fill' : 'satin', SWATCH, (v, k) => v.toFixed(k), { cells: 'Felder', edge: 'Sollkante' }, T);
+      const a = appendDesign(d.cur.p, sw, between(r, 0, 60), between(r, 0, 60), T);
+      return shapes(d, a?.pattern);
+    },
+  },
+  {
     // Ctrl+V in another design: here this one as it is now, which pastes the same (where the
     // copies lie on their originals they go a step further).
     name: 'paste from another design',
@@ -1317,6 +1327,8 @@ export function pointOnCloth(x: Piece, inset?: number): [number, number] | null 
 /** A script font whose letters run into each other (loaded from the app's fonts). */
 const SCRIPT = JSON.parse(readFileSync(new URL('../../public/fonts/pacificlo.json', import.meta.url), 'utf8')) as Font;
 addFont(SCRIPT);
+const SWATCH = JSON.parse(readFileSync(new URL(`../../public/fonts/${SWATCH_FONT}.json`, import.meta.url), 'utf8')) as Font;
+addFont(SWATCH);
 
 /** The letterings of a design, each once. */
 function letteringsIn(p: Pattern): Lettering[] {

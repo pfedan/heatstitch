@@ -23,6 +23,10 @@ import { scaling } from './shape/path';
 import { scaleBlocked } from './model/reshape';
 import { legendSpec } from './ui/legendSpec';
 import { bindProfile } from './ui/profilePanel';
+import { bindSwatch } from './ui/swatchPanel';
+import { writePattern } from './writers';
+import { SWATCH_FONT, testSwatch, type SwatchKind } from './model/swatch';
+import { loadFont } from './lettering/font';
 import { renderStats } from './ui/stats';
 import { ValidationPanel } from './ui/validationPanel';
 import { acknowledgementOf, settledBy, type Acknowledgement } from './validation/acks';
@@ -42,6 +46,8 @@ import { FILL, SATIN, TIE_STITCH } from './model/sequence';
 import { pointNear, stitchAt } from './render/flow';
 import { drawMeasure } from './render/measure';
 import { MeasureTool } from './ui/measureTool';
+import { AngleTool } from './ui/angleTool';
+import { drawAngle } from './render/angle';
 import type { Mode } from './settings';
 import { isGuessed, isOpenPattern, openOnPurpose, remembered, rememberedIn } from './model/restitch';
 import { innerStops } from './model/applique';
@@ -79,7 +85,7 @@ import { initReady } from './areas/ready';
 import { initShapes, refreshShapes } from './areas/shapes';
 import { initMeasure } from './areas/measure';
 import { initLibrary } from './areas/library';
-import { runCommand } from './shell/commands';
+import { command, runCommand } from './shell/commands';
 import { initCheck } from './areas/check/check';
 import { initAmpel } from './areas/ampel/ampel';
 import { initResponsive } from './areas/responsive/responsive';
@@ -142,7 +148,7 @@ const trace = bindTrace({
   applyEdit: (p) => applyEdit(p, files.active?.measurement),
   redraw: () => redraw(),
   newDesign: () => newDesign(),
-  busy: () => drawTool.active || ui.letterMode || rungTool.active || shapeTool.active || editor.active || measureTool.active,
+  busy: () => drawTool.active || ui.letterMode || rungTool.active || shapeTool.active || editor.active || measureTool.active || angleTool.active,
 });
 
 /** Per zone of `v`: whether it still counts with the active file's decisions. */
@@ -908,6 +914,7 @@ function redraw(): void {
     if (drawTool.preview && settings.mode === 'flow')
       drawDrawing(ctx, vp, drawTool.preview, { nodes: drawTool.kind === 'pen' || drawTool.kind === 'cut' ? drawTool.count : 0, closing: drawTool.closing, size: drawTool.size, fill: drawTool.kind === 'gap' });
     if (ui.letterMode) drawLetterBoxes();
+    if (angleTool.active) drawAngle(ctx, vp, angleTool, ui.stageW, ui.stageH);
     if (measureTool.active) drawMeasure(ctx, vp, measureTool, ui.stageW, ui.stageH);
     drawPlanCompare();
     checkArea?.draw(ctx);
@@ -1517,7 +1524,8 @@ function fitToHoop(): void {
   fitView();
 }
 
-const profile = bindProfile(settings, () => {
+const profilePanel = bindProfile(settings, () => {
+  swatchPanel.refresh();
   saveSettings(settings);
   // Classification is cheap: the design is re-checked instantly against the new limits.
   storeMaterial();
@@ -1529,6 +1537,45 @@ const profile = bindProfile(settings, () => {
   tooltip.hidden = true;
   redraw();
 });
+
+// The test swatch beside fabric and thread: measured values change the defaults of new objects.
+const swatchPanel = bindSwatch(settings, {
+  make: (kind) => void makeSwatch(kind),
+  changed: () => {
+    saveSettings(settings);
+    profilePanel.refresh();
+    imageMode.profileChanged();
+    controls.refresh();
+    redraw();
+  },
+});
+const profile = {
+  refresh: () => {
+    profilePanel.refresh();
+    swatchPanel.refresh();
+  },
+};
+
+command({ id: 'swatch.fill', label: 'swatch.cmd.fill', group: 'files.title', run: () => void makeSwatch('fill') });
+command({ id: 'swatch.satin', label: 'swatch.cmd.satin', group: 'files.title', run: () => void makeSwatch('satin') });
+
+/** A test swatch for the active fabric and thread as a new design, in view. */
+async function makeSwatch(kind: SwatchKind): Promise<void> {
+  let font;
+  try {
+    font = await loadFont(SWATCH_FONT);
+  } catch {
+    layers.say(t('swatch.loadFailed'), true);
+    return;
+  }
+  const fabric = t(`fabric.${settings.profile.fabric}` as Key).split(',')[0];
+  const p = testSwatch(settings.profile, kind, font, formatNumber, { cells: t('swatch.cells'), edge: t('swatch.edge') }, settings.trimMm);
+  const name = t('swatch.name', { fabric, kind: t(`swatch.${kind}`) });
+  const data = writePattern({ ...p, name }, 'pes');
+  if (settings.mode !== 'flow') setMode('flow');
+  await files.addWithObjects(`${name}.pes`, data.slice().buffer, rememberedIn(p, sewObjects(p)), [], undefined, true);
+  fitView();
+}
 
 const imageMode = new ImageMode({
   settings,
@@ -1690,9 +1737,21 @@ const measureTool = new MeasureTool({
   },
   redraw: () => redraw(),
 });
+/** The rows' angle drawn as a line across the selected fills (src/ui/angleTool.ts), set as with the dial of the panel. */
+const angleTool = new AngleTool({
+  current: () => (settings.mode === 'flow' ? stitchPanel.rowAngle : null),
+  set: (a, final) => stitchPanel.setRowAngle(a, final),
+  restore: (was) => stitchPanel.restoreRowAngle(was),
+  redraw: () => {
+    stage.classList.toggle('angle-drawing', angleTool.active);
+    stitchPanel.angleTool(angleTool.active);
+    redraw();
+  },
+});
 /** Picking a drawing tool (or Wählen) ends measuring: one tool has the pointer at a time. */
 const pickTool = (kind: DrawKind | null) => {
   measureTool.stop();
+  angleTool.stop();
   setDrawing(kind);
 };
 
@@ -1700,6 +1759,7 @@ const pickTool = (kind: DrawKind | null) => {
 
 bindKeys({
   measure: measureTool,
+  angle: angleTool,
   get selectObjects() {
     return selectObjects;
   },
@@ -1821,6 +1881,7 @@ bindKeys({
 
 const { showObjectMenu } = bindPointer({
   measure: measureTool,
+  angle: angleTool,
   get canvas() {
     return canvas;
   },
@@ -1926,7 +1987,7 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', red
 
 initShell({ files, mode: () => settings.mode, setMode });
 initResponsive();
-const stitchArea = initStitchArea({ files, settings, editor, rungTool, stitchPanel, closeRungs, toggleRungs, toggleGuides, togglePoints, sewAlongLines, suggestLines, setEditing, enterObject, revealRecord, pointsVisible: () => vp.scale >= POINTS_MIN_SCALE, redraw });
+const stitchArea = initStitchArea({ files, settings, editor, rungTool, angleTool, stitchPanel, measure: measureTool, closeRungs, toggleRungs, toggleGuides, togglePoints, sewAlongLines, suggestLines, setEditing, enterObject, revealRecord, pointsVisible: () => vp.scale >= POINTS_MIN_SCALE, redraw });
 const design = initDesign({ files, settings, player, vp, stage, fitView, fitToHoop, redraw, applyEdit, trace });
 measureArea = initMeasure({ settings, vp, stage, measure: measureTool, stopDrawing: () => drawTool.active && setDrawing(null), redraw });
 library = initLibrary({ settings, setMode, files, vp, stage, stopDrawing: () => drawTool.active && setDrawing(null), takeShapes, redraw, newDesign: () => newDesign(), setFormLevel, fitView: () => fitView() });
