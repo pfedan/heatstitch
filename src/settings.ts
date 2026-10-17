@@ -4,7 +4,7 @@ import type { Metric } from './density/grid';
 import type { DigitizeOptions } from './digitize/digitize';
 import { DEFAULT_PREPARE, type PrepareOptions } from './image/prepare';
 import type { Lang } from './i18n';
-import { DEFAULT_PROFILE, normalizeProfile, threadWidthMm, type Profile } from './validation/profiles';
+import { DEFAULT_PROFILE, normalizeOwn, normalizeProfile, ownKey, threadWidthMm, type OwnValues, type Profile } from './validation/profiles';
 import { ALL_CHECKS, normalizeChecks, type Checks } from './validation/validate';
 import { isOutputFormat, type OutputFormat } from './writers';
 import { normalizeHoop, type Hoop } from './model/hoop';
@@ -126,8 +126,10 @@ export interface Settings {
   showValidation: boolean;
   /** Widths of the side columns in px set by dragging their edges; null follows the window width. */
   panels: PanelWidths;
-  /** Material the validation thresholds are scaled for. */
+  /** Material the validation thresholds are scaled for, with this browser's measured values on it (see withOwn). */
   profile: Profile;
+  /** Values measured with test swatches, by fabric and thread (ownKey). */
+  own: Record<string, OwnValues>;
   /** Validation rules that are switched on. */
   checks: Checks;
   /** Automatic correction options (the region is chosen per run). */
@@ -176,6 +178,7 @@ export const DEFAULTS: Settings = {
   showValidation: true,
   panels: { side: null, inspector: null },
   profile: DEFAULT_PROFILE,
+  own: {},
   checks: { ...ALL_CHECKS },
   correction: { ...DEFAULT_CORRECTION },
   saveFormat: null,
@@ -200,7 +203,8 @@ export function loadSettings(): Settings {
     const raw = localStorage.getItem(KEY);
     if (!raw) return structuredClone(DEFAULTS);
     const s = JSON.parse(raw) as Partial<Settings> & { showJumps?: boolean; findingsOpen?: boolean };
-    const profile = normalizeProfile(s.profile);
+    const own = normalizeOwnStore(s.own);
+    const profile = withOwn(normalizeProfile(s.profile), own);
     const { showJumps, findingsOpen, ...rest } = s;
     return {
       ...structuredClone(DEFAULTS),
@@ -226,6 +230,7 @@ export function loadSettings(): Settings {
       },
       scales: { ...structuredClone(DEFAULTS.scales), ...s.scales },
       profile,
+      own,
       threadMm: typeof s.threadMm === 'number' && s.threadMm > 0 ? s.threadMm : threadWidthMm(profile),
       background: hexColor(s.background),
       liveLight: typeof s.liveLight === 'boolean' ? s.liveLight : DEFAULTS.liveLight,
@@ -242,6 +247,40 @@ export function loadSettings(): Settings {
   } catch {
     return structuredClone(DEFAULTS);
   }
+}
+
+/** The store of measured values with everything invalid left out. */
+function normalizeOwnStore(v: unknown): Record<string, OwnValues> {
+  const out: Record<string, OwnValues> = {};
+  if (!v || typeof v !== 'object') return out;
+  for (const [k, o] of Object.entries(v)) {
+    const n = normalizeOwn(o);
+    if (n && /^[a-z_]+\/\w+$/.test(k)) out[k] = n;
+  }
+  return out;
+}
+
+/** `p` with the values measured for its fabric and thread in `own` (none: the fabric's). */
+export function withOwn(p: Profile, own: Record<string, OwnValues>): Profile {
+  const { fabric, thread } = p;
+  const o = own[ownKey(p)];
+  return o ? { fabric, thread, own: structuredClone(o) } : { fabric, thread };
+}
+
+/** Sets the active profile, with the values measured for it. */
+export function setProfile(s: Settings, p: Profile): void {
+  s.profile = withOwn(p, s.own);
+}
+
+/** Keeps `values` (or forgets them, undefined) for the active fabric and thread and puts them on the profile. */
+export function setOwn(s: Settings, values: OwnValues | undefined): void {
+  const key = ownKey(s.profile);
+  const own = { ...s.own };
+  const n = normalizeOwn(values);
+  if (n) own[key] = n;
+  else delete own[key];
+  s.own = own;
+  setProfile(s, s.profile);
 }
 
 /** A color as #rrggbb (lower case), or null for anything else. */
@@ -305,13 +344,14 @@ export interface Material {
 }
 
 export function materialOf(s: Settings): Material {
-  return structuredClone({ profile: s.profile, checks: s.checks, hoop: s.hoop, background: s.background, threadMm: s.threadMm });
+  // Measured values belong to the browser, not to the design.
+  return structuredClone({ profile: { fabric: s.profile.fabric, thread: s.profile.thread }, checks: s.checks, hoop: s.hoop, background: s.background, threadMm: s.threadMm });
 }
 
 /** Makes `m` the active material. */
 export function applyMaterial(s: Settings, m: Material): void {
   const c = structuredClone(m);
-  s.profile = c.profile;
+  setProfile(s, c.profile);
   s.checks = c.checks;
   s.hoop = c.hoop;
   s.background = c.background;

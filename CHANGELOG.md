@@ -19,10 +19,12 @@ How it is kept (see [CONTRIBUTING.md](CONTRIBUTING.md#releases)):
 ### Deutsch
 
 - **Winkel auf der Fläche ziehen:** Den Winkel einer Füllung stellst du jetzt auch direkt auf dem Stickmuster ein: Knopf neben dem Winkel-Regler oder Taste W, dann eine Linie über die Fläche ziehen. Die Reihen folgen ihr schon beim Ziehen, Umschalt rastet auf 15°, Esc bricht ab.
+- **Probestück für deinen Stoff:** Unter Material erstellt ein Klick ein beschriftetes Raster aus Füllungen oder Satinringen, Zeilen nach Stichabstand, Spalten nach Zugausgleich, mit einer Sollkante zum Vergleichen. Stick es auf deinem Stoff, wähle in der App das Feld, das am besten aussieht, und neue Objekte auf diesem Stoff bekommen diese Werte.
 
 ### English
 
 - **Drag the angle on the area:** You can now set a fill's angle right on the design: the button beside the angle slider or the W key, then drag a line across the area. The rows follow it while you drag, Shift snaps to 15°, Esc cancels.
+- **Test swatch for your fabric:** Under Material one click makes a labelled grid of fills or satin rings, rows by stitch spacing, columns by pull compensation, with a nominal edge to compare against. Stitch it on your fabric, pick the cell that looks best in the app, and new objects on that fabric get those values.
 
 ## [1.0.0] - 2026-10-16
 

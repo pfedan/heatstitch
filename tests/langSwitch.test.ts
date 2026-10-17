@@ -177,6 +177,20 @@ const STATES: Record<string, (page: Page) => Promise<void>> = {
     // Converting the picture runs in a worker and can take long on a busy machine.
     await page.locator('#image-take:not([hidden]):not([disabled])').waitFor({ timeout: SLOW_STEP });
   },
+  'a test swatch with a cell picked': async (page) => {
+    await loadCat(page);
+    await page.evaluate(() => {
+      (document.getElementById('swatch') as HTMLDetailsElement).open = true;
+    });
+    await page.click('#swatch-make');
+    await page.locator('#layer-list .layer').first().waitFor();
+    await wait(page, 1000);
+    await page.evaluate(() => {
+      (document.getElementById('swatch') as HTMLDetailsElement).open = true;
+    });
+    await page.click('#swatch-grid tr:nth-child(2) td:nth-child(2) label');
+    await wait(page, 500);
+  },
   'a lettering': async (page) => {
     await page.evaluate(() => document.getElementById('new-design')!.click());
     await page.click('#lettering-new');

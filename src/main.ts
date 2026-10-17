@@ -23,6 +23,10 @@ import { scaling } from './shape/path';
 import { scaleBlocked } from './model/reshape';
 import { legendSpec } from './ui/legendSpec';
 import { bindProfile } from './ui/profilePanel';
+import { bindSwatch } from './ui/swatchPanel';
+import { writePattern } from './writers';
+import { SWATCH_FONT, testSwatch, type SwatchKind } from './model/swatch';
+import { loadFont } from './lettering/font';
 import { renderStats } from './ui/stats';
 import { ValidationPanel } from './ui/validationPanel';
 import { acknowledgementOf, settledBy, type Acknowledgement } from './validation/acks';
@@ -81,7 +85,7 @@ import { initReady } from './areas/ready';
 import { initShapes, refreshShapes } from './areas/shapes';
 import { initMeasure } from './areas/measure';
 import { initLibrary } from './areas/library';
-import { runCommand } from './shell/commands';
+import { command, runCommand } from './shell/commands';
 import { initCheck } from './areas/check/check';
 import { initAmpel } from './areas/ampel/ampel';
 import { initResponsive } from './areas/responsive/responsive';
@@ -1520,7 +1524,8 @@ function fitToHoop(): void {
   fitView();
 }
 
-const profile = bindProfile(settings, () => {
+const profilePanel = bindProfile(settings, () => {
+  swatchPanel.refresh();
   saveSettings(settings);
   // Classification is cheap: the design is re-checked instantly against the new limits.
   storeMaterial();
@@ -1532,6 +1537,45 @@ const profile = bindProfile(settings, () => {
   tooltip.hidden = true;
   redraw();
 });
+
+// The test swatch beside fabric and thread: measured values change the defaults of new objects.
+const swatchPanel = bindSwatch(settings, {
+  make: (kind) => void makeSwatch(kind),
+  changed: () => {
+    saveSettings(settings);
+    profilePanel.refresh();
+    imageMode.profileChanged();
+    controls.refresh();
+    redraw();
+  },
+});
+const profile = {
+  refresh: () => {
+    profilePanel.refresh();
+    swatchPanel.refresh();
+  },
+};
+
+command({ id: 'swatch.fill', label: 'swatch.cmd.fill', group: 'files.title', run: () => void makeSwatch('fill') });
+command({ id: 'swatch.satin', label: 'swatch.cmd.satin', group: 'files.title', run: () => void makeSwatch('satin') });
+
+/** A test swatch for the active fabric and thread as a new design, in view. */
+async function makeSwatch(kind: SwatchKind): Promise<void> {
+  let font;
+  try {
+    font = await loadFont(SWATCH_FONT);
+  } catch {
+    layers.say(t('swatch.loadFailed'), true);
+    return;
+  }
+  const fabric = t(`fabric.${settings.profile.fabric}` as Key).split(',')[0];
+  const p = testSwatch(settings.profile, kind, font, formatNumber, { cells: t('swatch.cells'), edge: t('swatch.edge') }, settings.trimMm);
+  const name = t('swatch.name', { fabric, kind: t(`swatch.${kind}`) });
+  const data = writePattern({ ...p, name }, 'pes');
+  if (settings.mode !== 'flow') setMode('flow');
+  await files.addWithObjects(`${name}.pes`, data.slice().buffer, rememberedIn(p, sewObjects(p)), [], undefined, true);
+  fitView();
+}
 
 const imageMode = new ImageMode({
   settings,

@@ -301,6 +301,15 @@ acknowledged are not touched; the correction only makes sure they don't get wors
 (spacing in the recommended range, underlay by size, long satin stitches split, pull compensation by
 fabric, gap rows in fills on knit) and applies them on click; designs made in heatstitch get these rules from the start.
 
+*Make test swatch* under *Material* makes a new design to stitch on one's own fabric: a labelled grid of
+fills (12 mm squares) or satin rings (4 mm wide), five rows of stitch spacing in steps of about 12 %
+around the fabric's default and four columns of pull compensation from none in steps of half the
+fabric's, each cell ringed by a running stitch on its nominal edge in a second color (a gap to it means
+too little compensation). It fits a 100 × 100 mm hoop. Picking the best cell in the panel keeps its
+spacing and pull compensation for that fabric and thread in the browser (`Profile.own`): new fills or
+satins get them, and *Tune to fabric* uses them; the grid itself always stays centered on the fabric's
+values, so a swatch stitched once still matches the picker later.
+
 ![Correction panel with proposals and the before/after preview](public/guide/correct-en.jpg)
 
 ### By hand

@@ -1,6 +1,6 @@
 import { formatNumber, onLangChange, t, type Key } from '../i18n';
 import { JOIN_MAX_EXCESS, JOIN_MAX_MM2, SMALL_CAUTION_MM2 } from '../validation/practice';
-import type { Settings } from '../settings';
+import { setProfile, type Settings } from '../settings';
 import {
   FABRICS,
   fabricOf,
@@ -127,7 +127,7 @@ export function bindProfile(s: Settings, onChange: () => void): { refresh: () =>
     const next: ThreadId = thread.value as ThreadId;
     // A new thread weight moves the width slider to that weight; it can be adjusted afterwards.
     if (next !== s.profile.thread) s.threadMm = threadWidthMm({ ...s.profile, thread: next });
-    s.profile = { fabric: fabric.value as FabricId, thread: next };
+    setProfile(s, { fabric: fabric.value as FabricId, thread: next });
     refresh();
     onChange();
   };
