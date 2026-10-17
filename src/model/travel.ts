@@ -43,6 +43,10 @@ const CHECK_SLACK = 0.25;
 export const HIDE_ENDS = 1;
 /** Grid travel is planned on (mm). */
 const CELL = 0.25;
+/** The cells round a cell within HIDE_INSET (as offsets): all under, the cell lies off every edge. */
+const DISC: [number, number][] = [];
+for (let dj = -Math.round(HIDE_INSET / CELL); dj <= Math.round(HIDE_INSET / CELL); dj++)
+  for (let di = -Math.round(HIDE_INSET / CELL); di <= Math.round(HIDE_INSET / CELL); di++) if ((di || dj) && Math.hypot(di, dj) * CELL <= HIDE_INSET) DISC.push([di, dj]);
 
 /** An area that hides what is sewn under it, and how far inside its edge it does (its rows may stop short of it). */
 export interface Hiding {
@@ -73,6 +77,11 @@ export function hidingOf(m: Remembered | null | undefined): Hiding | null {
 function under(areas: Hiding[], q: Pt): boolean {
   for (const h of areas) if (sample(h.region, h.region.sdf, q[0], q[1]) <= -h.inset) return true;
   return false;
+}
+
+/** Some area covers a point within HIDE_ENDS of `q`. */
+function nearCover(areas: Hiding[], q: Pt): boolean {
+  return under(areas, q) || RING.some((r) => under(areas, [q[0] + r[0] * HIDE_ENDS * 0.9, q[1] + r[1] * HIDE_ENDS * 0.9]));
 }
 
 const RING = Array.from({ length: 8 }, (_, k): Pt => [Math.cos((k * Math.PI) / 4), Math.sin((k * Math.PI) / 4)]);
@@ -134,14 +143,22 @@ export function hiddenWay(a: Pt, b: Pt, areas: Hiding[]): Pt[] | null {
   const d = Math.hypot(b[0] - a[0], b[1] - a[1]);
   const reach = longestWay(d);
   // Only ways inside the ellipse round a and b this long can be taken: its box.
-  const half = reach / 2;
+  // Only ways inside the ellipse round a and b this long can be taken: its box, and of that only
+  // where the hiding areas are.
+  const [ax, by] = [reach / 2, Math.sqrt(Math.max(0, (reach / 2) ** 2 - (d / 2) ** 2))];
+  const [c, s] = d > 0 ? [(b[0] - a[0]) / d, (b[1] - a[1]) / d] : [1, 0];
+  const [hx, hy] = [Math.hypot(ax * c, by * s), Math.hypot(ax * s, by * c)];
   const mid: Pt = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-  const box: Box = { minX: mid[0] - half, minY: mid[1] - half, maxX: mid[0] + half, maxY: mid[1] + half };
+  let box: Box = { minX: mid[0] - hx, minY: mid[1] - hy, maxX: mid[0] + hx, maxY: mid[1] + hy };
   const near = areas.filter((h) => {
     const r = boxOf(h.region);
     return r.minX <= box.maxX && box.minX <= r.maxX && r.minY <= box.maxY && box.minY <= r.maxY;
   });
   if (!near.length) return null;
+  const cover = near.map((h) => boxOf(h.region)).reduce((u, r) => ({ minX: Math.min(u.minX, r.minX), minY: Math.min(u.minY, r.minY), maxX: Math.max(u.maxX, r.maxX), maxY: Math.max(u.maxY, r.maxY) }));
+  box = { minX: Math.max(box.minX, cover.minX - HIDE_ENDS), minY: Math.max(box.minY, cover.minY - HIDE_ENDS), maxX: Math.min(box.maxX, cover.maxX + HIDE_ENDS), maxY: Math.min(box.maxY, cover.maxY + HIDE_ENDS) };
+  // The thread leaves and reaches the objects within HIDE_ENDS of a cover, or not at all.
+  if (!nearCover(near, a) || !nearCover(near, b)) return null;
   const key = `${a[0]},${a[1]};${b[0]},${b[1]};${near.map((h) => `${idOf(h.region)}:${h.inset}`).join(',')}`;
   if (found.has(key)) return found.get(key)!;
   const out = search(a, b, near, box, reach);
@@ -158,20 +175,41 @@ function search(a: Pt, b: Pt, areas: Hiding[], box: Box, reach: number): Pt[] | 
   const w = Math.ceil(box.maxX / CELL) + 2 - x0;
   const h = Math.ceil(box.maxY / CELL) + 2 - y0;
   const mask = new Uint8Array(w * h);
-  for (let j = 2; j < h - 2; j++) {
-    for (let i = 2; i < w - 2; i++) if (under(areas, [(x0 + i + 0.5) * CELL, (y0 + j + 0.5) * CELL])) mask[j * w + i] = 1;
-  }
-  const all = regionOf(mask, x0, y0, w, h, CELL);
-  if (!all) return null;
-  const ends = HIDE_ENDS * 0.9;
-  for (let j = 2; j < h - 2; j++) {
-    for (let i = 2; i < w - 2; i++) {
-      const q: Pt = [(x0 + i + 0.5) * CELL, (y0 + j + 0.5) * CELL];
-      const k = j * w + i;
-      mask[k] = all.sdf[k] <= -HIDE_INSET || Math.hypot(q[0] - a[0], q[1] - a[1]) < ends || Math.hypot(q[0] - b[0], q[1] - b[1]) < ends ? 1 : 0;
+  // Each area only over its own window.
+  for (const area of areas) {
+    const r = boxOf(area.region);
+    const [i0, i1] = [Math.max(2, Math.floor(r.minX / CELL) - x0), Math.min(w - 2, Math.ceil(r.maxX / CELL) - x0)];
+    const [j0, j1] = [Math.max(2, Math.floor(r.minY / CELL) - y0), Math.min(h - 2, Math.ceil(r.maxY / CELL) - y0)];
+    for (let j = j0; j < j1; j++) {
+      for (let i = i0; i < i1; i++) {
+        const k = j * w + i;
+        if (!mask[k] && sample(area.region, area.region.sdf, (x0 + i + 0.5) * CELL, (y0 + j + 0.5) * CELL) <= -area.inset) mask[k] = 1;
+      }
     }
   }
-  const region = regionOf(mask, x0, y0, w, h, CELL);
+  // Off the edges: cells whose disc of HIDE_INSET lies under all of it (the union shrunk), and the
+  // discs round the two ends.
+  const deep = new Uint8Array(w * h);
+  const disc = DISC.map(([di, dj]) => dj * w + di);
+  for (let j = 2; j < h - 2; j++) {
+    for (let i = 2; i < w - 2; i++) {
+      const k = j * w + i;
+      if (!mask[k]) continue;
+      let all = true;
+      for (let n = 0; n < disc.length && all; n++) all = mask[k + disc[n]] === 1;
+      if (all) deep[k] = 1;
+    }
+  }
+  const ends = HIDE_ENDS * 0.9;
+  for (const e of [a, b]) {
+    const [ci, cj] = [Math.floor(e[0] / CELL) - x0, Math.floor(e[1] / CELL) - y0];
+    const r = Math.ceil(ends / CELL) + 1;
+    for (let j = Math.max(2, cj - r); j <= Math.min(h - 3, cj + r); j++)
+      for (let i = Math.max(2, ci - r); i <= Math.min(w - 3, ci + r); i++) if (Math.hypot((x0 + i + 0.5) * CELL - e[0], (y0 + j + 0.5) * CELL - e[1]) < ends) deep[j * w + i] = 1;
+  }
+  // Not joined there at all: no way (a quick answer for most pairs, before the field is worked out).
+  if (!joins(deep, w, h, [Math.floor(a[0] / CELL) - x0, Math.floor(a[1] / CELL) - y0], [Math.floor(b[0] / CELL) - x0, Math.floor(b[1] / CELL) - y0])) return null;
+  const region = regionOf(deep, x0, y0, w, h, CELL);
   if (!region) return null;
   const grid = new TravelGrid(region);
   const path = grid.path(a, b, false);
@@ -181,6 +219,28 @@ function search(a: Pt, b: Pt, areas: Hiding[], box: Box, reach: number): Pt[] | 
   // A way of one stitch still gets a point of its own: the object it leads to knows its travel by its stitches.
   if (!inner.length) inner = [[Math.round(((a[0] + b[0]) / 2) * 10) / 10, Math.round(((a[1] + b[1]) / 2) * 10) / 10]];
   return hiddenAlong([a, ...inner, b], areas) ? inner : null;
+}
+
+/** Whether cells `s` and `t` (column, row) are joined through set cells of `m` (w by h). */
+function joins(m: Uint8Array, w: number, h: number, s: [number, number], t: [number, number]): boolean {
+  const at = (c: [number, number]) => (c[0] >= 0 && c[1] >= 0 && c[0] < w && c[1] < h ? c[1] * w + c[0] : -1);
+  const [from, to] = [at(s), at(t)];
+  if (from < 0 || to < 0 || !m[from] || !m[to]) return false;
+  const seen = new Uint8Array(w * h);
+  const queue = new Int32Array(w * h);
+  let [head, tail] = [0, 0];
+  queue[tail++] = from;
+  seen[from] = 1;
+  while (head < tail) {
+    const k = queue[head++];
+    if (k === to) return true;
+    for (const n of [k - 1, k + 1, k - w, k + w]) {
+      if (n < 0 || n >= w * h || seen[n] || !m[n]) continue;
+      seen[n] = 1;
+      queue[tail++] = n;
+    }
+  }
+  return false;
 }
 
 const exits = new Map<string, Pt | null>();
