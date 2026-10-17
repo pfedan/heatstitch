@@ -10,6 +10,7 @@ import { de as ready } from './areas/ready';
 import { de as ampel } from './areas/ampel';
 import { de as responsive } from './areas/responsive';
 import { de as fabrics } from './areas/fabrics';
+import { de as swatch } from './areas/swatch';
 import { de as measure } from './areas/measure';
 import { de as applique } from './areas/applique';
 import { de as library } from './areas/library';
@@ -1518,4 +1519,4 @@ export const deBase = {
 } as const;
 
 /** All German texts: the base plus one block per area of the new interface (src/i18n/areas). */
-export const de = { ...deBase, ...shell, ...files, ...objects, ...shapes, ...stitches, ...check, ...image, ...design, ...ready, ...ampel, ...responsive, ...fabrics, ...measure, ...applique, ...library } as const;
+export const de = { ...deBase, ...shell, ...files, ...objects, ...shapes, ...stitches, ...check, ...image, ...design, ...ready, ...ampel, ...responsive, ...fabrics, ...swatch, ...measure, ...applique, ...library } as const;

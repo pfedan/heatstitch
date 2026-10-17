@@ -150,7 +150,7 @@ export function bindHoop(s: Settings, onChange: () => void, fit: (() => void) | 
         parts.push(document.createTextNode(' '), btn);
       }
       note.replaceChildren(...parts);
-    }
+    } else note.replaceChildren(); // nothing hidden left in the language of an earlier design
   };
   onLangChange(() => refresh(bounds, fromFile));
   return { refresh };

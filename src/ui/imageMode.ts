@@ -16,7 +16,7 @@ import { drawStitches } from '../render/stitches';
 import { drawThreads } from '../render/threads';
 import { drawFabric } from '../render/fabricGl';
 import type { Viewport } from '../render/viewport';
-import { IMAGE_STYLES, shownMarks, SVG_STYLES, type ImageStyle, type ImageView, type Mode, type Settings, type SvgStyle } from '../settings';
+import { IMAGE_STYLES, setProfile, shownMarks, SVG_STYLES, type ImageStyle, type ImageView, type Mode, type Settings, type SvgStyle } from '../settings';
 import { redworkShapes } from '../image/redwork';
 import { CAUTION, CRITICAL, type ValidationResult } from '../validation/validate';
 import { clearImage, loadImage, saveImage, saveWork, type StoredImage, type StoredWork } from '../storage/imageStore';
@@ -585,7 +585,7 @@ export class ImageMode {
           real.dispatchEvent(new Event('change'));
           return;
         }
-        this.h.settings.profile = { ...this.h.settings.profile, [theirs]: sel.value };
+        setProfile(this.h.settings, { ...this.h.settings.profile, [theirs]: sel.value });
         this.h.save();
         this.profileChanged();
       });
