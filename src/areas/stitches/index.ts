@@ -3,6 +3,8 @@ import { formatNumber, onLangChange, t, type Key } from '../../i18n';
 import type { Editor } from '../../ui/editor';
 import type { FileList } from '../../ui/fileList';
 import type { RungTool } from '../../ui/rungTool';
+import type { AngleTool } from '../../ui/angleTool';
+import type { MeasureTool } from '../../ui/measureTool';
 import type { StitchPanel } from '../../ui/stitchPanel';
 import type { Settings } from '../../settings';
 import { ui } from '../../app/state';
@@ -19,6 +21,8 @@ export interface StitchAreaApp {
   readonly settings: Settings;
   readonly editor: Editor;
   readonly rungTool: RungTool;
+  readonly angleTool: AngleTool;
+  readonly measure: MeasureTool;
   readonly stitchPanel: StitchPanel;
   readonly closeRungs: () => void;
   readonly toggleRungs: () => void;
@@ -105,6 +109,22 @@ export function initStitchArea(app: StitchAreaApp): { refresh: () => void } {
     group: G,
     when: () => (rungsOn() && rt.mode === 'points') || (!!info()?.points?.single && POINTED.includes(panel.fillPattern ?? '')),
     run: () => app.togglePoints(),
+  });
+  // The rows' angle as a line drawn across the selected fills; it ends with a new selection.
+  const at = app.angleTool;
+  let angleFor = -1;
+  command({
+    id: 'stitch.angleDrag',
+    label: 'stitches.cmd.angleDrag',
+    group: G,
+    keys: ['W'],
+    when: () => at.active || (flow() && !ed.active && !!panel.rowAngle),
+    run: () => {
+      if (at.active) return at.stop();
+      app.closeRungs();
+      app.measure.stop();
+      if (at.start()) angleFor = ui.selectionKey;
+    },
   });
   const drawing = () => rungsOn() && (rt.mode === 'satin' || rt.mode === 'fill');
   command({ id: 'stitch.pen.rung', label: 'stitches.cmd.penRung', group: G, when: () => drawing() && rt.cutMode, run: () => rt.setCutMode(false) });
@@ -312,6 +332,7 @@ export function initStitchArea(app: StitchAreaApp): { refresh: () => void } {
   function barState(): string {
     const mode = app.settings.mode;
     if (mode === 'image') return '';
+    if (at.active) return JSON.stringify(['angle', at.angle]);
     if (ed.active) return JSON.stringify(['edit', ed.selection.size, ed.range !== null, app.pointsVisible(), thinShare(), mode, ed.penOn, where()]);
     if (!rungsOn()) return '';
     const d = dir();
@@ -324,6 +345,14 @@ export function initStitchArea(app: StitchAreaApp): { refresh: () => void } {
     const tool = rungsOn() ? rt.mode : null;
     if (app.settings.mode === 'image') {
       /* Bild draws no stitches */
+    } else if (at.active) {
+      const a = at.angle ?? panel.rowAngle?.value;
+      items.push(
+        title('stitches.bar.angle'),
+        state(a === undefined || !Number.isFinite(a) ? t('stitches.auto') : `${Math.round(a)}°`),
+        help('stitch.angle.drag.help'),
+        cmdButton('stitch.angleDrag', 'stitch.direction.done', { primary: true }),
+      );
     } else if (ed.active && ed.penOn) {
       // Stitching on: what the next click does, the way back, and done.
       const at = where();
@@ -490,6 +519,8 @@ export function initStitchArea(app: StitchAreaApp): { refresh: () => void } {
   }
 
   function refresh(): void {
+    // Another selection, another mode or a tool of its own: the line for the angle is gone.
+    if (at.active && !at.dragging && (angleFor !== ui.selectionKey || !flow() || ed.active || rt.active || !panel.rowAngle)) at.stop();
     refreshRail();
     const key = barState();
     if (key === barKey) return;
