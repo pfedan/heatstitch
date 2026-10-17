@@ -28,9 +28,11 @@ export const PROJECT_MIME = 'application/x-heatstitch-project';
 /**
  * Raised whenever the content changes in a way older versions would misread. 3: the vector model
  * (each object's form in one place, no pixel mask next to the curves it is rastered from). 4: designs
- * made in the app are kept in heatstitch's own records (parsers/records.ts), not as PES.
+ * made in the app are kept in heatstitch's own records (parsers/records.ts), not as PES. 5: an
+ * object can start with hidden travel from the one before (Remembered.travel, see travel.ts), which
+ * older versions would read as an object of its own.
  */
-export const PROJECT_VERSION = 4;
+export const PROJECT_VERSION = 5;
 const MAGIC = 'heatstitch-project';
 
 export interface ProjectFile {

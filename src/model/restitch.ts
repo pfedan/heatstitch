@@ -29,6 +29,7 @@ import { tidy, withRecords } from './edit';
 import { coversOver, cutAway, type Cover } from './covers';
 import { backToVersion, entryOf, hasTable, sewObjects, hold, keepVersion, knowKinds, relearn, rememberObjects, setMemory, setObjects, setObjectsFromKeys, stitchIndex, stitchKey, tableOf, type ObjectKind, type PlacedEntry, type SewObject } from './objects';
 import { END, JUMP, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
+import { dropTravel, travelOf as travelIn } from './travel';
 import { partFringe } from './fringe';
 import { recordOfStitch, SATIN, stitchKinds, TIE_STITCH } from './sequence';
 import { gradientOf, patchArea, patchSpacing, rowPatches, type RowPatch } from './rows';
@@ -463,6 +464,11 @@ export interface Remembered {
   under?: number;
   /** Its underlay starts after this many stitches of the object (other parts sewn before the fill). */
   underFrom?: number;
+  /**
+   * It starts with this many stitches of hidden travel from the object before, under fills sewn
+   * later (see model/travel.ts); counted in its parts like travel inside a fill.
+   */
+  travel?: number;
   /** The border in the fill's thread starts after this many stitches of the object. */
   borderAt?: number;
   /**
@@ -580,7 +586,8 @@ export function withLine(m: Remembered, line: BorderSettings | undefined): Remem
 }
 
 /** A key for an object's stitches. */
-export const objectKey = (p: Pattern, o: SewObject): string => stitchKey(p, o.first, o.last);
+/** A key for object `o` of `p` by its own stitches: the hidden travel it starts with is the way to it, not part of what it is. */
+export const objectKey = (p: Pattern, o: SewObject): string => stitchKey(p, o.first + (remembered(p, o)?.travel ?? 0), o.last);
 
 /** Remembers `r` for object `o` of version `p`. */
 export function remember(p: Pattern, o: SewObject, r: Remembered): void {
@@ -755,6 +762,7 @@ export interface StoredObject {
   line?: BorderSettings;
   under?: number;
   underFrom?: number;
+  travel?: number;
   borderAt?: number;
   parts?: SewnPart[];
   /** Before project version 3: the satin a fill had been (now kept.satin). */
@@ -840,6 +848,7 @@ function storeOne(key: string, r: Remembered): StoredObject {
     ...(r.line ? { line: storeLine(r.line) } : {}),
     ...(r.under ? { under: r.under } : {}),
     ...(r.underFrom ? { underFrom: r.underFrom } : {}),
+    ...(r.travel ? { travel: r.travel } : {}),
     ...(r.borderAt ? { borderAt: r.borderAt } : {}),
     ...(r.parts ? { parts: r.parts.map((x) => ({ ...x })) } : {}),
     ...(r.outline ? { outline: r.outline } : {}),
@@ -1368,6 +1377,7 @@ function fromStored(e: StoredObject): Remembered | null {
   }
   if (finite(e.under) && e.under > 0) r.under = Math.round(e.under);
   if (finite(e.underFrom) && e.underFrom > 0) r.underFrom = Math.round(e.underFrom);
+  if (finite(e.travel) && e.travel > 0) r.travel = Math.round(e.travel);
   if (finite(e.borderAt) && e.borderAt > 0) r.borderAt = Math.round(e.borderAt);
   const parts = partsFrom(e.parts);
   if (parts) r.parts = parts;
@@ -4290,6 +4300,13 @@ export function restitch(
   areas?: Map<number, Region>,
   paths?: Map<number, Form>,
 ): RestitchResult {
+  // Hidden travel to the objects goes first: their new stitches start elsewhere (settleTravel finds the way again).
+  const via = which.filter((k) => objs[k] && travelIn(remembered(p, objs[k])) && !remembered(p, objs[k])?.free);
+  if (via.length) {
+    p = dropTravel(p, new Set(via), trimMm);
+    objs = sewObjects(p);
+    kinds = stitchKinds(p);
+  }
   const once = (back: boolean) => restitchOnce(p, objs, which, settingsFor, kinds, trimMm, from, back, guides, areas, paths);
   const r = once(reverse);
   if (!r.starts.length || !sameStitches(p, objs, which, r)) return r;

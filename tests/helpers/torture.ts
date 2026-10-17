@@ -28,11 +28,11 @@ import { appliquesOf, asFill, canApplique, fromApplique, setApplique, toApplique
 import type { Region } from '../../src/digitize/region';
 import { GAP_ROWS_MAX } from '../../src/digitize/fill';
 import { fillRuns, TRAVEL_REACH } from '../../src/model/restitch';
-import { expandRegion, outline as outlineOf } from '../../src/digitize/region';
+import { expandRegion, outline as outlineOf, sample as sampleField } from '../../src/digitize/region';
 import { shownTravel } from './travel';
 import { analyze, backToVersion, crossGridOf, sameGrid, edgeAlong, keepShape, measureSatin, sectionsOf, sectionPlan, sectionView, keepVersion, relearn, objectKey, remember, remembered, rememberedIn, restitch, restoreRemembered, DECO_PATTERNS, OPEN_PATTERNS, type BorderSettings, type DecoSettings, type FillSettings, type Rails, type Remembered, type SatinSettings, type StoredObjects } from '../../src/model/restitch';
 import { reorder } from '../../src/model/order';
-import { stitchKinds } from '../../src/model/sequence';
+import { blockIndex, stitchKinds } from '../../src/model/sequence';
 import { addContour, behindCovered, gapReader } from '../../src/model/contour';
 import { combineLines, joinTouchingEnds, deleteObjects, partsOfForm, splitByForm, duplicateObject, duplicateObjects, extractObjects, gatherObjects, mergeLeads, mirrorMatrix, recolorObjects, subtractTop, threadOfAFill } from '../../src/model/shapeOps';
 import { isRigid, stitchesBefore } from '../../src/model/transform';
@@ -55,6 +55,7 @@ import { writePattern } from '../../src/writers';
 import { pecOwnSlot, PEC_APPLIQUE } from '../../src/parsers/pecPalette';
 import { loadedOriginal, originalOf } from '../../src/model/original';
 import { rng } from './images';
+import { withTravel } from '../../src/model/travel';
 import { readFileSync } from 'node:fs';
 import { addFont, type Font } from '../../src/lettering/font';
 import { layout, LETTERING_DEFAULTS, type Lettering } from '../../src/lettering/layout';
@@ -94,9 +95,21 @@ await loadOps();
  */
 
 /** The stitches of object `o` (0.1 mm), its tie-in left out. */
+/** Where the own stitches of object `o` start: after the hidden travel to it (see model/travel.ts) and its tie-in. */
+export const ownFrom = (p: Pattern, o: SewObject) => {
+  const travel = remembered(p, o)?.travel ?? 0;
+  if (!travel) return o.first + o.tieIn;
+  const tags = tagShortStitches(p);
+  let i = o.first + travel;
+  while (i + 1 <= o.last && tags[i + 1] === TIE) i++;
+  return i;
+};
+/** How many stitches object `o` has of its own (without the hidden travel to it). */
+export const ownCount = (p: Pattern, o: SewObject) => o.stitches - (remembered(p, o)?.travel ?? 0);
+
 export const ownStitches = (p: Pattern, o: SewObject) => {
   const out: string[] = [];
-  for (let i = o.first + o.tieIn; i <= o.last; i++) if (p.cmd[i] === STITCH) out.push(`${p.x[i]},${p.y[i]}`);
+  for (let i = ownFrom(p, o); i <= o.last; i++) if (p.cmd[i] === STITCH) out.push(`${p.x[i]},${p.y[i]}`);
   return out.join(' ');
 };
 
@@ -515,8 +528,9 @@ export const OPS: Op[] = [
       for (const k of g!.which) {
         expect(head(now[k].block), 'gathered into one color block').toBe(head(now[g!.which[0]].block));
         expect(sameColor(now[k].color, d.objects[lead].color), 'in the lead\'s thread').toBe(true);
-        expect(now[k].stitches, 'a gathered object keeps its stitches').toBe(was.get(now[k].id)!.stitches);
-        expect(remembered(g!.pattern, now[k]), 'a gathered object keeps what it knows').toEqual(remembered(p, was.get(now[k].id)!));
+        expect(ownCount(g!.pattern, now[k]), 'a gathered object keeps its stitches').toBe(ownCount(p, was.get(now[k].id)!));
+        const ownly = (m: Remembered | undefined) => m && withTravel(m, 0);
+        expect(ownly(remembered(g!.pattern, now[k])), 'a gathered object keeps what it knows').toEqual(ownly(remembered(p, was.get(now[k].id)!)));
       }
       // The others keep their order and thread.
       const ids = new Set(objs.map((o) => o.id));
@@ -2760,6 +2774,60 @@ export function checkHiddenTravel(p: Pattern): void {
   }
 }
 
+/** Fills dense enough to hide a thread under them (see model/travel.ts): their patterns and widest row spacing. */
+const HIDING_PATTERNS = [...COVERING, 'contour', 'spiral', 'follow', 'guided'];
+const HIDING_SPACING = 0.6;
+
+/**
+ * Hidden travel between objects (model/travel.ts): every object that starts with travel comes to
+ * it from the object right before, in the same thread without a trim, and all of the travel
+ * (but a millimetre at either end) lies inside dense fills sewn after it, as they are sewn:
+ * never under an open or light pattern, a satin, a line, appliqué fabric or a part left out.
+ */
+export function checkTravel(p: Pattern): void {
+  const objs = sewObjects(p);
+  const problems: string[] = [];
+  objs.forEach((o, k) => {
+    const n = remembered(p, o)?.travel ?? 0;
+    if (!n) return;
+    const a = objs[k - 1];
+    if (!a) return void problems.push(`object ${k}: travel without an object before`);
+    if (blockIndex(p)[a.last] !== o.block) problems.push(`object ${k}: travel from another thread`);
+    for (let i = a.last + 1; i < o.first; i++) if (p.cmd[i] === TRIM || p.cmd[i] === COLOR_CHANGE) problems.push(`object ${k}: trimmed before its travel`);
+    if (o.stitches <= n) return void problems.push(`object ${k}: nothing but travel`);
+    const pts: [number, number][] = [[p.x[a.last] / 10, p.y[a.last] / 10]];
+    for (let i = o.first; i <= o.first + n; i++) {
+      if (p.cmd[i] !== STITCH) return void problems.push(`object ${k}: travel not one run of stitches`);
+      pts.push([p.x[i] / 10, p.y[i] / 10]);
+    }
+    if (Math.hypot(pts[1][0] - pts[0][0], pts[1][1] - pts[0][1]) > 2.8) problems.push(`object ${k}: travel starts away from the object before`);
+    const areas = objs.slice(k).flatMap((x) => {
+      const m = remembered(p, x);
+      const spec = specOf(p, x);
+      const f = m?.fill;
+      if (!f || m.read || m.hand || m.free || m.applique || !HIDING_PATTERNS.includes(f.pattern)) return [];
+      if (Math.max(f.spacing, f.pattern === 'gradient' || f.gradient ? f.spacingEnd : 0) > HIDING_SPACING) return [];
+      const area = spec?.kind === 'fill' ? spec.area : f.pattern === 'follow' ? m.region : null;
+      return area ? [area] : [];
+    });
+    const [s, e] = [pts[0], pts[pts.length - 1]];
+    let shown = 0;
+    for (let i = 1; i < pts.length; i++) {
+      const [u, v] = [pts[i - 1], pts[i]];
+      const m = Math.max(1, Math.ceil(Math.hypot(v[0] - u[0], v[1] - u[1]) / 0.1));
+      for (let j = 0; j <= m; j++) {
+        const q: [number, number] = [u[0] + ((v[0] - u[0]) * j) / m, u[1] + ((v[1] - u[1]) * j) / m];
+        if (Math.hypot(q[0] - s[0], q[1] - s[1]) < 1 || Math.hypot(q[0] - e[0], q[1] - e[1]) < 1) continue;
+        // Under them together, 0.2 mm off their edge (two overlapping fills hide their seam too).
+        const inside = (x: number, y: number) => areas.some((r) => sampleField(r, r.sdf, x, y) < 0);
+        if (!inside(q[0], q[1]) || !Array.from({ length: 8 }, (_, t) => (t * Math.PI) / 4).every((t) => inside(q[0] + 0.2 * Math.cos(t), q[1] + 0.2 * Math.sin(t)))) shown++;
+      }
+    }
+    if (shown) problems.push(`object ${k}: ${(shown / 10).toFixed(1)} mm of travel not under a dense fill sewn later`);
+  });
+  expect(problems.slice(0, 5).join('; '), 'hidden travel').toBe('');
+}
+
 export function describeObjects(p: Pattern): string {
   return sewObjects(p)
     .map((o) => {
@@ -3041,6 +3109,7 @@ function checkStep(d: Doc, full: boolean): void {
   checkFillLooks(p);
   checkCrossCells(p);
   checkAppliques(p);
+  checkTravel(p);
   checkTrace(d);
   checkReload(d);
   if (full) {

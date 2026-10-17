@@ -127,6 +127,10 @@ from its object list) and `src/model/shapeOps.ts` (duplicate, mirror, delete, cu
 ...) are the main entry points. Related objects follow their leaders in the same step: borders
 (`border.ts`), knockouts under later fills (`knockout.ts`), derived areas (`derived.ts`), appliqué
 (`applique.ts`, edges shared by touching appliqués in `appliqueShare.ts`), echoes and shadows (`shadow.ts`).
+Hidden travel (`travel.ts`): the way between neighbours in one thread runs as running stitch under
+the dense fills sewn later where the travel grid finds one 0.5 mm inside them; it belongs to the
+object it leads to (`Remembered.travel`, its first stitches), `sewList` plans and keeps it, and
+`settleTravel` finds it again after edits made without the list (borders, added shapes, pictures).
 
 Other model modules: `transform.ts` and `reshape.ts` (move, rotate, scale), `order.ts` and
 `bestOrder.ts` (sewing order), `jumps.ts` (trims and ties), `sequence.ts` (stitch kinds and color
@@ -262,7 +266,7 @@ preview at its own address; see CONTRIBUTING.
   of the operations the app offers (add, duplicate, mirror, scale, cut out, knock out, recolor,
   border, lettering, motifs, undo, redo, save and open, export, ...) the way the app does them, and
   checks the design's invariants after every step (`checkWellFormed`, `checkObjectList`,
-  `checkBorders`, `checkKnockouts`, `checkFollowers`, `checkExport`, ...). A failing chain prints
+  `checkBorders`, `checkKnockouts`, `checkFollowers`, `checkTravel`, `checkExport`, ...). A failing chain prints
   its seed and steps, so it can be replayed and turned into a regression test in the
   "found by the torture test" block. `TORTURE_CHAINS=10000` runs a long session.
 - **Demos** (`tests/demos.test.ts`): the guide's demo files are generated and must stay current.
