@@ -2,10 +2,13 @@ import type { Pt } from '../digitize/skeleton';
 import type { Viewport } from './viewport';
 
 const ACCENT = '#e0559e';
+/** Half the length of the strokes across the line, which show how the rows lie (CSS pixels). */
+const CAP = 9;
 
 /**
- * The line drawn across a fill for the direction of its rows: light over a dark halo, a dot at
- * each end, and the angle on a dark label beside the end being dragged (kept on the stage).
+ * The line drawn over a fill for the direction of its rows, which run across it: light over a dark
+ * halo, a stroke across each end the way the rows lie, a dot at each end, and the angle on a dark
+ * label beyond the end being dragged (kept on the stage).
  */
 export function drawAngle(ctx: CanvasRenderingContext2D, vp: Viewport, m: { a: Pt | null; b: Pt | null; angle: number | null }, w: number, h: number): void {
   if (!m.a || !m.b || m.angle === null) return;
@@ -13,9 +16,19 @@ export function drawAngle(ctx: CanvasRenderingContext2D, vp: Viewport, m: { a: P
   const [bx, by] = vp.toScreen(m.b[0], m.b[1]);
   ctx.save();
   ctx.lineCap = 'round';
+  const len = Math.hypot(bx - ax, by - ay) || 1;
+  const nx = -(by - ay) / len;
+  const ny = (bx - ax) / len;
   ctx.beginPath();
   ctx.moveTo(ax, ay);
   ctx.lineTo(bx, by);
+  for (const [x, y] of [
+    [ax, ay],
+    [bx, by],
+  ]) {
+    ctx.moveTo(x - nx * CAP, y - ny * CAP);
+    ctx.lineTo(x + nx * CAP, y + ny * CAP);
+  }
   ctx.strokeStyle = 'rgba(0, 0, 0, 0.65)';
   ctx.lineWidth = 4;
   ctx.stroke();
@@ -39,7 +52,6 @@ export function drawAngle(ctx: CanvasRenderingContext2D, vp: Viewport, m: { a: P
   const tw = ctx.measureText(text).width + 14;
   const th = 22;
   // Ahead of the pointer, along the line, so the finger or the cursor does not cover it.
-  const len = Math.hypot(bx - ax, by - ay) || 1;
   let lx = bx + ((bx - ax) / len) * (tw / 2 + 12);
   let ly = by + ((by - ay) / len) * (th / 2 + 12);
   lx = Math.min(w - tw / 2 - 4, Math.max(tw / 2 + 4, lx));
