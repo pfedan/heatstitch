@@ -5,6 +5,7 @@ import type { FrameTool } from '../ui/frameTool';
 import type { TraceTool } from '../ui/traceTool';
 import type { ImageMode } from '../ui/imageMode';
 import type { MeasureTool } from '../ui/measureTool';
+import type { AngleTool } from '../ui/angleTool';
 import type { Lettering } from '../lettering/layout';
 import type { OrderCard } from '../ui/objectPanel';
 import type { Pattern } from '../model/pattern';
@@ -24,6 +25,7 @@ import { updateTooltip } from '../ui/tooltip';
 
 /** What bindPointer needs from the rest of the app. */
 export interface PointerApp {
+  readonly angle: AngleTool;
   readonly canvas: HTMLCanvasElement;
   readonly closeShape: () => void;
   readonly drawTool: DrawTool;
@@ -134,8 +136,8 @@ export function bindPointer(app: PointerApp) {
   /** Tooltip for the side of the divider the pointer is on. */
   function showTooltip(sx: number, sy: number): void {
     if (app.settings.mode === 'image') return;
-    // While measuring, the label on the line says what counts; a tip would cover it.
-    if (app.measure.active) {
+    // While measuring or drawing the rows' angle, the label on the line says what counts; a tip would cover it.
+    if (app.measure.active || app.angle.active) {
       app.tooltip.hidden = true;
       return;
     }
@@ -218,6 +220,9 @@ export function bindPointer(app: PointerApp) {
       if (app.measure.active) {
         app.measure.down(wx, wy, app.vp.scale, { shift: e.shiftKey, alt: e.altKey, touch: e.pointerType !== 'mouse' });
         mode = 'move';
+      } else if (app.angle.active && flow) {
+        app.angle.down(wx, wy, app.vp.scale);
+        mode = 'move';
       } else if (app.drawTool.active && flow) {
         app.drawTool.down(wx, wy, app.vp.scale, e.shiftKey);
         mode = 'move';
@@ -299,6 +304,7 @@ export function bindPointer(app: PointerApp) {
       app.drawTool.abortPress();
       app.traceTool.cancel();
       app.measure.abortPress();
+      app.angle.cancel();
       ui.letterDrag = null;
       if (app.frameTool.dragging !== null) {
         app.frameTool.cancel();
@@ -354,7 +360,7 @@ export function bindPointer(app: PointerApp) {
         ui.objectBand.x1 = wx;
         ui.objectBand.y1 = wy;
       } else if (pointers.size === 1) {
-        if (!app.measure.dragTo(wx, wy, { shift: e.shiftKey, alt: e.altKey, touch: e.pointerType !== 'mouse' }) && !app.drawTool.dragTo(wx, wy, e.shiftKey, e.altKey) && !app.letterDragTo(wx, wy) && !app.rungTool.dragTo(wx, wy) && !app.shapeTool.dragTo(wx, wy) && !app.frameTool.dragTo(wx, wy, e.shiftKey, app.vp.scale, e.altKey) && !app.traceTool.dragTo(wx, wy) && !app.editor.dragTo(wx, wy, pos[0], pos[1])) app.vp.pan(pos[0] - prev[0], pos[1] - prev[1]);
+        if (!app.measure.dragTo(wx, wy, { shift: e.shiftKey, alt: e.altKey, touch: e.pointerType !== 'mouse' }) && !app.angle.dragTo(wx, wy, e.shiftKey) && !app.drawTool.dragTo(wx, wy, e.shiftKey, e.altKey) && !app.letterDragTo(wx, wy) && !app.rungTool.dragTo(wx, wy) && !app.shapeTool.dragTo(wx, wy) && !app.frameTool.dragTo(wx, wy, e.shiftKey, app.vp.scale, e.altKey) && !app.traceTool.dragTo(wx, wy) && !app.editor.dragTo(wx, wy, pos[0], pos[1])) app.vp.pan(pos[0] - prev[0], pos[1] - prev[1]);
       } else if (pointers.size === 2) {
         pointers.set(e.pointerId, pos);
         const [a, b] = [...pointers.values()];
@@ -478,8 +484,13 @@ export function bindPointer(app: PointerApp) {
       app.stage.classList.remove('splitting');
     }
     if (pointers.size === 1 && pointers.has(e.pointerId)) {
-      if (e.type === 'pointerup') app.measure.up();
-      else app.measure.abortPress();
+      if (e.type === 'pointerup') {
+        app.measure.up();
+        app.angle.up();
+      } else {
+        app.measure.abortPress();
+        app.angle.cancel();
+      }
       app.drawTool.up(...app.vp.toWorld(pos[0], pos[1]), e.shiftKey, e.altKey);
       app.letterUp();
       app.rungTool.up();
@@ -522,7 +533,7 @@ export function bindPointer(app: PointerApp) {
   });
   /** Whether a rubber band may select objects now (level Objects, no tool open). */
   function bandAllowed(): boolean {
-    return app.settings.mode === 'flow' && !!app.files.active?.pattern && !app.measure.active && !app.editor.active && !app.shapeTool.active && !app.rungTool.active && !app.drawTool.active && !app.orderCard.isOpen && !ui.letterMode;
+    return app.settings.mode === 'flow' && !!app.files.active?.pattern && !app.measure.active && !app.angle.active && !app.editor.active && !app.shapeTool.active && !app.rungTool.active && !app.drawTool.active && !app.orderCard.isOpen && !ui.letterMode;
   }
 
   /** The object under `pos` (on the stage), or -1: its stitches within `reach` px, or an appliqué's fabric. */
@@ -559,7 +570,7 @@ export function bindPointer(app: PointerApp) {
   /** Opens the menu for the object under `pos` (on the stage), selecting it first; false when there is none. */
   function openObjectMenu(pos: [number, number], clientX: number, clientY: number): boolean {
     const p = app.files.active?.pattern;
-    if (!p || app.settings.mode !== 'flow' || app.measure.active || app.editor.active || app.shapeTool.active || app.rungTool.active || app.drawTool.active || app.orderCard.isOpen || ui.letterMode) return false;
+    if (!p || app.settings.mode !== 'flow' || app.measure.active || app.angle.active || app.editor.active || app.shapeTool.active || app.rungTool.active || app.drawTool.active || app.orderCard.isOpen || ui.letterMode) return false;
     const o = objectAt(pos);
     return o >= 0 && showObjectMenu(o, clientX, clientY);
   }
@@ -588,7 +599,7 @@ export function bindPointer(app: PointerApp) {
     const pos = local(e);
     const [x, y] = app.vp.toWorld(pos[0], pos[1]);
     // Measuring: two quick clicks are two ends, not a reason to fit the view.
-    if (app.measure.active) return;
+    if (app.measure.active || app.angle.active) return;
     if (app.drawTool.active) {
       // The pen ends an open line; the other tools ignore it.
       app.drawTool.finish(false);
