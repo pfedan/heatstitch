@@ -558,7 +558,7 @@ export const deBase = {
   'stitch.angle': 'Winkel',
   'stitch.angle.hint': 'Richtung der Reihen',
   'stitch.angle.drag': 'Winkel auf der Fläche ziehen',
-  'stitch.angle.drag.hint': 'Eine Linie über die Fläche ziehen, die Reihen folgen ihr',
+  'stitch.angle.drag.hint': 'Eine Linie über die Fläche ziehen, die Reihen laufen quer dazu',
   'stitch.angle.drag.help': 'Linie über die Fläche ziehen · Umschalt: 15°-Schritte · Esc: abbrechen',
   'stitch.length': 'Stichlänge',
   'stitch.length.hint': 'Länge der Stiche entlang einer Reihe',
