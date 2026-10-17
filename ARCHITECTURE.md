@@ -128,9 +128,11 @@ from its object list) and `src/model/shapeOps.ts` (duplicate, mirror, delete, cu
 (`border.ts`), knockouts under later fills (`knockout.ts`), derived areas (`derived.ts`), appliqué
 (`applique.ts`, edges shared by touching appliqués in `appliqueShare.ts`), echoes and shadows (`shadow.ts`).
 Hidden travel (`travel.ts`): the way between neighbours in one thread runs as running stitch under
-the dense fills sewn later where the travel grid finds one 0.5 mm inside them; it belongs to the
-object it leads to (`Remembered.travel`, its first stitches), `sewList` plans and keeps it, and
-`settleTravel` finds it again after edits made without the list (borders, added shapes, pictures).
+the dense fills and satins from 2 mm sewn later where the travel grid finds one 0.5 mm inside them;
+it belongs to the object it leads to (`Remembered.travel`, its first stitches), `sewList` plans and
+keeps it, and `settleTravel` finds it again after edits made without the list (borders, added
+shapes, pictures). `withHiddenJoins` lists the hidden ways as transitions for the jumps panel and
+the stage; `joinsAs` trims one by hand (`Remembered.cutIn`: never hidden again) or hides it again.
 
 Other model modules: `transform.ts` and `reshape.ts` (move, rotate, scale), `order.ts` and
 `bestOrder.ts` (sewing order), `jumps.ts` (trims and ties), `sequence.ts` (stitch kinds and color

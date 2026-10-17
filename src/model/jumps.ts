@@ -1,6 +1,7 @@
 import { LOCK_MM } from '../material/rules';
 import { tidyKept, withRecords } from './edit';
-import { carryObjects } from './objects';
+import { carryObjects, sewObjects } from './objects';
+import { remember, remembered } from './restitch';
 import { STITCH, TRIM, type Pattern } from './pattern';
 import type { Transition } from './sequence';
 
@@ -35,13 +36,54 @@ function dir(p: Pattern, a: number, b: number): [number, number] {
 }
 
 export function build(p: Pattern, list: Rec[], src: Pattern = p): Pattern {
+  return built(p, list, src).pattern;
+}
+
+/** As build, with the record of `src` each record came from (-1: a new one). */
+function built(p: Pattern, list: Rec[], src: Pattern): { pattern: Pattern; origin: Int32Array } {
   const x = Int32Array.from(list, (r) => r.x);
   const y = Int32Array.from(list, (r) => r.y);
   const cmd = Uint8Array.from(list, (r) => r.cmd);
   const { pattern, kept } = tidyKept(withRecords(p, x, y, cmd));
   // The objects follow their records (`from`, records of `src`); new ones go with their neighbours.
-  carryObjects(src, pattern, Int32Array.from(kept, (k) => list[k].from ?? -1));
-  return pattern;
+  const origin = Int32Array.from(kept, (k) => list[k].from ?? -1);
+  carryObjects(src, pattern, origin);
+  return { pattern, origin };
+}
+
+/**
+ * The parts the objects of `q` were sewn in (Remembered.parts) counted in the stitches they have
+ * now, after lock stitches were added or taken away (`origin`: the record of `p` each record of `q`
+ * came from). A stitch added goes with the part of the stitch before it.
+ */
+function refitParts(p: Pattern, q: Pattern, origin: Int32Array): void {
+  // Each stitch of `p`: how many stitches of its object end with it.
+  const num = new Int32Array(p.cmd.length);
+  for (const o of sewObjects(p)) {
+    let n = 0;
+    for (let i = o.first; i <= o.last; i++) if (p.cmd[i] === STITCH) num[i] = ++n;
+  }
+  for (const o of sewObjects(q)) {
+    const m = remembered(q, o);
+    if (!m?.parts?.length) continue;
+    const was: number[] = [];
+    let last = 0;
+    for (let i = o.first; i <= o.last; i++) {
+      if (q.cmd[i] !== STITCH) continue;
+      const r = origin[i];
+      if (r >= 0 && num[r]) last = num[r];
+      was.push(last);
+    }
+    const n = was.length;
+    if (m.parts[m.parts.length - 1].end === n) continue;
+    const parts = m.parts
+      .map((pt, k, all) => {
+        const after = was.findIndex((s) => s > pt.end);
+        return { ...pt, end: k === all.length - 1 || after < 0 ? n : after };
+      })
+      .filter((pt, k, all) => pt.end > (k ? all[k - 1].end : 0));
+    remember(q, o, { ...m, ...(parts.length ? { parts } : {}) });
+  }
 }
 
 /**
@@ -95,6 +137,8 @@ export function setTrims(p: Pattern, list: Transition[], cut: boolean): Pattern 
     }
   }
   out.push(...recs(p, i, p.cmd.length));
-  // The objects stay what they were: what lies between them changed, not they.
-  return build(p, out);
+  // The objects stay what they were: what lies between them changed, not they (but their lock stitches).
+  const { pattern, origin } = built(p, out, p);
+  refitParts(p, pattern, origin);
+  return pattern;
 }

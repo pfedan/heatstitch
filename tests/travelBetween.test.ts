@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { addShape } from '../src/model/addShape';
+import { addLine, addShape } from '../src/model/addShape';
+import { lineStitchFor } from '../src/model/line';
+import type { PathStitch } from '../src/model/along';
 import { sewObjects } from '../src/model/objects';
 import { COLOR_CHANGE, JUMP, STITCH, TRIM, type Pattern, type ThreadColor } from '../src/model/pattern';
 import { remembered, type FillSettings } from '../src/model/restitch';
 import { deleteObjects, duplicateObjects, mirrorMatrix } from '../src/model/shapeOps';
 import { setKnockout } from '../src/model/knockout';
+import { transitions } from '../src/model/sequence';
+import { cutJoins, freeJoins, joinedObjects, withHiddenJoins } from '../src/model/travel';
 import { translation } from '../src/shape/path';
 import { parsePath, rectPath } from '../src/shape/svgPath';
 import { digitize, digitizeDefaults } from '../src/digitize/digitize';
@@ -66,12 +70,30 @@ describe('hidden travel between objects', () => {
     }
   });
 
-  it('trims under a satin or a line', () => {
+  /**
+   * The two red squares, then a blue line along their lower edge sewn as `stitch`, `width` mm wide
+   * (where their rows end: a fill ends with its last row, at one side of it).
+   */
+  function underLine(stitch: Partial<PathStitch>, width: number): Doc {
     const d = new Doc();
     shapes(d, addShape(empty, { form: rect(-30, -8, 14, 16), kind: 'fill' }, red, null, options)!.pattern);
     shapes(d, addShape(d.cur.p, { form: rect(16, -8, 14, 16), kind: 'fill' }, red, 0, options)!.pattern);
-    shapes(d, addShape(d.cur.p, { form: parsePath('M-34 0 L34 0', ID), kind: 'stroke', width: 6 }, blue, null, options)!.pattern);
-    expect(join(d.cur.p, 1)).toBe('trim');
+    const st = { ...lineStitchFor(width, options.tolerance), ...stitch } as PathStitch;
+    shapes(d, addLine(d.cur.p, parsePath('M-34 -7 L34 -7', ID), st, blue, null, options)!.pattern);
+    return d;
+  }
+
+  it('runs under a satin 2 mm wide or wider', () => {
+    const d = underLine({ type: 'satin' }, 6);
+    expect(join(d.cur.p, 1)).toBe('travel');
+    checkTravel(d.cur.p);
+  });
+
+  it('trims under a narrow or open satin and under a running line', () => {
+    for (const [stitch, width] of [[{ type: 'satin' }, 1.5], [{ type: 'e' }, 6], [{ type: 'satin', spacing: 2 }, 6], [{ type: 'run' }, 6]] as [Partial<PathStitch>, number][]) {
+      const d = underLine(stitch, width);
+      expect(join(d.cur.p, 1), JSON.stringify(stitch) + width).toBe('trim');
+    }
   });
 
   it('keeps off a part left out under an open fill on top', () => {
@@ -136,4 +158,48 @@ describe('hidden travel between objects', () => {
     expect(objs.filter((x) => remembered(pattern, x)?.travel).length).toBeGreaterThanOrEqual(4);
     checkTravel(pattern);
   }, 60000);
+
+  it('is trimmed and tied by hand, stays so, and can be hidden again', async () => {
+    const d = design();
+    const hidden = d.cur;
+    const joins = withHiddenJoins(d.cur.p, transitions(d.cur.p));
+    const way = joins.find((t) => t.hidden)!;
+    expect(way).toBeTruthy();
+    expect(joinedObjects(d.cur.p, [way])).toEqual([1]);
+    shapes(d, cutJoins(d.cur.p, [1], T));
+    expect(join(d.cur.p, 1)).toBe('trim');
+    expect(remembered(d.cur.p, d.objects[1])?.cutIn).toBe(true);
+    // Tied off and in around the trim, and listed as trimmed by hand.
+    const cut = withHiddenJoins(d.cur.p, transitions(d.cur.p)).find((t) => joinedObjects(d.cur.p, [t])[0] === 1)!;
+    expect(cut.trimmed && cut.byHand && cut.tieOff > 0 && cut.tieIn > 0).toBe(true);
+    // Whatever changes after: the band sewn denser, moved a little, saved and opened.
+    expect(refill(d, 2, { spacing: 0.35 })).toBe(true);
+    expect(transform(d, [2], translation(1, 0))).toBe(true);
+    await saveAndOpen(d);
+    expect(join(d.cur.p, 1)).toBe('trim');
+    expect(remembered(d.cur.p, d.objects[1])?.cutIn).toBe(true);
+    checkTravel(d.cur.p);
+    // Hidden again on request.
+    shapes(d, freeJoins(d.cur.p, [1], T, false));
+    expect(join(d.cur.p, 1)).toBe('travel');
+    expect(remembered(d.cur.p, d.objects[1])?.cutIn).toBeUndefined();
+    checkTravel(d.cur.p);
+    // Undo goes back to the hidden way with its stitches.
+    d.cur = hidden;
+    expect(join(d.cur.p, 1)).toBe('travel');
+  });
+
+  it('keeps a long jump trimmed by hand from being hidden later', () => {
+    const d = new Doc();
+    shapes(d, addShape(empty, { form: rect(-30, -8, 14, 16), kind: 'fill' }, red, null, options)!.pattern);
+    shapes(d, addShape(d.cur.p, { form: rect(16, -8, 14, 16), kind: 'fill' }, red, 0, options)!.pattern);
+    expect(join(d.cur.p, 1)).toBe('trim');
+    shapes(d, cutJoins(d.cur.p, [1], T));
+    // A dense band sewn after both would hide the way: the trim set by hand stays.
+    shapes(d, addShape(d.cur.p, { form: rect(-34, -10, 68, 20), kind: 'fill' }, blue, null, options)!.pattern);
+    expect(join(d.cur.p, 1)).toBe('trim');
+    // Not trimmed any more: carried, then hidden where it can be.
+    shapes(d, freeJoins(d.cur.p, [1], T, true));
+    expect(join(d.cur.p, 1)).toBe('travel');
+  });
 });

@@ -469,6 +469,8 @@ export interface Remembered {
    * later (see model/travel.ts); counted in its parts like travel inside a fill.
    */
   travel?: number;
+  /** Trimmed and tied off from the object before by hand (see travel.ts): never joined to it by hidden travel. */
+  cutIn?: true;
   /** The border in the fill's thread starts after this many stitches of the object. */
   borderAt?: number;
   /**
@@ -763,6 +765,7 @@ export interface StoredObject {
   under?: number;
   underFrom?: number;
   travel?: number;
+  cutIn?: true;
   borderAt?: number;
   parts?: SewnPart[];
   /** Before project version 3: the satin a fill had been (now kept.satin). */
@@ -849,6 +852,7 @@ function storeOne(key: string, r: Remembered): StoredObject {
     ...(r.under ? { under: r.under } : {}),
     ...(r.underFrom ? { underFrom: r.underFrom } : {}),
     ...(r.travel ? { travel: r.travel } : {}),
+    ...(r.cutIn ? { cutIn: true as const } : {}),
     ...(r.borderAt ? { borderAt: r.borderAt } : {}),
     ...(r.parts ? { parts: r.parts.map((x) => ({ ...x })) } : {}),
     ...(r.outline ? { outline: r.outline } : {}),
@@ -1378,6 +1382,7 @@ function fromStored(e: StoredObject): Remembered | null {
   if (finite(e.under) && e.under > 0) r.under = Math.round(e.under);
   if (finite(e.underFrom) && e.underFrom > 0) r.underFrom = Math.round(e.underFrom);
   if (finite(e.travel) && e.travel > 0) r.travel = Math.round(e.travel);
+  if (e.cutIn === true) r.cutIn = true;
   if (finite(e.borderAt) && e.borderAt > 0) r.borderAt = Math.round(e.borderAt);
   const parts = partsFrom(e.parts);
   if (parts) r.parts = parts;

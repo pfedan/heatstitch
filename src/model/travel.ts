@@ -2,13 +2,16 @@ import { pathLength, TRAVEL_STITCH, TravelGrid } from '../digitize/fill';
 import { outline, sample, type Region } from '../digitize/region';
 import { runStitch } from '../digitize/run';
 import type { Pt } from '../digitize/skeleton';
-import { regionOf } from '../shape/rasterize';
+import { rasterize, rasterizeStroke, regionOf, unionOf } from '../shape/rasterize';
+import type { Form } from '../shape/path';
 import { withRecords } from './edit';
 import { bandArea, geoOf, geoUse } from './geo';
 import { wholeArea } from './knockout';
-import { setObjects, sewObjects, stitchKey, tableOf, trimmedBetween, type PlacedEntry, type SewObject } from './objects';
+import { relearn, setObjects, sewObjects, stitchKey, tableOf, trimmedBetween, type PlacedEntry, type SewObject } from './objects';
+import { setTrims } from './jumps';
+import { blockIndex, transitions, type Transition } from './sequence';
 import { COLOR_CHANGE, JUMP, STITCH, TRIM, type Pattern } from './pattern';
-import { isOpenPattern, remembered, type FillPattern, type Remembered } from './restitch';
+import { isOpenPattern, remember, remembered, type FillPattern, type Remembered } from './restitch';
 import { listOf, sewList, specOf } from './sew';
 
 /**
@@ -60,6 +63,10 @@ export interface Hiding {
  * on top).
  */
 export function hidingOf(m: Remembered | null | undefined): Hiding | null {
+  if (m && !m.read && !m.hand && !m.free && !m.applique && !m.lettering) {
+    const satin = satinHiding(m);
+    if (satin !== undefined) return satin;
+  }
   const f = m?.fill;
   if (!m || !f || m.read || m.hand || m.free || m.applique || m.lettering || m.satin || (m.outline && m.border)) return null;
   if (isOpenPattern(f.pattern) || !HIDING.has(f.pattern)) return null;
@@ -73,9 +80,68 @@ export function hidingOf(m: Remembered | null | undefined): Hiding | null {
   return { region, inset: Math.max(0, -f.edge) + Math.max(0, -(f.expand ?? 0)) };
 }
 
+/** Satin further apart than this between penetrations on one side (mm) lets a thread under it show. */
+export const SATIN_HIDING_SPACING = 1;
+/** Satin hides only this far inside its rails besides HIDE_INSET (mm): a way under it needs a column at least 2 mm wide. */
+export const SATIN_INSET = 1 - HIDE_INSET;
+/** Satin areas are rastered this fine (mm). */
+const SATIN_PX = 0.2;
+const satins = new WeakMap<Remembered, Hiding | null>();
+
+/**
+ * The area a dense satin of object memory `m` covers: a column between its rails, a satin line
+ * along its path, a satin border along its area's edge; null when it does not hide (an E stitch, a
+ * fringe, penetrations far apart); undefined when `m` is no satin.
+ */
+function satinHiding(m: Remembered): Hiding | null | undefined {
+  const line = m.outline && m.border && m.region ? m.border : geoUse(m) === 'line' ? m.line : undefined;
+  const column = !line && m.satin && m.columns?.length && !m.fill ? m.satin : undefined;
+  if (!column && line?.type !== 'satin') return undefined;
+  if (satins.has(m)) return satins.get(m)!;
+  let out: Hiding | null = null;
+  if (column) {
+    if ((column.type ?? 'satin') === 'satin' && !column.fringe && column.spacing <= SATIN_HIDING_SPACING) {
+      const polys = m.columns!.flat().map((r): Form => ({ paths: [{ closed: true, nodes: [...r.left, ...[...r.right].reverse()].map((q) => ({ p: q, a: q, b: q, smooth: false })) }] }));
+      const region = unionOf(polys.map((f) => rasterize(f, SATIN_PX)).filter((r): r is Region => !!r));
+      if (region) out = { region, inset: SATIN_INSET + Math.max(0, -column.edge) };
+    }
+  } else if (line && !line.fringe && (line.spacing ?? 0) <= SATIN_HIDING_SPACING) {
+    const width = line.width + 2 * Math.max(0, line.pull ?? 0);
+    const region = m.outline && m.border ? bandAround(m.region!, line.offset ?? 0, width) : geoOf(m) ? rasterizeStroke(geoOf(m)!, width, SATIN_PX, 'flat') : null;
+    if (region) out = { region, inset: SATIN_INSET };
+  }
+  satins.set(m, out);
+  return out;
+}
+
+/** The band `width` wide along the edge of `area`, its middle `offset` outside it (inside when negative). */
+function bandAround(area: Region, offset: number, width: number): Region | null {
+  const reach = Math.abs(offset) + width / 2 + 1;
+  const [minX, minY] = [area.x0 * area.pxMm - reach, area.y0 * area.pxMm - reach];
+  const [maxX, maxY] = [(area.x0 + area.w) * area.pxMm + reach, (area.y0 + area.h) * area.pxMm + reach];
+  const x0 = Math.floor(minX / SATIN_PX);
+  const y0 = Math.floor(minY / SATIN_PX);
+  const w = Math.ceil(maxX / SATIN_PX) - x0;
+  const h = Math.ceil(maxY / SATIN_PX) - y0;
+  const mask = new Uint8Array(w * h);
+  for (let j = 0; j < h; j++)
+    for (let i = 0; i < w; i++) {
+      const d = sample(area, area.sdf, (x0 + i + 0.5) * SATIN_PX, (y0 + j + 0.5) * SATIN_PX);
+      // Beyond the window of its field the edge lies further than the band reaches.
+      if (d < 10 && Math.abs(d - offset) <= width / 2) mask[j * w + i] = 1;
+    }
+  return regionOf(mask, x0, y0, w, h, SATIN_PX);
+}
+
 /** Whether point q lies under one of the hiding areas (inside it by its inset). */
 function under(areas: Hiding[], q: Pt): boolean {
   for (const h of areas) if (sample(h.region, h.region.sdf, q[0], q[1]) <= -h.inset) return true;
+  return false;
+}
+
+/** Whether point q lies under one of the hiding areas off its edge (as a way is planned). */
+function deep(areas: Hiding[], q: Pt): boolean {
+  for (const h of areas) if (sample(h.region, h.region.sdf, q[0], q[1]) <= -h.inset - HIDE_INSET) return true;
   return false;
 }
 
@@ -267,7 +333,9 @@ export function exitToward(area: Region, next: Region, areas: Hiding[]): Pt | nu
     for (const q of ring) {
       const near = sample(next, next.sdf, q[0], q[1]);
       const d = near < 10 ? near : far(q);
-      if (d >= bd || !(under(areas, q) || RING.some((r) => under(areas, [q[0] + r[0] * HIDE_ENDS * 0.9, q[1] + r[1] * HIDE_ENDS * 0.9])))) continue;
+      // Off the edge of what hides the way, by half the reach of the ends: the next object then
+      // starts near enough to it too (it starts where it is nearest).
+      if (d >= bd || !(deep(areas, q) || RING.some((r) => deep(areas, [q[0] + r[0] * HIDE_ENDS * 0.5, q[1] + r[1] * HIDE_ENDS * 0.5])))) continue;
       bd = d;
       best = [q[0], q[1]];
     }
@@ -355,7 +423,7 @@ export function settleTravel(p: Pattern, trimMm: number): Pattern {
       if (!pts || !hiddenAlong(pts, hidingAfter(k, hides))) fresh.add(k);
       continue;
     }
-    if (!mem[k] || a.block !== o.block || tiedTo(mem[k - 1]) || tiedTo(mem[k])) continue;
+    if (!mem[k] || mem[k]!.cutIn || a.block !== o.block || tiedTo(mem[k - 1]) || tiedTo(mem[k])) continue;
     const from: Pt = [p.x[a.last] / 10, p.y[a.last] / 10];
     const to: Pt = [p.x[o.first] / 10, p.y[o.first] / 10];
     const d = Math.hypot(to[0] - from[0], to[1] - from[1]);
@@ -450,4 +518,118 @@ export function dropTravel(p: Pattern, which: ReadonlySet<number>, trimMm: numbe
   });
   setObjects(q, placed, tableOf(p).next);
   return q;
+}
+
+/**
+ * The joins of `p` (as listed by transitions) with the hidden ones among them: each hidden way as a
+ * transition of its own (`hidden`), from the last stitch of the object before to the first of the
+ * object it leads to, after its travel; and joins trimmed by hand marked as such (`byHand`).
+ * In sewing order.
+ */
+export function withHiddenJoins(p: Pattern, list: Transition[]): Transition[] {
+  if (!p.cmd.length) return list;
+  const objs = sewObjects(p);
+  const mem = objs.map((o) => remembered(p, o));
+  const hidden: Transition[] = [];
+  const blocks = blockIndex(p);
+  objs.forEach((o, k) => {
+    const n = travelOf(mem[k]);
+    const a = objs[k - 1];
+    if (!n || !a) return;
+    let len = 0;
+    for (let i = a.last; i < o.first + n; i++) len += Math.hypot(p.x[i + 1] - p.x[i], p.y[i + 1] - p.y[i]) / 10;
+    hidden.push({ from: a.last, to: o.first + n, lengthMm: len, trimmed: false, tieOff: 0, tieIn: 0, block: blocks[o.first], hidden: true });
+  });
+  const byHand = new Set(objs.filter((_, k) => mem[k]?.cutIn).map((o) => o.first));
+  const marked = list.map((t): Transition => (t.trimmed && byHand.has(objectStart(objs, t.to)) ? { ...t, byHand: true } : t));
+  if (!hidden.length) return byHand.size ? marked : list;
+  return [...marked, ...hidden].sort((x, y) => x.from - y.from);
+}
+
+/** The first record of the object record `i` belongs to (-1: none). */
+function objectStart(objs: SewObject[], i: number): number {
+  let lo = 0;
+  let hi = objs.length - 1;
+  while (lo <= hi) {
+    const m = (lo + hi) >> 1;
+    if (objs[m].last < i) lo = m + 1;
+    else if (objs[m].first > i) hi = m - 1;
+    else return objs[m].first;
+  }
+  return -1;
+}
+
+/** Indices of the objects joins `list` lead to from the object before (jumps inside an object left out). */
+export function joinedObjects(p: Pattern, list: Transition[]): number[] {
+  const objs = sewObjects(p);
+  const at = new Map(objs.map((o) => [o.first, o.index]));
+  return list.flatMap((t) => {
+    const k = at.get(objectStart(objs, t.to));
+    return k === undefined || t.from >= objs[k].first ? [] : [k];
+  });
+}
+
+/** A new version of `p` whose objects `which` (indices) are trimmed from the one before by hand, or no longer. */
+function markedCut(p: Pattern, which: readonly number[], on: boolean): Pattern {
+  const objs = sewObjects(p);
+  const change = which.filter((k) => objs[k] && remembered(p, objs[k]) && !!remembered(p, objs[k])!.cutIn !== on);
+  if (!change.length) return p;
+  return relearn(p, (q) => {
+    const now = sewObjects(q);
+    for (const k of change) {
+      const m = { ...remembered(q, now[k])! };
+      if (on) m.cutIn = true;
+      else delete m.cutIn;
+      remember(q, now[k], m);
+    }
+  });
+}
+
+/**
+ * Trim and tie by hand before the objects `which` (indices): hidden travel to them goes, the thread
+ * is tied off, trimmed and tied in, and it stays so whatever is changed later (Remembered.cutIn).
+ */
+export function cutJoins(p: Pattern, which: readonly number[], trimMm: number): Pattern {
+  const ways = which.filter((k) => travelOf(remembered(p, sewObjects(p)[k])));
+  // Trimmed at any length: the thread is cut here because it was asked to.
+  const q = markedCut(ways.length ? dropTravel(p, new Set(ways), 0) : p, which, true);
+  const want = new Set(which);
+  const joins = transitions(q).filter((t, i, all) => want.has(joinedObjects(q, [t])[0] ?? -1) && all.indexOf(t) === i);
+  const r = joins.length ? setTrims(q, joins, true) : q;
+  return settleTravel(r, trimMm);
+}
+
+/**
+ * The objects `which` (indices) no longer trimmed from the one before by hand: carried across by a
+ * jump (`carry`), or hidden again where a way under what is sewn later can be found.
+ */
+export function freeJoins(p: Pattern, which: readonly number[], trimMm: number, carry: boolean): Pattern {
+  let q = markedCut(p, which, false);
+  if (carry) {
+    const want = new Set(which);
+    const joins = transitions(q).filter((t) => want.has(joinedObjects(q, [t])[0] ?? -1));
+    if (joins.length) q = setTrims(q, joins, false);
+  }
+  return settleTravel(q, trimMm);
+}
+
+/**
+ * The joins `picked` (as listed by withHiddenJoins) cut and tied by hand, carried across by a jump,
+ * or hidden again, as the jumps panel asks. Null: `hide` found no way under what is sewn later for
+ * one of them (it stays trimmed).
+ */
+export function joinsAs(p: Pattern, picked: Transition[], how: 'cut' | 'carry' | 'hide', trimMm: number): Pattern | null {
+  const plain = picked.filter((t) => !t.hidden);
+  if (how === 'cut') {
+    // Trimmed between two objects by hand, it stays so (a hidden way there goes).
+    const between = joinedObjects(p, picked);
+    const q = setTrims(p, plain, true);
+    return between.length ? cutJoins(q, between, trimMm) : q;
+  }
+  if (how === 'carry') return freeJoins(setTrims(p, plain, false), joinedObjects(p, plain), trimMm, false);
+  // Hidden again: only where a way under what is sewn later is found, else it stays trimmed.
+  const which = joinedObjects(p, picked);
+  const q = freeJoins(p, which, trimMm, true);
+  const now = sewObjects(q);
+  return which.every((k) => travelOf(remembered(q, now[k]))) ? q : null;
 }

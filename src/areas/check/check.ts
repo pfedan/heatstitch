@@ -100,6 +100,7 @@ export function initCheck(app: CheckApp): { draw: (ctx: CanvasRenderingContext2D
   command({ id: 'jumps.cut', label: 'check.jumps.cut', group: G, when: () => app.jumps.actions().includes('cut'), run: () => app.jumps.act('cut') });
   command({ id: 'jumps.tie', label: 'check.jumps.tie', group: G, when: () => app.jumps.actions().includes('tie'), run: () => app.jumps.act('tie') });
   command({ id: 'jumps.carry', label: 'check.jumps.carry', group: G, when: () => app.jumps.actions().includes('carry'), run: () => app.jumps.act('carry') });
+  command({ id: 'jumps.hide', label: 'check.jumps.hide', group: G, when: () => app.jumps.actions().includes('hide'), run: () => app.jumps.act('hide') });
 
   // The heatmap section's line says what it shows while it is folded away.
   const heatmapSum = () => {

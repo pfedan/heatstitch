@@ -32,7 +32,7 @@ import { expandRegion, outline as outlineOf, sample as sampleField } from '../..
 import { shownTravel } from './travel';
 import { analyze, backToVersion, crossGridOf, sameGrid, edgeAlong, keepShape, measureSatin, sectionsOf, sectionPlan, sectionView, keepVersion, relearn, objectKey, remember, remembered, rememberedIn, restitch, restoreRemembered, DECO_PATTERNS, OPEN_PATTERNS, type BorderSettings, type DecoSettings, type FillSettings, type Rails, type Remembered, type SatinSettings, type StoredObjects } from '../../src/model/restitch';
 import { reorder } from '../../src/model/order';
-import { blockIndex, stitchKinds } from '../../src/model/sequence';
+import { blockIndex, stitchKinds, transitions } from '../../src/model/sequence';
 import { addContour, behindCovered, gapReader } from '../../src/model/contour';
 import { combineLines, joinTouchingEnds, deleteObjects, partsOfForm, splitByForm, duplicateObject, duplicateObjects, extractObjects, gatherObjects, mergeLeads, mirrorMatrix, recolorObjects, subtractTop, threadOfAFill } from '../../src/model/shapeOps';
 import { isRigid, stitchesBefore } from '../../src/model/transform';
@@ -55,7 +55,7 @@ import { writePattern } from '../../src/writers';
 import { pecOwnSlot, PEC_APPLIQUE } from '../../src/parsers/pecPalette';
 import { loadedOriginal, originalOf } from '../../src/model/original';
 import { rng } from './images';
-import { withTravel } from '../../src/model/travel';
+import { hidingOf, joinsAs, withHiddenJoins, withTravel } from '../../src/model/travel';
 import { readFileSync } from 'node:fs';
 import { addFont, type Font } from '../../src/lettering/font';
 import { layout, LETTERING_DEFAULTS, type Lettering } from '../../src/lettering/layout';
@@ -1781,6 +1781,18 @@ export const SHAPE_OPS: Op[] = [
  * around its nodes): moved, taken away (a hole, a piece; only while another loop stays) or made
  * round or corners. Drawn from a stream of its own, so the chains of the other ops stay as they were.
  */
+/** As the jumps panel: a join between objects cut and tied by hand, carried across, or hidden again. */
+export const JOIN_OPS: Op[] = (['cut', 'carry', 'hide'] as const).map((how) => ({
+  name: `${how} a join`,
+  run: (d: Doc, r: Rand) => {
+    const p = d.cur.p;
+    const list = withHiddenJoins(p, transitions(p)).filter((t) => (how === 'cut' ? !t.trimmed || t.hidden : how === 'hide' ? t.byHand : t.trimmed));
+    if (!list.length) return false;
+    const next = joinsAs(p, [pick(r, list)], how, T);
+    return !!next && next !== p && shapes(d, next);
+  },
+}));
+
 export const LOOP_OPS: Op[] = [
   {
     name: 'edit loop',
@@ -2296,7 +2308,8 @@ export function checkEchoes(p: Pattern): void {
     if (!lineGeoOf(m) || !m!.line || m!.free || (partOf(m) && m!.hand) || (!m!.line.echo && !((m!.line.repeat ?? 1) > 1) && !isRedwork(m!.line))) continue;
     const fresh = lineStitches(m!.geo!, m!.line).flat();
     const sewn: [number, number][] = [];
-    for (let i = o.first; i <= o.last; i++) if (p.cmd[i] === STITCH) sewn.push([p.x[i] / 10, p.y[i] / 10]);
+    // The hidden travel to it (see model/travel.ts) is not its own.
+    for (let i = m!.travel ? ownFrom(p, o) : o.first; i <= o.last; i++) if (p.cmd[i] === STITCH) sewn.push([p.x[i] / 10, p.y[i] / 10]);
     const off = Math.max(...sewn.map((q) => near(q, fresh)));
     const missing = Math.max(...fresh.filter((_, k) => k % 7 === 0).map((q) => near(q, sewn)));
     if (off > 0.6 || missing > 0.6) problems.push(`line ${o.index}: stitches ${off.toFixed(2)} mm off its echo, echo ${missing.toFixed(2)} mm from its stitches`);
@@ -2789,6 +2802,14 @@ export function checkTravel(p: Pattern): void {
   const problems: string[] = [];
   objs.forEach((o, k) => {
     const n = remembered(p, o)?.travel ?? 0;
+    if (remembered(p, o)?.cutIn) {
+      // Trimmed by hand: a trim before it within its thread, and never travel (see travel.ts).
+      if (n) problems.push(`object ${k}: travel though trimmed by hand`);
+      const a = objs[k - 1];
+      let cut = false;
+      for (let i = (a?.last ?? o.first) + 1; i < o.first; i++) cut ||= p.cmd[i] === TRIM || p.cmd[i] === COLOR_CHANGE;
+      if (a && !cut) problems.push(`object ${k}: trimmed by hand but not trimmed`);
+    }
     if (!n) return;
     const a = objs[k - 1];
     if (!a) return void problems.push(`object ${k}: travel without an object before`);
@@ -2804,6 +2825,9 @@ export function checkTravel(p: Pattern): void {
     const areas = objs.slice(k).flatMap((x) => {
       const m = remembered(p, x);
       const spec = specOf(p, x);
+      // A dense satin 2 mm wide or wider: the column between its rails (see hidingOf).
+      const satin = m && !m.fill && (m.satin || m.line?.type === 'satin' || m.border?.type === 'satin') ? hidingOf(m) : null;
+      if (satin) return [satin.region];
       const f = m?.fill;
       if (!f || m.read || m.hand || m.free || m.applique || !HIDING_PATTERNS.includes(f.pattern)) return [];
       if (Math.max(f.spacing, f.pattern === 'gradient' || f.gradient ? f.spacingEnd : 0) > HIDING_SPACING) return [];
@@ -2858,6 +2882,7 @@ export async function chain(seed: number, steps = STEPS, opts: { trace?: boolean
   const rloop = rng(seed + 160481183);
   const rmot = rng(seed + 179424673);
   const rpath = rng(seed + 198491317);
+  const rjoin = rng(seed + 217645177);
   const d = new Doc();
   const log: string[] = [];
   const at = () => `seed ${seed}: ${log.join(' > ')}`;
@@ -2985,6 +3010,19 @@ export async function chain(seed: number, steps = STEPS, opts: { trace?: boolean
       if (await sop.run(d, rs)) {
         log.push(sop.name);
         if (process.env.TORTURE_TRACE) console.log(sop.name, describeObjects(d.cur.p));
+        try {
+          checkStep(d, false);
+        } catch (e) {
+          throw new Error(`${at()}\n${(e as Error).message}`);
+        }
+      }
+    }
+    // Now and then a join cut by hand, carried across or hidden again, beside the chain.
+    if (!blank(d.cur.p) && rjoin() < 0.15) {
+      const jop = pick(rjoin, JOIN_OPS);
+      if (await jop.run(d, rjoin)) {
+        log.push(jop.name);
+        if (process.env.TORTURE_TRACE) console.log(jop.name, describeObjects(d.cur.p));
         try {
           checkStep(d, false);
         } catch (e) {

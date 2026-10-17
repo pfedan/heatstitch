@@ -479,12 +479,14 @@ export function sewList(p: Pattern, list: Entry[], trimMm: number, opts: ListOpt
       // gone, or sewn the other way round) stay joined so: a cut would give them ties.
       const asWent = !asBefore && !whole && keptAt(k - 1) && !spec && !via && joinedUncut(p, prev, o);
       // Joined by hidden travel in `p`: trimmed now where it is too far for a jump.
-      cut = color || stop || apart?.has(k) || (asBefore && !via ? trimmedBetween(p, prev, o) : !asWent && (far || !!whole || linked(p, prev) || linked(p, o)));
-      // In place of a jump, or of a trim for its length (never one that keeps them apart for
-      // another reason): hidden travel, where fills sewn later cover a way there.
+      // Trimmed from the one before by hand: it stays so (see travel.ts).
+      cut = color || stop || apart?.has(k) || !!known[k]?.cutIn || (asBefore && !via ? trimmedBetween(p, prev, o) : !asWent && (far || !!whole || linked(p, prev) || linked(p, o)));
+      // In place of a jump (also one the thread went by before), or of a trim for its length (never
+      // one that keeps them apart for another reason): hidden travel, where fills sewn later cover
+      // a way there.
       const start = sewn ? sewn.runs[0][0] : mm(recOf(k, o.first));
       const there: Pt = [Math.round(start[0] * 10) / 10, Math.round(start[1] * 10) / 10];
-      if (here && known[k] && !color && !stop && !apart?.has(k) && !asWent && (!cut || far) && !linked(p, prev) && !linked(p, o) && Math.hypot(there[0] - here[0], there[1] - here[1]) > 1) {
+      if (here && known[k] && !known[k]!.cutIn && !color && !stop && !apart?.has(k) && (!cut || far) && !linked(p, prev) && !linked(p, o) && Math.hypot(there[0] - here[0], there[1] - here[1]) > 1) {
         travel = hiddenWay(here, there, hidingFrom(k));
         if (travel) cut = false;
       }

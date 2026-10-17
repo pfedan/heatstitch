@@ -12,7 +12,7 @@ import { drawAreas, drawFrame, drawShapeOverlay, type FlatArea } from './shapeOv
 import type { ShapeView } from '../ui/shapeTool';
 import type { FrameView } from '../ui/frameTool';
 import type { Pt } from '../digitize/skeleton';
-import { stitchColors, drawFlatStitches, drawJumps, drawMarkers, drawNeedle, drawOutlines, drawTransition, drawContour, drawUnderlay, type StitchStyle } from './flow';
+import { stitchColors, drawFlatStitches, drawHiddenWays, drawJumps, drawMarkers, drawNeedle, drawOutlines, drawTransition, drawContour, drawUnderlay, type StitchStyle } from './flow';
 import { drawHeatmap } from './heatmap';
 import { drawStitches } from './stitches';
 import { drawThreads } from './threads';
@@ -35,6 +35,8 @@ export interface ShapeOutline {
 export interface FlowScene {
   style: StitchStyle;
   markers: Markers;
+  /** Hidden ways under what is sewn later (see travel.ts), drawn with the jumps. */
+  hidden?: Transition[];
   /** Jumps hovered (drawn lighter) and selected in the list. */
   hover: Transition | null;
   selected: Transition | null;
@@ -131,6 +133,7 @@ export function drawScene(ctx: CanvasRenderingContext2D, w: number, h: number, s
     } else if (!s.realistic || !drawThreads(ctx, vp, pattern, 1, s.threadMm, st)) drawFlatStitches(ctx, vp, pattern, st, 1);
     const marks = shownMarks(s);
     if (marks.jumps) drawJumps(ctx, vp, pattern, st.limit, st.alpha, st.carried?.jumps);
+    if (marks.jumps && flow.hidden?.length) drawHiddenWays(ctx, vp, pattern, flow.hidden, st.limit, st.alpha);
     drawMarkers(ctx, vp, pattern, { markers: flow.markers, marks, limit: st.limit, alpha: st.alpha }, w, h);
     if (s.hoop) drawHoop(ctx, vp, pattern.bounds, s.hoop, scene.hoopAt);
     if (flow.trace) drawTraceFrame(ctx, vp, flow.trace);

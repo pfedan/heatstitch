@@ -7,7 +7,7 @@ import { JumpsPanel } from '../ui/jumpsPanel';
 import { OrderCard } from '../ui/objectPanel';
 import { bestOrder, orderSeconds, orderStats, type OrderChoice } from '../model/bestOrder';
 import { saveSettings, type Settings } from '../settings';
-import { setTrims } from '../model/jumps';
+import { joinsAs } from '../model/travel';
 import { recordOfStitch } from '../model/sequence';
 import { t } from '../i18n';
 import type { Pattern } from '../model/pattern';
@@ -112,12 +112,14 @@ export function bindOrder(app: OrderApp) {
       app.redraw();
     },
     step: (dir) => stepJump(dir),
-    apply: (indices, cut) => {
+    apply: (indices, how) => {
       const f = app.files.active;
       const p = f?.pattern;
       if (!f || !p) return;
       const list = app.seq(p).transitions;
-      const next = setTrims(p, indices.map((i) => list[i]), cut);
+      const picked = indices.map((i) => list[i]);
+      const next = joinsAs(p, picked, how, app.settings.trimMm);
+      if (!next) return void app.layers.say(t('jumps.hide.none'));
       if (next === p) return;
       const keep = ui.selectedJump;
       app.applyEdit(next);
