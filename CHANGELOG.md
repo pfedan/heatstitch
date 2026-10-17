@@ -16,6 +16,14 @@ How it is kept (see [CONTRIBUTING.md](CONTRIBUTING.md#releases)):
 
 ## [Unreleased]
 
+### Deutsch
+
+- **Verbindungen versteckt statt geschnitten:** Liegt der Weg zwischen zwei Objekten derselben Farbe ganz unter einer dichten Füllung, die später gestickt wird, läuft der Faden dort als Steppstich hin. Das spart Schnitte und Zeit. Unter offenen oder lichten Mustern, Satin, Linien und ausgesparten Stellen bleibt der Schnitt, weil man den Faden dort sehen würde.
+
+### English
+
+- **Connections hidden instead of trimmed:** Where the way between two objects of one color lies wholly under a dense fill sewn later, the thread runs there as a running stitch. That saves trims and time. Under open or light patterns, satin, lines and knocked-out parts the trim stays, because the thread would show there.
+
 ## [1.0.0] - 2026-10-16
 
 ### Deutsch
