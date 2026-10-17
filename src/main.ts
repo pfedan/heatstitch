@@ -42,6 +42,8 @@ import { FILL, SATIN, TIE_STITCH } from './model/sequence';
 import { pointNear, stitchAt } from './render/flow';
 import { drawMeasure } from './render/measure';
 import { MeasureTool } from './ui/measureTool';
+import { AngleTool } from './ui/angleTool';
+import { drawAngle } from './render/angle';
 import type { Mode } from './settings';
 import { isGuessed, isOpenPattern, openOnPurpose, remembered, rememberedIn } from './model/restitch';
 import { innerStops } from './model/applique';
@@ -142,7 +144,7 @@ const trace = bindTrace({
   applyEdit: (p) => applyEdit(p, files.active?.measurement),
   redraw: () => redraw(),
   newDesign: () => newDesign(),
-  busy: () => drawTool.active || ui.letterMode || rungTool.active || shapeTool.active || editor.active || measureTool.active,
+  busy: () => drawTool.active || ui.letterMode || rungTool.active || shapeTool.active || editor.active || measureTool.active || angleTool.active,
 });
 
 /** Per zone of `v`: whether it still counts with the active file's decisions. */
@@ -908,6 +910,7 @@ function redraw(): void {
     if (drawTool.preview && settings.mode === 'flow')
       drawDrawing(ctx, vp, drawTool.preview, { nodes: drawTool.kind === 'pen' || drawTool.kind === 'cut' ? drawTool.count : 0, closing: drawTool.closing, size: drawTool.size, fill: drawTool.kind === 'gap' });
     if (ui.letterMode) drawLetterBoxes();
+    if (angleTool.active) drawAngle(ctx, vp, angleTool, ui.stageW, ui.stageH);
     if (measureTool.active) drawMeasure(ctx, vp, measureTool, ui.stageW, ui.stageH);
     drawPlanCompare();
     checkArea?.draw(ctx);
@@ -1690,9 +1693,21 @@ const measureTool = new MeasureTool({
   },
   redraw: () => redraw(),
 });
+/** The rows' angle drawn as a line across the selected fills (src/ui/angleTool.ts), set as with the dial of the panel. */
+const angleTool = new AngleTool({
+  current: () => (settings.mode === 'flow' ? stitchPanel.rowAngle : null),
+  set: (a, final) => stitchPanel.setRowAngle(a, final),
+  restore: (was) => stitchPanel.restoreRowAngle(was),
+  redraw: () => {
+    stage.classList.toggle('angle-drawing', angleTool.active);
+    stitchPanel.angleTool(angleTool.active);
+    redraw();
+  },
+});
 /** Picking a drawing tool (or Wählen) ends measuring: one tool has the pointer at a time. */
 const pickTool = (kind: DrawKind | null) => {
   measureTool.stop();
+  angleTool.stop();
   setDrawing(kind);
 };
 
@@ -1700,6 +1715,7 @@ const pickTool = (kind: DrawKind | null) => {
 
 bindKeys({
   measure: measureTool,
+  angle: angleTool,
   get selectObjects() {
     return selectObjects;
   },
@@ -1821,6 +1837,7 @@ bindKeys({
 
 const { showObjectMenu } = bindPointer({
   measure: measureTool,
+  angle: angleTool,
   get canvas() {
     return canvas;
   },
@@ -1926,7 +1943,7 @@ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', red
 
 initShell({ files, mode: () => settings.mode, setMode });
 initResponsive();
-const stitchArea = initStitchArea({ files, settings, editor, rungTool, stitchPanel, closeRungs, toggleRungs, toggleGuides, togglePoints, sewAlongLines, suggestLines, setEditing, enterObject, revealRecord, pointsVisible: () => vp.scale >= POINTS_MIN_SCALE, redraw });
+const stitchArea = initStitchArea({ files, settings, editor, rungTool, angleTool, stitchPanel, measure: measureTool, closeRungs, toggleRungs, toggleGuides, togglePoints, sewAlongLines, suggestLines, setEditing, enterObject, revealRecord, pointsVisible: () => vp.scale >= POINTS_MIN_SCALE, redraw });
 const design = initDesign({ files, settings, player, vp, stage, fitView, fitToHoop, redraw, applyEdit, trace });
 measureArea = initMeasure({ settings, vp, stage, measure: measureTool, stopDrawing: () => drawTool.active && setDrawing(null), redraw });
 library = initLibrary({ settings, setMode, files, vp, stage, stopDrawing: () => drawTool.active && setDrawing(null), takeShapes, redraw, newDesign: () => newDesign(), setFormLevel, fitView: () => fitView() });

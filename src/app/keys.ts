@@ -1,6 +1,7 @@
 import type { DrawKind, DrawTool } from '../ui/drawTool';
 import type { Editor } from '../ui/editor';
 import type { MeasureTool } from '../ui/measureTool';
+import type { AngleTool } from '../ui/angleTool';
 import type { FrameTool } from '../ui/frameTool';
 import type { OrderCard } from '../ui/objectPanel';
 import type { Player } from '../ui/player';
@@ -13,6 +14,7 @@ import { ui } from './state';
 
 /** What bindKeys needs from the rest of the app. */
 export interface KeysApp {
+  readonly angle: AngleTool;
   readonly closeRungs: () => void;
   readonly closeShape: () => void;
   readonly commitTransform: (m: Mat) => void;
@@ -106,6 +108,12 @@ export function bindKeys(app: KeysApp) {
       if (app.measure.busy) app.measure.clear();
       else app.measure.stop();
       app.redraw();
+      return;
+    }
+    // Drawing the rows' angle: Esc puts back the angle being dragged first, then ends the tool.
+    if (e.key === 'Escape' && app.angle.active) {
+      if (app.angle.dragging) app.angle.cancel();
+      else app.angle.stop();
       return;
     }
     if (app.drawTool.active && app.settings.mode === 'flow') {

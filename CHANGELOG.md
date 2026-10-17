@@ -16,6 +16,14 @@ How it is kept (see [CONTRIBUTING.md](CONTRIBUTING.md#releases)):
 
 ## [Unreleased]
 
+### Deutsch
+
+- **Winkel auf der Fläche ziehen:** Den Winkel einer Füllung stellst du jetzt auch direkt auf dem Stickmuster ein: Knopf neben dem Winkel-Regler oder Taste W, dann eine Linie über die Fläche ziehen. Die Reihen folgen ihr schon beim Ziehen, Umschalt rastet auf 15°, Esc bricht ab.
+
+### English
+
+- **Drag the angle on the area:** You can now set a fill's angle right on the design: the button beside the angle slider or the W key, then drag a line across the area. The rows follow it while you drag, Shift snaps to 15°, Esc cancels.
+
 ## [1.0.0] - 2026-10-16
 
 ### Deutsch
