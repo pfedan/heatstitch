@@ -800,6 +800,21 @@
                 <button type="button" id="fabric-tune" data-i18n="tune.button" data-i18n-title="tune.button.hint"></button>
               </div>
             </div>
+            <details class="swatch" id="swatch">
+              <summary data-i18n="swatch.title"></summary>
+              <p class="swatch-intro" data-i18n="swatch.intro"></p>
+              <div class="swatch-make">
+                <div class="segmented" role="radiogroup" data-i18n-aria="swatch.kind">
+                  <label><input type="radio" name="swatch-kind" value="fill" checked /><span data-i18n="swatch.fill"></span></label>
+                  <label><input type="radio" name="swatch-kind" value="satin" /><span data-i18n="swatch.satin"></span></label>
+                </div>
+                <button type="button" id="swatch-make" data-i18n="swatch.make" data-i18n-title="swatch.make.hint"></button>
+              </div>
+              <p class="swatch-pick" data-i18n="swatch.pick"></p>
+              <table class="swatch-grid" id="swatch-grid" data-i18n-aria="swatch.grid"></table>
+              <p class="swatch-own" id="swatch-own" role="status"></p>
+              <button type="button" class="link" id="swatch-reset" data-i18n="swatch.reset" data-i18n-title="swatch.reset.hint" hidden></button>
+            </details>
             <fieldset class="checks" data-mode="density">
               <legend data-i18n="checks.title"></legend>
               <div id="checks"></div>

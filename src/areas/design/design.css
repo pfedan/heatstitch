@@ -177,6 +177,112 @@ body[data-mode='flow'] .material-panel .profile-info span:nth-child(2) {
   margin-top: 4px;
 }
 
+/* Test swatch: make one, then pick the cell that looked best on the fabric. */
+.material-panel .swatch {
+  margin: 4px 0 8px;
+  font-size: 12px;
+}
+
+.material-panel .swatch summary {
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.material-panel .swatch p {
+  margin: 6px 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.material-panel .swatch-make {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.material-panel .swatch-make .segmented {
+  flex: 1;
+}
+
+.swatch-grid {
+  border-collapse: separate;
+  border-spacing: 4px;
+  margin: 0 -4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.swatch-grid th {
+  font-weight: 400;
+  color: var(--muted);
+  font-size: 11px;
+  text-align: center;
+  padding: 0 2px;
+}
+
+.swatch-grid th[scope='row'] {
+  text-align: right;
+}
+
+.swatch-grid label {
+  position: relative;
+  display: block;
+  cursor: pointer;
+}
+
+.swatch-grid input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.swatch-grid span {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--bg);
+  transition: background-color 120ms, border-color 120ms;
+}
+
+.swatch-grid label:hover span {
+  border-color: var(--muted);
+}
+
+/* The fabric's own default: a dot, so the starting point is visible without color. */
+.swatch-grid label.fabric span::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.swatch-grid input:checked + span {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.swatch-grid input:checked + span::before {
+  content: '✓';
+  width: auto;
+  height: auto;
+  background: none;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.swatch-grid input:focus-visible + span {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.material-panel .swatch-own {
+  color: var(--ink);
+}
+
 /* Garne */
 
 .dt-list {

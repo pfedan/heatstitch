@@ -10,6 +10,7 @@ import { de as ready } from './areas/ready';
 import { de as ampel } from './areas/ampel';
 import { de as responsive } from './areas/responsive';
 import { de as fabrics } from './areas/fabrics';
+import { de as swatch } from './areas/swatch';
 import { de as measure } from './areas/measure';
 import { de as applique } from './areas/applique';
 import { de as library } from './areas/library';
@@ -556,6 +557,9 @@ export const deBase = {
   'stitch.densityNote': 'etwa {d} mm Garn pro mm²',
   'stitch.angle': 'Winkel',
   'stitch.angle.hint': 'Richtung der Reihen',
+  'stitch.angle.drag': 'Winkel auf der Fläche ziehen',
+  'stitch.angle.drag.hint': 'Eine Linie über die Fläche ziehen, die Reihen laufen quer dazu',
+  'stitch.angle.drag.help': 'Linie über die Fläche ziehen · Umschalt: 15°-Schritte · Esc: abbrechen',
   'stitch.length': 'Stichlänge',
   'stitch.length.hint': 'Länge der Stiche entlang einer Reihe',
   'stitch.edge': 'Kanten',
@@ -1518,4 +1522,4 @@ export const deBase = {
 } as const;
 
 /** All German texts: the base plus one block per area of the new interface (src/i18n/areas). */
-export const de = { ...deBase, ...shell, ...files, ...objects, ...shapes, ...stitches, ...check, ...image, ...design, ...ready, ...ampel, ...responsive, ...fabrics, ...measure, ...applique, ...library } as const;
+export const de = { ...deBase, ...shell, ...files, ...objects, ...shapes, ...stitches, ...check, ...image, ...design, ...ready, ...ampel, ...responsive, ...fabrics, ...swatch, ...measure, ...applique, ...library } as const;

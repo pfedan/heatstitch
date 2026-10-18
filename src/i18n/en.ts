@@ -11,6 +11,7 @@ import { en as ready } from './areas/ready';
 import { en as ampel } from './areas/ampel';
 import { en as responsive } from './areas/responsive';
 import { en as fabrics } from './areas/fabrics';
+import { en as swatch } from './areas/swatch';
 import { en as measure } from './areas/measure';
 import { en as applique } from './areas/applique';
 import { en as library } from './areas/library';
@@ -558,6 +559,9 @@ const enBase: Record<keyof typeof deBase, string> = {
   'stitch.densityNote': 'about {d} mm thread per mm²',
   'stitch.angle': 'Angle',
   'stitch.angle.hint': 'Direction of the rows',
+  'stitch.angle.drag': 'Drag the angle on the area',
+  'stitch.angle.drag.hint': 'Drag a line over the area, the rows run across it',
+  'stitch.angle.drag.help': 'Drag a line over the area · Shift: 15° steps · Esc: cancel',
   'stitch.length': 'Stitch length',
   'stitch.length.hint': 'Length of the stitches along a row',
   'stitch.edge': 'Edges',
@@ -1519,4 +1523,4 @@ const enBase: Record<keyof typeof deBase, string> = {
   'canvas.hint.letters': 'Drag letters: move · Arrow keys: nudge · Esc: back to the lettering',
 };
 
-export const en: Record<keyof typeof de, string> = { ...enBase, ...shell, ...files, ...objects, ...shapes, ...stitches, ...check, ...image, ...design, ...ready, ...ampel, ...responsive, ...fabrics, ...measure, ...applique, ...library };
+export const en: Record<keyof typeof de, string> = { ...enBase, ...shell, ...files, ...objects, ...shapes, ...stitches, ...check, ...image, ...design, ...ready, ...ampel, ...responsive, ...fabrics, ...swatch, ...measure, ...applique, ...library };

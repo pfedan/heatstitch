@@ -3,7 +3,7 @@ import { distanceToSeeds } from '../image/edt';
 import { components, type Components } from '../image/labels';
 import { NONE, type Prepared } from '../image/prepare';
 import { COLOR_CHANGE, END, JUMP, PatternBuilder, STITCH, TRIM, type Pattern, type ThreadColor } from '../model/pattern';
-import { fabricOf, recommendedSpacing, type Profile } from '../validation/profiles';
+import { fabricOf, fabricPull, recommendedSpacing, satinSpacing, type Profile } from '../validation/profiles';
 import { fillRegion } from './fill';
 import { flowFill } from './flow';
 import { coverage, peakDensity } from './measure';
@@ -58,6 +58,8 @@ export interface DigitizeOptions {
   satinMin: number;
   /** Pull compensation per side (mm). */
   pull: number;
+  /** Pull compensation of satin (the fabric's value, see satinOf), measured with a test swatch; `pull` when not set. */
+  satinPull?: number;
   /** Objects sewn earlier reach this far under neighbours sewn later (mm). */
   overlap: number;
   underlay: boolean;
@@ -105,7 +107,7 @@ export const gapOf = (o: Pick<DigitizeOptions, 'gapRows'>): { gapRows?: number }
  * its size (longer rows pull in more), a satin gets half fixed and half by its width.
  */
 export function pullFor(profile: Profile, kind: 'fill' | 'satin', areaMm2 = 400): { edge: number; edgeShare?: number } {
-  const pull = fabricOf(profile).pullMm;
+  const pull = fabricPull(profile, kind);
   if (kind === 'satin') return { edge: round2(pull / 2), edgeShare: Math.round((pull / 2 / PULL_WIDTH) * 1000) / 1000 };
   const k = Math.min(1.5, Math.max(0.75, Math.sqrt(areaMm2) / 20));
   return { edge: round2(Math.round((pull * k) / 0.05) * 0.05) };
@@ -120,8 +122,8 @@ const PULL_WIDTH = 4;
  */
 const satinOf = (o: DigitizeOptions): SatinParams => ({
   spacing: o.satinSpacing,
-  pull: o.pull / 2,
-  pullShare: o.pull / 2 / PULL_WIDTH,
+  pull: (o.satinPull ?? o.pull) / 2,
+  pullShare: (o.satinPull ?? o.pull) / 2 / PULL_WIDTH,
   splitMm: Math.min(Math.max(7, o.satinMax), o.splitMm ?? Infinity),
 });
 
@@ -131,13 +133,14 @@ export function digitizeDefaults(profile: Profile): DigitizeOptions {
   const fabric = fabricOf(profile);
   return {
     spacing: round2(spacing),
-    satinSpacing: round2(spacing),
+    satinSpacing: round2(satinSpacing(profile)),
     stitch: 4,
     angle: null,
     flow: true,
     satinMax: 7,
     satinMin: 1,
-    pull: fabric.pullMm,
+    pull: fabricPull(profile, 'fill'),
+    ...(profile.own?.satin ? { satinPull: profile.own.satin.pull } : {}),
     overlap: 0.2,
     underlay: true,
     underCross: fabric.pull === 'high',

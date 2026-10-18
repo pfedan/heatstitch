@@ -243,6 +243,9 @@ const PATTERN_ICON: Record<Tile, string> = {
   none: SVG('<rect x="3.5" y="3.5" width="17" height="17" rx="3"/>', 2),
 };
 
+/** Drawing the rows' direction on the stage: a line with its two ends across faint rows. */
+const ANGLE_DRAG_ICON = '<svg viewBox="0 0 20 20" aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round"><path d="M3 7h14M3 11h14M3 15h14" stroke-width="1.1" opacity=".45"/><path d="M4.5 16.5l11-11" stroke-width="1.8"/><circle cx="4.5" cy="16.5" r="1.8" fill="currentColor" stroke="none"/><circle cx="15.5" cy="5.5" r="1.8" fill="currentColor" stroke="none"/></svg>';
+
 /** No embossing: plain rows. */
 const MOTIF_NONE = SVG('<path d="M4 7h16M4 12h16M4 17h16"/>', 1.4);
 
@@ -347,6 +350,9 @@ export class StitchPanel {
   private tolerance: number | null = null;
   /** The tool state as last drawn. */
   private tools = '';
+  /** Shows the angle anew on the dial a line on the stage sets (see dial). */
+  private showAngle: (() => void) | null = null;
+  private angleToolOn = false;
   /** Left and right width set apart. */
   private sides = false;
   private picker = new ThreadPicker('.border-thread');
@@ -584,6 +590,7 @@ export class StitchPanel {
   }
 
   private render(): void {
+    this.showAngle = null;
     const info = this.info!;
     this.tools = this.toolKey(info);
     const parts: HTMLElement[] = [];
@@ -1647,7 +1654,7 @@ export class StitchPanel {
     // Crosshatch: two layers of straight rows, turned together; the spacing is that of each layer.
     if (pat === 'crosshatch') {
       out.push(
-        this.dial({ label: 'stitch.angle', hint: 'stitch.crosshatch.angle.hint', turn: 180, get: () => s.angle, set: (v) => (s.angle = v), fmt: (v) => `${Math.round(Number.isFinite(v) ? v : 0)}°` }),
+        this.dial({ label: 'stitch.angle', hint: 'stitch.crosshatch.angle.hint', ...this.angleField(s)!, drag: true, fmt: (v) => `${Math.round(Number.isFinite(v) ? v : 0)}°` }),
         this.slider({ label: 'stitch.density', hint: 'stitch.crosshatch.size.hint', min: lo, max: hi, step: 0.1, get: () => Math.min(hi, Math.max(lo, d.size ?? OPEN_SIZE[pat])), set: (v) => (d.size = v), fmt: (v) => `${formatNumber(v, 1)} mm`, auto: this.unset(d, 'size') }),
         this.slider({ label: 'stitch.length', hint: 'stitch.length.hint', min: 1, max: 3, step: 0.1, get: () => Math.min(3, s.stitch), set: (v) => (s.stitch = v), fmt: (v) => `${formatNumber(v, 1)} mm` }),
       );
@@ -1695,7 +1702,7 @@ export class StitchPanel {
       }),
     );
     // Turned half round a grid, cross stitch, meander or maze is the same kind again; figures need the whole turn.
-    if (pat !== 'echo') out.push(this.dial({ label: 'stitch.openAngle', hint: 'stitch.openAngle.hint', turn: pat === 'motifs' ? 360 : 180, get: () => d.angle ?? 0, set: (v) => (v ? (d.angle = v) : delete d.angle), fmt: (v) => `${Math.round(v)}°` }));
+    if (pat !== 'echo') out.push(this.dial({ label: 'stitch.openAngle', hint: 'stitch.openAngle.hint', ...this.angleField(s)!, drag: true, fmt: (v) => `${Math.round(v)}°` }));
     if (pat !== 'cross') out.push(this.slider({ label: 'stitch.length', hint: 'stitch.openLength.hint', min: 1, max: 3, step: 0.1, get: () => Math.min(3, s.stitch), set: (v) => (s.stitch = v), fmt: (v) => `${formatNumber(v, 1)} mm` }));
     // Whole crosses lay each diagonal as often as their size needs (crossPasses).
     if (pat !== 'cross' || d.cross === 'half' || d.cross === 'double') out.push(this.check('stitch.triple', 'stitch.openTriple.hint', () => !!d.triple, (v) => (d.triple = v)));
@@ -1727,11 +1734,62 @@ export class StitchPanel {
     return this.dial({
       label: 'stitch.angle',
       hint: 'stitch.angle.hint',
-      turn: 180,
-      get: () => s.angle,
-      set: (v) => (s.angle = v),
+      ...this.angleField(s)!,
+      drag: true,
       fmt: (v) => (Number.isFinite(v) ? `${Math.round(v)}°` : t('stitches.auto')),
     });
+  }
+
+  /**
+   * The angle of fill settings `s` that a dial turns and a line on the stage sets: the rows of a
+   * straight, gradient, wave or grain fill and of a crosshatch (half a turn), or how an open pattern
+   * lies (figures need the whole turn). Null when the pattern has none.
+   */
+  private angleField(s: FillSettings): { turn: 180 | 360; get: () => number; set: (v: number) => void } | null {
+    if (ANGLED.includes(s.pattern) || s.pattern === 'crosshatch') return { turn: 180, get: () => s.angle, set: (v) => (s.angle = v) };
+    if (!isOpenPattern(s.pattern) || s.pattern === 'echo') return null;
+    const d = this.deco(s);
+    return { turn: s.pattern === 'motifs' ? 360 : 180, get: () => d.angle ?? 0, set: (v) => (v ? (d.angle = v) : delete d.angle) };
+  }
+
+  /** The angle field of the fill settings shown now, when a line on the stage can set it (see AngleTool). */
+  private shownAngle(): ReturnType<StitchPanel['angleField']> {
+    const info = this.current;
+    const s = this.draft.fill;
+    if (!info || this.kind !== 'fill' || !s || this.appliqueDraft || info.outline || info.free?.on) return null;
+    return this.angleField(s);
+  }
+
+  /** The angle of the shown fill and how far it turns, or null when a line on the stage has nothing to set. */
+  get rowAngle(): { value: number; turn: 180 | 360 } | null {
+    const f = this.shownAngle();
+    return f ? { value: f.get(), turn: f.turn } : null;
+  }
+
+  /** The shown fill at angle `v` from a line on the stage: shown (`final` false), then taken over like the dial. */
+  setRowAngle(v: number, final: boolean): void {
+    const f = this.shownAngle();
+    if (!f) return;
+    f.set(v);
+    this.showAngle?.();
+    this.changed(final);
+  }
+
+  /** A line on the stage dropped: the angle as it was (NaN: automatic), and no preview. */
+  restoreRowAngle(v: number): void {
+    const f = this.shownAngle();
+    if (!f) return;
+    cancelAnimationFrame(this.frame);
+    this.frame = 0;
+    f.set(v);
+    this.showAngle?.();
+    this.hooks.preview(null);
+  }
+
+  /** The line tool on the stage on or off: its button by the dial shows it. */
+  angleTool(on: boolean): void {
+    this.angleToolOn = on;
+    this.root.querySelector('.angle-drag')?.setAttribute('aria-pressed', String(on));
   }
 
   /**
@@ -1739,7 +1797,7 @@ export class StitchPanel {
    * for the keyboard and fine steps, in whole degrees from 0 to `turn` (exclusive). `arrow`: the
    * needle points one way (a direction), not both (rows).
    */
-  private dial(d: { label: Key; hint: Key; turn: 180 | 360; arrow?: boolean; get: () => number; set: (v: number) => void; fmt: (v: number) => string }): HTMLElement {
+  private dial(d: { label: Key; hint: Key; turn: 180 | 360; arrow?: boolean; drag?: boolean; get: () => number; set: (v: number) => void; fmt: (v: number) => string }): HTMLElement {
     const out = h('output');
     const needle = h('span');
     const dial = h('span', { class: 'angle-dial' + (d.arrow ? ' arrow' : ''), role: 'presentation' }, needle);
@@ -1751,6 +1809,12 @@ export class StitchPanel {
       needle.style.transform = `rotate(${Number.isFinite(d.get()) ? d.get() : 0}deg)`;
     };
     show();
+    // A line drawn on the stage sets the same angle: the dial follows it.
+    if (d.drag)
+      this.showAngle = () => {
+        input.value = String(now());
+        show();
+      };
     const put = (v: number, done: boolean) => {
       const a = ((Math.round(v) % d.turn) + d.turn) % d.turn;
       if (a !== d.get()) {
@@ -1784,7 +1848,20 @@ export class StitchPanel {
     };
     dial.addEventListener('pointerup', up);
     dial.addEventListener('pointercancel', up);
-    return h('label', { class: 'field stitch-field', title: t(d.hint) }, h('span', { class: 'label' }, h('span', { class: 'name' }, t(d.label)), out), h('span', { class: 'angle-row' }, dial, input));
+    const row = h('span', { class: 'angle-row' }, dial, input);
+    if (d.drag) {
+      const c = getCommand('stitch.angleDrag');
+      const key = c?.keys?.[0] ? ` (${keyLabel(c.keys[0])})` : '';
+      const b = h('button', { type: 'button', class: 'angle-drag', 'aria-pressed': String(this.angleToolOn), title: t('stitch.angle.drag.hint') + key, 'aria-label': t('stitch.angle.drag') });
+      b.innerHTML = ANGLE_DRAG_ICON;
+      b.addEventListener('click', (e) => {
+        // In a label, a click would also reach the slider.
+        e.preventDefault();
+        runCommand('stitch.angleDrag');
+      });
+      row.append(b);
+    }
+    return h('label', { class: 'field stitch-field', title: t(d.hint) }, h('span', { class: 'label' }, h('span', { class: 'name' }, t(d.label)), out), row);
   }
 
   /** A row of buttons, one per value; picking one applies it. Each has `<text>.hint` as its title. */

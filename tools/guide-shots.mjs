@@ -1019,6 +1019,26 @@ shots.gap = async (lang) => {
   await close();
 };
 
+// swatch: a fill test swatch for terry in the realistic view, the cell picked in the Material panel beside it
+shots.swatch = async (lang) => {
+  const { page, close } = await boot(lang);
+  await page.click('.start-cards button:nth-child(3)');
+  await page.waitForTimeout(1500);
+  await setControl(page, '#fabric', 'terry');
+  await page.evaluate(() => { document.getElementById('swatch').open = true; });
+  await page.click('#swatch-make');
+  await page.waitForTimeout(3000);
+  await realistic(page, true);
+  await page.click('#marks-toggle');
+  await page.click('#swatch-grid tr:nth-child(3) td:nth-child(3) label');
+  // the hint of the pick fades before the shot
+  await page.waitForTimeout(7000);
+  await inspectorTo(page, '#fabric', -40);
+  await mouseAway(page);
+  await jpeg(page, `swatch-${lang}`);
+  await close();
+};
+
 // ---- runner
 const names = process.argv.slice(2);
 const list = names.length ? names : Object.keys(shots);

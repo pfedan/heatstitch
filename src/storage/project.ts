@@ -98,7 +98,7 @@ export const isProjectName = (name: string) => name.toLowerCase().endsWith(PROJE
 
 export function projectSettings(s: Settings): ProjectSettings {
   return structuredClone({
-    profile: s.profile,
+    profile: { fabric: s.profile.fabric, thread: s.profile.thread },
     checks: s.checks,
     correction: s.correction,
     trimMm: s.trimMm,
