@@ -5,6 +5,7 @@
 // Numeric code over pixels and points reads best with plain index loops, as in the papers it follows.
 #![allow(clippy::needless_range_loop, clippy::too_many_arguments)]
 
+pub mod correct;
 pub mod density;
 pub mod digitize;
 pub mod geom;

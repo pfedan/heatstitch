@@ -5,10 +5,11 @@ import { stitchKinds } from '../../model/sequence';
 import type { Acknowledgement } from '../../validation/acks';
 import { stableFabric } from '../../validation/practice';
 import type { Profile } from '../../validation/profiles';
-import { CAUTION, CRITICAL, SAFE, thresholdsFor } from '../../validation/thresholds';
+import { CAUTION, thresholdsFor } from '../../validation/thresholds';
 import { ALL_CHECKS, type Checks, type ValidationResult } from '../../validation/validate';
+import { core } from '../../wasm/core';
+import type { Engine } from '../../wasm/pkg/heatstitch_core';
 import { CAUTION_KINDS, cellDiff, cellKey, countingCells, kindsOf, openFor, type CellDiff, type FixKind, type FixTarget } from './cells';
-import { Field, type Contribution } from './field';
 import { merged, toolSets, toolsFor, type Tool, type Variant } from './variants';
 import { borderTools, designKey, letteringTools, movesOf, objectsOf, predictable, sewUnit, stitchesOf, unitKey, unitOf, type Unit } from './units';
 import { fineFix, fineObjects } from './fine';
@@ -26,8 +27,11 @@ import { lineGeoOf } from '../../model/geo';
  *
  * Steps: find the open cells, find which objects carry them (their share of the thread there),
  * sew the variants a digitizer would try on those objects, put the objects that share open cells
- * into groups, search each group on the fast additive measure (field.ts), then sew the result for
- * real, check the whole design, and forbid what broke a rule until it holds.
+ * into groups, search each group on the fast additive measure, then sew the result for real, check
+ * the whole design, and forbid what broke a rule until it holds.
+ *
+ * The field, the carriers, the groups and the search run in the Rust core (core/src/correct/engine/,
+ * one Engine per fix); sewing the variants and checking for real stay here, with the model.
  */
 
 /** A change on one object, as the user sees it. */
@@ -89,18 +93,9 @@ export const DIRECT_MAX = 0.6;
 const SHARE = 0.15;
 /** At most this many objects the search re-spaced are tried without it, for the fine stage (see planFix). */
 const KEEP_TRIES = 4;
-/** Later thread (mm/mm²) from which an object's thread counts as covered. */
-const HIDDEN = 2.2;
 const MAX_ROUNDS = 3;
-/** Search time per group (ms), and neighbourhoods in a row without a better choice before it stops. */
+/** Search time per group (ms of the reference machine), spent as field work in the core (search.rs). */
 const BUDGET_MS = 800;
-/**
- * Field work (Field.work) the search does per millisecond, measured on the test set (110 to 120
- * thousand on the cloud machine, 2026-10-08). The budget is given in milliseconds and spent in
- * work: a slower machine takes longer, but comes to the same choice.
- */
-const WORK_PER_MS = 110_000;
-const STALE = 40;
 /** Time for the caution kinds (gaps, too open, long stitches), object by object. */
 const LOWER_BUDGET_MS = 6000;
 /**
@@ -108,85 +103,25 @@ const LOWER_BUDGET_MS = 6000;
  * validation cell (sewing and checking, fitted on the test set), about 38 of them per millisecond.
  */
 const LOWER_WORK_PER_MS = 38;
-/** Groups with at most this many combinations are searched completely. */
-const EXHAUSTIVE = 1500;
 
 interface Candidate {
+  /** Its index in the engine. */
+  ci: number;
   o: SewObject;
   unit: Unit;
   variants: Variant[];
-  contributions: Contribution[];
   /** Measured visibility per variant. */
   visibility: number[];
   /** Variants forbidden after a real check failed. */
   banned: Set<number>;
+  /** The variant chosen, as the engine last reported it. */
   chosen: number;
   /** Moves and trims of its objects as they are now (see apartOf). */
   base: { moves: number; trims: number };
 }
 
-/** Field cell of each validation cell (by world key). */
-function fieldCells(f: Field, v: ValidationResult): Int32Array {
-  const byKey = new Map<number, number>();
-  for (let c = 0; c < f.level.length; c++) byKey.set(f.keyOf(c), c);
-  const out = new Int32Array(v.level.length).fill(-1);
-  for (let i = 0; i < v.level.length; i++) out[i] = byKey.get(cellKey(v, i)) ?? -1;
-  return out;
-}
-
-/** Sub-cell of the peak of cell `c` and the thread there. */
-function peakOf(f: Field, c: number): { sx: number; sy: number; t: number } {
-  const cx = c % f.cols;
-  const cy = (c - cx) / f.cols;
-  let best = { sx: cx * 5, sy: cy * 5, t: -1 };
-  for (let y = cy * 5; y < cy * 5 + 5; y++) for (let x = cx * 5; x < cx * 5 + 5; x++) if (f.total[y * f.scols + x] > best.t) best = { sx: x, sy: y, t: f.total[y * f.scols + x] };
-  return best;
-}
-
-const at = (m: Contribution['map'], sx: number, sy: number): number => {
-  const x = sx - m.ox;
-  const y = sy - m.oy;
-  return x >= 0 && y >= 0 && x < m.cols && y < m.rows ? m.total[y * m.cols + x] : 0;
-};
-
-/** Share of each object's thread that later objects cover (by its base map). */
-function hiddenShares(f: Field, base: Contribution[]): number[] {
-  const later = new Float32Array(f.total.length);
-  const out = new Array<number>(base.length).fill(0);
-  for (let k = base.length - 1; k >= 0; k--) {
-    const m = base[k].map;
-    let all = 0;
-    let hid = 0;
-    for (let y = 0; y < m.rows; y++) {
-      const fy = m.oy + y;
-      if (fy < 0 || fy >= f.srows) continue;
-      for (let x = 0; x < m.cols; x++) {
-        const fx = m.ox + x;
-        if (fx < 0 || fx >= f.scols) continue;
-        const t = m.total[y * m.cols + x];
-        all += t;
-        if (later[fy * f.scols + fx] >= HIDDEN) hid += t;
-      }
-    }
-    out[k] = all > 0 ? hid / all : 0;
-    for (let y = 0; y < m.rows; y++) {
-      const fy = m.oy + y;
-      if (fy < 0 || fy >= f.srows) continue;
-      for (let x = 0; x < m.cols; x++) {
-        const fx = m.ox + x;
-        if (fx >= 0 && fx < f.scols) later[fy * f.scols + fx] += m.total[y * m.cols + x];
-      }
-    }
-  }
-  return out;
-}
-
-/** The score of the current choice in a group. Higher is better; null when a hard rule is broken. */
-interface Tally {
-  fixed: number;
-  newCritical: number;
-  newCaution: number;
-}
+/** Bounds of `p` as the core takes them. */
+const boundsOf = (p: Pattern) => Float64Array.of(p.bounds.minX, p.bounds.minY, p.bounds.maxX, p.bounds.maxY);
 
 /**
  * Fixes the open cells of `kind` (or of all kinds) in `p`. Nothing in `p` changes: the result
@@ -257,42 +192,45 @@ export async function planFix(p: Pattern, profile: Profile, kind: FixTarget, opt
 
 /** Density and penetrations: search on the additive field, check for real. Objects in `keep` are not searched. */
 async function upperFix(p: Pattern, v: ValidationResult, counting: Uint8Array, profile: Profile, kinds: FixKind[], opt: FixOptions, keep?: Set<number>): Promise<{ pattern: Pattern; objects: ObjectFix[]; hidden: number[] }> {
-  const tStart = performance.now();
   cacheDesign(p);
+  const e = new (core().Engine)(p.x, p.y, p.cmd, boundsOf(p), thresholdsFor(profile), stableFabric(profile));
+  try {
+    return await search(e, p, v, counting, profile, kinds, opt, keep);
+  } finally {
+    e.free();
+  }
+}
+
+async function search(e: Engine, p: Pattern, v: ValidationResult, counting: Uint8Array, profile: Profile, kinds: FixKind[], opt: FixOptions, keep?: Set<number>): Promise<{ pattern: Pattern; objects: ObjectFix[]; hidden: number[] }> {
+  const tStart = performance.now();
   const th = thresholdsFor(profile);
-  const f = new Field(p, th, stableFabric(profile));
-  const fc = fieldCells(f, v);
+  const fc = e.fieldCells(Float64Array.from(v.level, (_, i) => cellKey(v, i)));
   const kindsArr = stitchKinds(p);
   const objs = sewObjects(p, kindsArr);
   // Open cells, on the field.
-  const target = new Uint8Array(f.level.length);
   const targets: number[] = [];
   for (let i = 0; i < v.level.length; i++) {
     if (fc[i] < 0 || !kinds.some((k) => openFor(v, counting, i, k))) continue;
-    target[fc[i]] = 1;
     targets.push(fc[i]);
   }
-  const base = objs.map((o) => f.contribution(sliceOf(p, o)));
-  const hidden = hiddenShares(f, base);
+  e.setTarget(Uint32Array.from(targets));
+  e.addObjects(p.x, p.y, p.cmd, Float64Array.from(objs.flatMap((o) => [o.first, o.last, o.minX, o.minY, o.maxX, o.maxY])));
+  const hidden = Array.from(e.hiddenShares());
   // Who carries each open cell.
   const carriers = new Map<number, number[]>();
-  for (const c of targets) {
-    const pk = peakOf(f, c);
-    const who: number[] = [];
-    for (const o of objs) {
-      const m = base[o.index].map;
-      if (!m.cols) continue;
-      const share = pk.t > 0 ? at(m, pk.sx, pk.sy) / pk.t : 0;
-      const holes = kinds.includes('holes') && base[o.index].shorts.has(c);
-      if (share >= SHARE || holes) who.push(o.index);
-    }
-    carriers.set(c, who);
+  const flat = e.carriers(SHARE, kinds.includes('holes'));
+  for (let i = 0; i < flat.length; ) {
+    const c = flat[i];
+    const n = flat[i + 1];
+    carriers.set(c, Array.from(flat.subarray(i + 2, i + 2 + n)));
+    i += 2 + n;
   }
   // Candidates: the units (sets of settings) that may be changed, with their variants.
   opt.log?.(`field and carriers t=${Math.round(performance.now() - tStart)}`);
   const want = new Set<FixKind>(kinds);
   const cands = new Map<number, Candidate>();
   const unitCand = new Map<string, Candidate>();
+  const threads = new Map<string, { top: number; under: number }>();
   for (const idx of new Set([...carriers.values()].flat())) {
     if (opt.stale?.()) break;
     const u = unitOf(p, objs, objs[idx], kindsArr, opt.hand);
@@ -311,7 +249,7 @@ async function upperFix(p: Pattern, v: ValidationResult, counting: Uint8Array, p
     tools = tools.filter((t) => opt.visible || !t.visible);
     if (!tools.length) continue;
     const predictOk = !(want.has('holes') && th.holes);
-    const built = buildVariants(p, f, u, tools, opt.trimMm, predictOk, coveredAfter(f, base, Math.max(...u.objects)));
+    const built = buildVariants(p, e, threads, u, tools, opt.trimMm, predictOk);
     if (built.variants.length < 2) continue;
     const { variants, contributions } = built;
     // Visibility: where the unit's objects lie on top.
@@ -324,148 +262,48 @@ async function upperFix(p: Pattern, v: ValidationResult, counting: Uint8Array, p
     variants.forEach((_, k) => {
       if (k && !opt.visible && visibility[k] > (opt.directMax ?? DIRECT_MAX)) banned.add(k);
     });
-    const c: Candidate = { o: owner, unit: u, variants, contributions, visibility, banned, chosen: 0, base: built.base };
+    const ci = e.addCandidate(Uint32Array.from(contributions), Float64Array.from(visibility), Uint8Array.from(variants, (_, k) => (banned.has(k) ? 1 : 0)));
+    const c: Candidate = { ci, o: owner, unit: u, variants, visibility, banned, chosen: 0, base: built.base };
     unitCand.set(key, c);
     cands.set(idx, c);
     await Promise.resolve();
   }
   opt.log?.(`targets ${targets.length} carriers ${[...new Set([...carriers.values()].flat())].join(',')} units ${[...unitCand.values()].map((c) => `${unitKey(c.unit)}:${c.variants.length}v`).join(' ')} t=${Math.round(performance.now() - tStart)}`);
   if (!cands.size) return { pattern: p, objects: [], hidden };
-  // Groups: units sharing an open cell.
-  const parent = new Map<Candidate, Candidate>([...unitCand.values()].map((c) => [c, c]));
-  const find = (x: Candidate): Candidate => (parent.get(x) === x ? x : (parent.set(x, find(parent.get(x)!)), parent.get(x)!));
-  for (const who of carriers.values()) {
-    const c = [...new Set(who.map((x) => cands.get(x)).filter((x): x is Candidate => !!x))];
-    for (let k = 1; k < c.length; k++) parent.set(find(c[k]), find(c[0]));
-  }
-  const groups = new Map<Candidate, Candidate[]>();
-  for (const c of unitCand.values()) {
-    const g = find(c);
-    groups.set(g, [...(groups.get(g) ?? []), c]);
-  }
-
-  const tally: Tally = { fixed: 0, newCritical: 0, newCaution: 0 };
-  const onChange = (c: number, was: number, now: number, riskWas: number, riskNow: number) => {
-    const b = f.base[c];
-    if (target[c]) {
-      const open = (l: number) => l === CRITICAL;
-      if (open(was) && !open(now)) tally.fixed++;
-      else if (!open(was) && open(now)) tally.fixed--;
-    }
-    tally.newCritical += riskNow - riskWas;
-    if (b === SAFE) {
-      if (was !== SAFE) tally.newCaution--;
-      if (now !== SAFE) tally.newCaution++;
-    }
+  // Groups: units sharing an open cell (formed in the core).
+  const objCand = new Int32Array(objs.length).fill(-1);
+  for (const [idx, c] of cands) objCand[idx] = c.ci;
+  const groups = e.link(objCand);
+  const all = [...unitCand.values()];
+  const sync = () => {
+    const ch = e.chosen();
+    for (const c of all) c.chosen = ch[c.ci];
   };
-  const choose = (c: Candidate, k: number) => {
-    if (c.chosen === k) return;
-    f.swap(c.contributions[c.chosen], c.contributions[k], onChange);
-    c.chosen = k;
-  };
-  // Lexicographic: open cells fixed, then measured visibility, new caution, objects touched.
-  const value = (g: Candidate[]): number => {
-    if (tally.newCritical > 0) return -Infinity;
-    let vis = 0;
-    let touched = 0;
-    for (const c of g) {
-      vis += c.visibility[c.chosen];
-      if (c.chosen) touched++;
-    }
-    return tally.fixed * 1e6 - vis * 1e3 - tally.newCaution * 20 - touched;
+  const ban = (c: Candidate, k: number) => {
+    c.banned.add(k);
+    e.ban(c.ci, k);
   };
 
-  const solveGroup = async (g: Candidate[]) => {
-    // Forbidden variants leave the choice first.
-    for (const c of g) if (c.banned.has(c.chosen)) choose(c, 0);
-    const allowed = g.map((c) => c.variants.map((_, k) => k).filter((k) => !c.banned.has(k)));
-    const combos = allowed.reduce((a, l) => a * l.length, 1);
-    let best = value(g);
-    let bestChoice = g.map((c) => c.chosen);
-    const keep = () => {
-      const val = value(g);
-      if (val > best) {
-        best = val;
-        bestChoice = g.map((c) => c.chosen);
-      }
-    };
+  const solveGroup = async (g: number) => {
+    const combos = e.beginGroup(g);
     const mode = opt.solver ?? 'lns';
     if (mode !== 'lns' && opt.exact && combos > 1) {
-      const start = g.map((c) => c.chosen);
-      const r = await opt.exact(f, g.map((c, k) => ({ contributions: c.contributions, allowed: allowed[k], chosen: c.chosen, visibility: c.visibility })), target, opt.budgetMs ?? BUDGET_MS);
-      if (r) {
-        g.forEach((c, k) => choose(c, r.choice[k]));
-        keep();
-        opt.log?.(`mip ${r.status} rows ${r.rows} cols ${r.cols} value ${value(g)}`);
-      }
-      g.forEach((c, k) => choose(c, mode === 'mip' ? bestChoice[k] : start[k]));
-      if (mode === 'mip' && r && value(g) > -Infinity) return;
+      const r = await opt.exact(e, g, opt.budgetMs ?? BUDGET_MS);
+      if (r) opt.log?.(`mip ${r.status} rows ${r.rows} cols ${r.cols}`);
+      if (e.mipResult(g, r ? Uint32Array.from(r.choice) : undefined, mode === 'mip')) return;
     }
-    if (combos <= EXHAUSTIVE) {
-      const rec = (k: number) => {
-        if (k === g.length) return keep();
-        for (const x of allowed[k]) {
-          choose(g[k], x);
-          rec(k + 1);
-        }
-      };
-      rec(0);
-    } else {
-      // Greedy from the current choice, then large neighbourhoods: a few objects at once, exactly.
-      // Budgeted by work, not by the clock: the same design gets the same answer on any machine.
-      const end = f.work + (opt.budgetMs ?? BUDGET_MS) * WORK_PER_MS;
-      let improved = true;
-      while (improved && f.work < end) {
-        improved = false;
-        for (let k = 0; k < g.length; k++) {
-          const was = g[k].chosen;
-          let localBest = value(g);
-          let pick = was;
-          for (const x of allowed[k]) {
-            choose(g[k], x);
-            const val = value(g);
-            if (val > localBest) {
-              localBest = val;
-              pick = x;
-            }
-          }
-          choose(g[k], pick);
-          if (pick !== was) improved = true;
-        }
-        keep();
-      }
-      let seed = 1;
-      const rnd = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
-      let stale = 0;
-      while (f.work < end && stale < STALE) {
-        g.forEach((c, k) => choose(c, bestChoice[k]));
-        // A neighbourhood: one object and those sharing open cells with it, up to five.
-        const pivot = Math.floor(rnd() * g.length);
-        const near = neighbours(g, pivot, carriers, cands).slice(0, 5);
-        const sub = near.filter((k) => allowed[k].length > 1);
-        const before = best;
-        const rec = (j: number) => {
-          if (j === sub.length) return keep();
-          for (const x of allowed[sub[j]]) {
-            choose(g[sub[j]], x);
-            rec(j + 1);
-          }
-        };
-        if (sub.reduce((a, k) => a * allowed[k].length, 1) <= EXHAUSTIVE) rec(0);
-        stale = best > before ? 0 : stale + 1;
-      }
-    }
-    g.forEach((c, k) => choose(c, bestChoice[k]));
+    e.searchGroup(g, opt.budgetMs ?? BUDGET_MS);
   };
 
   let pattern = p;
   for (let round = 0; round < MAX_ROUNDS; round++) {
     const ts = performance.now();
-    for (const g of groups.values()) await solveGroup(g);
-    opt.log?.(`search ${Math.round(performance.now() - ts)}ms groups ${[...groups.values()].map((g) => g.length).join(',')}`);
+    for (let g = 0; g < groups; g++) await solveGroup(g);
+    sync();
+    opt.log?.(`search ${Math.round(performance.now() - ts)}ms groups ${groups}`);
     if (opt.stale?.()) break;
     // Sew the choice for real and check the whole design.
-    const chosen = [...unitCand.values()].filter((c) => c.chosen).sort((a, b) => a.o.index - b.o.index);
+    const chosen = all.filter((c) => c.chosen).sort((a, b) => a.o.index - b.o.index);
     pattern = applyChoice(p, chosen, opt.trimMm, opt.hand);
     // What was predicted is known now: its real thread replaces the prediction, and how much
     // more it is sewn apart counts from now on (too much for a direct fix: tried again without).
@@ -474,32 +312,33 @@ async function upperFix(p: Pattern, v: ValidationResult, counting: Uint8Array, p
       const x = c.variants[c.chosen];
       if (!x.predicted) continue;
       const st = stitchesOf(pattern, c.unit.objects);
-      const real = f.contribution(st);
-      f.swap(c.contributions[c.chosen], real, onChange);
-      c.contributions[c.chosen] = real;
+      e.replace(c.ci, st.x, st.y, st.cmd, boundsOf(st));
       x.predicted = false;
       const more = apartOf(st, c.base) - (x.apart ?? 0);
       if (more <= 0 || c.visibility[c.chosen] >= 1) continue;
       x.apart = (x.apart ?? 0) + more;
       c.visibility[c.chosen] += more;
+      e.setVisibility(c.ci, c.chosen, c.visibility[c.chosen]);
       if (!opt.visible && c.visibility[c.chosen] > (opt.directMax ?? DIRECT_MAX)) apart.push(c);
     }
     const after = validateDesign(pattern, v.profile, v.checks);
     const diff = cellDiff(v, after, opt.acks);
     const bad = [...new Set([...apart, ...blame(p, pattern, chosen, diff, after)])];
     opt.log?.(`verify t=${Math.round(performance.now() - tStart)}`);
-    opt.log?.(`round ${round}: tally ${JSON.stringify(tally)} chosen ${chosen.map((c) => `${c.o.index}:${c.variants[c.chosen].tools.map((t) => t.id).join('+')}`).join(' ')} real new crit ${diff.newCritical} gs ${diff.newGapSparse} crit ${diff.criticalBefore}>${diff.criticalAfter} bad ${bad.map((c) => c.o.index).join(',')}`);
+    const [fixed, newCritical, newCaution] = e.tally();
+    opt.log?.(`round ${round}: tally ${JSON.stringify({ fixed, newCritical, newCaution })} chosen ${chosen.map((c) => `${c.o.index}:${c.variants[c.chosen].tools.map((t) => t.id).join('+')}`).join(' ')} real new crit ${diff.newCritical} gs ${diff.newGapSparse} crit ${diff.criticalBefore}>${diff.criticalAfter} bad ${bad.map((c) => c.o.index).join(',')}`);
     if (!bad.length) break;
-    for (const c of bad) c.banned.add(c.chosen);
+    for (const c of bad) ban(c, c.chosen);
     if (round === MAX_ROUNDS - 1) {
       // Still breaking a rule: leave those objects as they are, until the design checks out (blame
       // goes by the objects' boxes, so the one to blame may come up only once the others are back).
       for (let left = bad; left.length; ) {
         for (const c of left) {
-          choose(c, 0);
-          c.variants.forEach((_, k) => k && c.banned.add(k));
+          e.choose(c.ci, 0);
+          c.variants.forEach((_, k) => k && ban(c, k));
         }
-        const still = [...unitCand.values()].filter((c) => c.chosen).sort((a, b) => a.o.index - b.o.index);
+        sync();
+        const still = all.filter((c) => c.chosen).sort((a, b) => a.o.index - b.o.index);
         pattern = applyChoice(p, still, opt.trimMm, opt.hand);
         if (!still.length) break;
         const check = validateDesign(pattern, v.profile, v.checks);
@@ -507,7 +346,7 @@ async function upperFix(p: Pattern, v: ValidationResult, counting: Uint8Array, p
       }
     }
   }
-  const objects = [...unitCand.values()]
+  const objects = all
     .filter((c) => c.chosen)
     .sort((a, b) => a.o.index - b.o.index)
     .map((c) => {
@@ -515,22 +354,6 @@ async function upperFix(p: Pattern, v: ValidationResult, counting: Uint8Array, p
       return { index: c.o.index, kind: c.o.kind, tools: x.tools.map((t) => t.id), changes: x.changes, knockout: x.knockout, visibility: c.visibility[c.chosen], visible: x.visible || c.visibility[c.chosen] > (opt.directMax ?? DIRECT_MAX), hand: handOf(p, c.unit, objs) };
     });
   return { pattern, objects, hidden };
-}
-
-/** Indices in `g` of the objects sharing open cells with g[k], g[k] first. */
-function neighbours(g: Candidate[], k: number, carriers: Map<number, number[]>, cands: Map<number, Candidate>): number[] {
-  const near = new Set<Candidate>([g[k]]);
-  for (const who of carriers.values()) if (who.some((x) => cands.get(x) === g[k])) who.forEach((x) => cands.get(x) && near.add(cands.get(x)!));
-  const out = [k];
-  g.forEach((c, j) => {
-    if (j !== k && near.has(c)) out.push(j);
-  });
-  return out;
-}
-
-/** Records of object `o` as a pattern of its own. */
-function sliceOf(p: Pattern, o: SewObject): Pattern {
-  return { name: p.name, format: p.format, x: p.x.slice(o.first, o.last + 1), y: p.y.slice(o.first, o.last + 1), cmd: p.cmd.slice(o.first, o.last + 1), colors: p.colors, bounds: { minX: o.minX, minY: o.minY, maxX: o.maxX, maxY: o.maxY } };
 }
 
 /** Sews the chosen variants into the design, object by object. */
@@ -643,28 +466,6 @@ function lowerFix(p: Pattern, orig: Pattern, v0: ValidationResult, profile: Prof
 
 export { CAUTION };
 
-/** Sub-cell test: thread of objects sewn after `index` covers it (no underlay needed there). */
-function coveredAfter(f: Field, base: Contribution[], index: number): (sx: number, sy: number) => boolean {
-  let later: Map<number, number> | null = null;
-  return (sx, sy) => {
-    if (!later) {
-      later = new Map();
-      for (let k = index + 1; k < base.length; k++) {
-        const m = base[k].map;
-        for (let y = 0; y < m.rows; y++) {
-          for (let x = 0; x < m.cols; x++) {
-            const t = m.total[y * m.cols + x];
-            if (!t) continue;
-            const key = (m.oy + y) * f.scols + m.ox + x;
-            later.set(key, (later.get(key) ?? 0) + t);
-          }
-        }
-      }
-    }
-    return (later.get(sy * f.scols + sx) ?? 0) < HIDDEN;
-  };
-}
-
 /** Whether object `index` was sewn here (its settings are remembered, not measured from stitches). */
 function sewnHere(p: Pattern, index: number): boolean {
   const m = remembered(p, objectsOf(p)[index]);
@@ -692,47 +493,60 @@ const MAX_VARIANTS = 36;
  * by width, short stitches, another underlay kind) are sewn; on each of them, looser rows and less
  * underlay are predicted from its thread (top stitches scaled, underlay taken away), since sewing a
  * large fill again for every spacing step costs seconds. Predicted variants are sewn when chosen.
+ * Their contributions are ids in engine `e`; `threads` keeps the sewn ones of this engine by key.
  */
-function buildVariants(p: Pattern, f: Field, u: Unit, tools: Tool[], trimMm: number, predictOk: boolean, uncovered: (sx: number, sy: number) => boolean): { variants: Variant[]; contributions: Contribution[]; base: { moves: number; trims: number } } {
+function buildVariants(p: Pattern, e: Engine, threads: Map<string, { top: number; under: number }>, u: Unit, tools: Tool[], trimMm: number, predictOk: boolean): { variants: Variant[]; contributions: number[]; base: { moves: number; trims: number } } {
   const pred = predictOk ? tools.filter((t) => predictable(t)) : [];
   const real = tools.filter((t) => !pred.includes(t));
   const realSets: Tool[][] = [[], ...toolSets(real, 6)];
   const scales: (Tool | null)[] = [null, ...pred.filter((t) => predictable(t)!.scale !== undefined)];
   const unders: (Tool | null)[] = [null, ...pred.filter((t) => predictable(t)!.under !== undefined)];
   const variants: Variant[] = [];
-  const contributions: Contribution[] = [];
+  const contributions: number[] = [];
   // Stitches from elsewhere change when sewn here even with the same settings: what is predicted
   // starts from them sewn here, not from the stitches in the file.
   const foreign = u.kind === 'object' && !sewnHere(p, u.owner);
   const uk = `${unitKey(u)}|${trimMm}`;
   const base = movesOf(stitchesOf(p, u.objects));
+  /** Top and underlay thread of stitches `st` in the engine, once per key (`file`: all of it is top). */
+  const threadOf = (key: string, st: Pattern & { under?: Uint8Array }, file: boolean) => {
+    let t = threads.get(key);
+    if (!t) {
+      const b = boundsOf(st);
+      const top = e.contribution(st.x, st.y, st.cmd, b, file ? undefined : st.under!.map((x) => (x ? 0 : 1)));
+      const under = e.contribution(st.x, st.y, st.cmd, b, file ? new Uint8Array(st.cmd.length) : st.under!.map((x) => (x ? 1 : 0)));
+      threads.set(key, (t = { top, under }));
+    }
+    return t;
+  };
   for (const set of realSets) {
     const knockout = set.some((t) => t.knockout);
     if (!set.length && foreign && !variants.length) {
       // The file's own stitches as they are, then the same sewn here as the base of the predictions.
       const st0 = stitchesOf(p, u.objects);
       variants.push({ tools: [], changes: [], knockout: false, stitches: st0, strength: 0, visible: false });
-      contributions.push(sewnOnce(`${uk}|file`, () => ({ st: st0, top: f.contribution(st0), under: f.contribution(st0, () => false) }))!.top);
+      contributions.push(threadOf(`${uk}|file`, st0, true).top);
     }
     const key = `${uk}|${set.map((t) => t.id).sort().join('+')}`;
     const sewn = sewnOnce(key, () => {
       const next = set.length || foreign ? sewUnit(p, u, merged(set), knockout, trimMm, true) : p;
       if (!next) return null;
-      const st = stitchesOf(next, u.objects);
-      return { st, top: f.contribution(st, (r) => !st.under[r]), under: f.contribution(st, (r) => !!st.under[r]) };
+      return { st: stitchesOf(next, u.objects) };
     });
     if (!sewn) {
       if (!set.length && foreign) break;
       continue;
     }
-    const { st, top, under } = sewn;
+    const { st } = sewn;
+    const { top, under } = threadOf(key, st, false);
     for (const sc of scales) {
       for (const un of unders) {
         const all = [...set, ...(sc ? [sc] : []), ...(un ? [un] : [])];
         // Sewn here without a change: kept only as the base of predictions for stitches from elsewhere.
         if (foreign && !all.length) continue;
         const pu = un ? predictable(un)!.under! : 1;
-        const c = f.blend(top, under, sc ? predictable(sc)!.scale! : 1, pu === 'covered' ? 1 : pu, pu === 'covered' ? uncovered : undefined);
+        // 'covered': underlay only where the objects sewn after the unit leave it uncovered.
+        const c = e.blend(top, under, sc ? predictable(sc)!.scale! : 1, pu === 'covered' ? 1 : pu, pu === 'covered' ? Math.max(...u.objects) : -1);
         variants.push({ tools: all, changes: merged(all), knockout, stitches: sc || un ? undefined : st, strength: Math.max(0, ...all.map((t) => t.strength)), visible: all.some((t) => t.visible), predicted: !!(sc || un), apart: apartOf(st, base) });
         contributions.push(c);
       }
@@ -744,14 +558,12 @@ function buildVariants(p: Pattern, f: Field, u: Unit, tools: Tool[], trimMm: num
 }
 
 /**
- * What a unit sewn with a set of tools contributes, kept for the design it was sewn on: the Ampel
- * works out several fixes of one design (each kind, the rest, all together), and they try the same
- * variants. Null: it could not be sewn.
+ * The stitches of a unit sewn with a set of tools, kept for the design they were sewn on: the
+ * Ampel works out several fixes of one design (each kind, the rest, all together), and they try
+ * the same variants. Null: it could not be sewn.
  */
 interface Sewn {
   st: Pattern & { under: Uint8Array };
-  top: Contribution;
-  under: Contribution;
 }
 const sewnCache = new Map<string, Sewn | null>();
 let sewnFor = '';
