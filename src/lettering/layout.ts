@@ -1,7 +1,8 @@
 import type { ThreadColor } from '../model/pattern';
-import { apply, compose, type Mat } from '../shape/path';
+import type { Mat } from '../shape/path';
 import type { Pt } from '../digitize/skeleton';
-import type { Font, Glyph } from './font';
+import { core } from '../wasm/core';
+import { inCore, type Font, type Glyph } from './font';
 
 /**
  * A lettering (Schriftzug): text set in an embroidery font. It stays text: whenever something
@@ -109,141 +110,59 @@ export function missingIn(font: Font, text: string): string[] {
   return out;
 }
 
-const rot = (deg: number, cx: number, cy: number): Mat => {
-  const r = (deg * Math.PI) / 180;
-  const c = Math.cos(r);
-  const s = Math.sin(r);
-  return [c, s, -s, c, cx - c * cx + s * cy, cy - s * cx - c * cy];
-};
-const move = (dx: number, dy: number): Mat => [1, 0, 0, 1, dx, dy];
-const scaled = (s: number): Mat => [s, 0, 0, s, 0, 0];
+/** The settings of `l` the core sets and sews from, the text in NFC. */
+export function letteringIn(l: Lettering): object {
+  return {
+    text: l.text.normalize('NFC'),
+    height: l.height,
+    align: l.align,
+    spacing: l.spacing,
+    wordSpacing: l.wordSpacing,
+    lineSpacing: l.lineSpacing,
+    shape: l.shape,
+    radius: l.radius,
+    x: l.x,
+    y: l.y,
+    angle: l.angle,
+    back: !!l.back,
+    density: l.density,
+    underlay: !!l.underlay,
+    letters: l.letters ?? [],
+  };
+}
+
+/** A layout as the core gives it: each letter names its glyph by key. */
+interface LayoutOut {
+  letters: { at: number; ch: string; line: number; word: number; key?: string | null; m: Mat; back: boolean; box: [Pt, Pt, Pt, Pt] }[];
+  missing: string[];
+  scale: number;
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
+/** The core's layout with the font's own glyph objects (the preview draws from them). */
+export function layoutFrom(font: Font, o: LayoutOut): Layout {
+  return {
+    letters: o.letters.map((p) => ({ at: p.at, ch: p.ch, line: p.line, word: p.word, glyph: p.key != null ? font.glyphs[p.key] : null, m: p.m, back: p.back, box: p.box })),
+    missing: o.missing,
+    scale: o.scale,
+    minX: o.minX,
+    minY: o.minY,
+    maxX: o.maxX,
+    maxY: o.maxY,
+  };
+}
 
 /**
  * Sets the text: letters along the baseline with their advances and kerning (an advance runs
  * from a letter's origin to the next one's; the first letter of a word starts at its own left
- * edge), lines below each other, aligned, then bent onto an arc or circle and turned.
+ * edge), lines below each other, aligned, then bent onto an arc or circle and turned. In the Rust
+ * core (core/src/lettering/layout.rs).
  */
 export function layout(font: Font, l: Lettering): Layout {
-  const s = l.height / (font.cap || 1);
-  const lines = l.text.normalize('NFC').replace(/\r/g, '').split('\n');
-  interface Item {
-    at: number;
-    ch: string;
-    word: number;
-    glyph: Glyph | null;
-    /** Origin along the line (mm of the design). */
-    u: number;
-    /** Left and right edge of the letter (design mm, from its origin). */
-    a: number;
-    b: number;
-  }
-  const missing = missingIn(font, l.text);
-  const set: { items: Item[]; left: number; right: number; words: number }[] = [];
-  let at = 0;
-  const gap = font.space * s;
-  for (const line of lines) {
-    const items: Item[] = [];
-    let pen = 0;
-    let prev: string | null = null;
-    let word = 0;
-    let inWord = false;
-    for (const ch of line) {
-      if (ch === ' ' || ch === '\t') {
-        pen += gap + l.wordSpacing;
-        if (inWord) word++;
-        inWord = false;
-        prev = null;
-        at++;
-        continue;
-      }
-      const glyph = glyphFor(font, ch);
-      const key = glyph && font.case === 'upper' ? ch.toUpperCase() : glyph && font.case === 'lower' ? ch.toLowerCase() : ch;
-      // A letter the font lacks keeps a place the size of a narrow letter.
-      const g = glyph ?? { a: font.cap * 0.55, x0: font.cap * 0.05, x1: font.cap * 0.5, y0: -font.cap, y1: 0, e: [] };
-      let u: number;
-      if (prev === null) u = pen - g.x0 * s;
-      else u = pen - (font.kern[prev + key] ?? 0) * s + l.spacing;
-      items.push({ at, ch, word, glyph, u, a: g.x0 * s, b: g.x1 * s });
-      pen = u + g.a * s;
-      prev = key;
-      inWord = true;
-      at++;
-    }
-    at++; // the line break
-    const left = items.length ? Math.min(...items.map((it) => it.u + it.a)) : 0;
-    const right = items.length ? Math.max(...items.map((it) => it.u + it.b)) : 0;
-    set.push({ items, left, right, words: word + (inWord ? 1 : 0) });
-  }
-  // Alignment: each line against the widest one; on an arc or circle around the middle.
-  const widest = Math.max(0, ...set.map((ln) => ln.right - ln.left));
-  const centered = l.shape !== 'line' || l.align === 'center';
-  for (const ln of set) {
-    const w = ln.right - ln.left;
-    let shift = -ln.left;
-    if (centered) shift -= w / 2;
-    else if (l.align === 'right') shift -= w;
-    else if (l.align === 'block' && ln.words > 1) {
-      // Block: the words of every line spread to the width of the widest.
-      const extra = (widest - w) / (ln.words - 1);
-      for (const it of ln.items) it.u += extra * it.word;
-    }
-    for (const it of ln.items) it.u += shift;
-  }
-
-  const lead = font.lead * s * l.lineSpacing;
-  const anchor = compose(move(l.x, l.y), rot(l.angle, 0, 0));
-  const placed: Placed[] = [];
-  const overrides = new Map(l.letters.map((o) => [o.at, o]));
-  set.forEach((ln, li) => {
-    const back = l.back && font.rev && li % 2 === 1;
-    // The circle: letters spread evenly around it, the text's middle at the top.
-    let spread = 0;
-    if (l.shape === 'circle' && ln.items.length > 1) {
-      const R = Math.max(1, l.radius - li * lead);
-      const w = ln.right - ln.left;
-      spread = Math.max(0, (2 * Math.PI * R - w) / ln.items.length);
-      ln.items.forEach((it, k) => (it.u += spread * (k - (ln.items.length - 1) / 2)));
-    }
-    for (const it of ln.items) {
-      const mid = it.u + (it.a + it.b) / 2;
-      let m: Mat;
-      if (l.shape === 'line') m = compose(move(it.u, li * lead), scaled(s));
-      else {
-        const R = Math.max(1, l.shape === 'arcDown' ? l.radius + li * lead : l.radius - li * lead);
-        const phi = mid / R;
-        // The letter stands on the circle at its middle, turned along it.
-        const deg = ((l.shape === 'arcDown' ? -phi : phi) * 180) / Math.PI;
-        const base: Pt = l.shape === 'arcDown' ? [R * Math.sin(phi), -l.radius + R * Math.cos(phi)] : [R * Math.sin(phi), l.radius - R * Math.cos(phi)];
-        m = compose(move(base[0], base[1]), compose(rot(deg, 0, 0), compose(move(-mid + it.u, 0), scaled(s))));
-      }
-      const o = overrides.get(it.at);
-      if (o && o.ch === it.ch) {
-        const g = it.glyph;
-        const cx = g ? ((g.x0 + g.x1) / 2) : 0;
-        const cy = g ? ((g.y0 + g.y1) / 2) : -font.cap / 2;
-        const c = apply(m, [cx, cy]);
-        m = compose(move(o.dx, o.dy), compose(rot(o.rot, c[0], c[1]), m));
-      }
-      m = compose(anchor, m);
-      const g = it.glyph ?? { x0: font.cap * 0.05, x1: font.cap * 0.5, y0: -font.cap, y1: 0 };
-      const box: [Pt, Pt, Pt, Pt] = [apply(m, [g.x0, g.y0]), apply(m, [g.x1, g.y0]), apply(m, [g.x1, g.y1]), apply(m, [g.x0, g.y1])];
-      placed.push({ at: it.at, ch: it.ch, line: li, word: it.word, glyph: it.glyph, m, back, box });
-    }
-  });
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  for (const p of placed) {
-    for (const [x, y] of p.box) {
-      minX = Math.min(minX, x);
-      minY = Math.min(minY, y);
-      maxX = Math.max(maxX, x);
-      maxY = Math.max(maxY, y);
-    }
-  }
-  if (!placed.length) [minX, minY, maxX, maxY] = [l.x, l.y - l.height, l.x, l.y];
-  return { letters: placed, missing, scale: s, minX, minY, maxX, maxY };
+  return layoutFrom(font, core().letteringLayout(inCore(font), letteringIn(l)) as LayoutOut);
 }
 
 /**

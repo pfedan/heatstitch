@@ -11,6 +11,7 @@ pub mod digitize;
 pub mod geom;
 pub mod image;
 pub mod js;
+pub mod lettering;
 pub mod material;
 pub mod model;
 pub mod parsers;

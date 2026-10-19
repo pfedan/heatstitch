@@ -1,6 +1,6 @@
-import { sample, type Region } from '../digitize/region';
-import type { Pt } from '../digitize/skeleton';
-import { columnOf, type Rails } from '../model/restitch';
+import { sample, type Region } from '../../../../src/digitize/region';
+import type { Pt } from '../../../../src/digitize/skeleton';
+import { columnOf, type Rails } from '../../../../src/model/restitch';
 
 /**
  * Letters that overlap are sewn there once. Where a letter sewn later lies on one sewn before (in
