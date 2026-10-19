@@ -1,8 +1,9 @@
 import type { Pattern } from '../model/pattern';
 import type { RestitchResult, Settings } from '../model/restitch';
 import type { Mat } from '../shape/path';
-import { ship, unship, type ShippedTransform } from './live';
-import type { CommitResponse, ResewRequest, ResewResponse, RestitchResponse } from './worker';
+import { ship, unship, type SewnFills, type ShippedTransform } from './live';
+import { fillPool, shares } from './pool';
+import type { CommitResponse, FillsResponse, ResewRequest, ResewResponse, RestitchResponse } from './worker';
 
 /** A scaling sewn anew, for the design it was asked on (to be looked at, see live.ts). */
 export interface LiveResult {
@@ -147,9 +148,11 @@ export interface PreviewResult {
 export class LivePreview {
   private worker: Worker | null = null;
   private loaded: Pattern | null = null;
-  private busy: { id: number; from: Pattern; settings: Settings } | null = null;
+  private busy: { id: number; tag: number; from: Pattern; settings: Settings } | null = null;
   private waiting: { from: Pattern; which: number[]; settings: Settings; trimMm: number } | null = null;
   private seq = 0;
+  /** This worker's own share of fills sewn on several cores (see pool.ts), by request. */
+  private own = new Map<number, (f: SewnFills | null) => void>();
   /** Without a worker (it failed to start) the caller sews on its own. */
   failed = false;
 
@@ -172,15 +175,22 @@ export class LivePreview {
   stop(): void {
     this.waiting = null;
     if (!this.busy) return;
+    fillPool.cancel(this.busy.tag);
     this.busy = null;
-    this.worker?.terminate();
-    this.worker = null;
-    this.loaded = null;
+    this.end();
   }
 
   /** Whether settings are being sewn or wait for it. */
   get pending(): boolean {
     return !!(this.busy || this.waiting);
+  }
+
+  private end(): void {
+    this.worker?.terminate();
+    this.worker = null;
+    this.loaded = null;
+    for (const done of this.own.values()) done(null);
+    this.own.clear();
   }
 
   private next(): void {
@@ -194,28 +204,47 @@ export class LivePreview {
         this.failed = true;
         return;
       }
-      this.worker.onmessage = (e: MessageEvent<RestitchResponse>) => this.answer(e.data);
+      this.worker.onmessage = (e: MessageEvent<RestitchResponse | FillsResponse>) => this.answer(e.data);
       this.worker.onerror = () => {
         const b = this.busy;
-        this.worker?.terminate();
-        this.worker = null;
-        this.loaded = null;
+        if (b) fillPool.cancel(b.tag);
+        this.end();
         this.busy = null;
         this.waiting = null;
         this.failed = true;
         if (b) this.got({ from: b.from, settings: b.settings, result: null, lost: true });
       };
     }
+    const worker = this.worker;
     if (this.loaded !== w.from) {
-      this.worker.postMessage({ type: 'load', design: ship(w.from) } satisfies ResewRequest);
+      worker.postMessage({ type: 'load', design: ship(w.from) } satisfies ResewRequest);
       this.loaded = w.from;
     }
     const id = ++this.seq;
-    this.busy = { id, from: w.from, settings: w.settings };
-    this.worker.postMessage({ type: 'restitch', id, which: w.which, settings: w.settings, trimMm: w.trimMm } satisfies ResewRequest);
+    const tag = fillPool.tag();
+    this.busy = { id, tag, from: w.from, settings: w.settings };
+    const sew = (fills?: SewnFills) => worker.postMessage({ type: 'restitch', id, which: w.which, settings: w.settings, trimMm: w.trimMm, ...(fills?.length ? { fills } : {}) } satisfies ResewRequest);
+    // Many fills: shared over this worker and the pool's, then sewn together here.
+    const split = fillPool.size ? shares(w.from, w.which, w.settings, fillPool.size + 1) : null;
+    if (!split) return sew();
+    const [mine, ...rest] = split;
+    const own = new Promise<SewnFills | null>((done) => {
+      const fid = ++this.seq;
+      this.own.set(fid, done);
+      worker.postMessage({ type: 'fills', id: fid, which: w.which, only: mine, settings: w.settings, trimMm: w.trimMm } satisfies ResewRequest);
+    });
+    void Promise.all([own, ...rest.map((only) => fillPool.sew(tag, w.from, w.which, only, w.settings, w.trimMm))]).then((parts) => {
+      // A share that did not come is sewn with the rest.
+      if (this.busy?.id === id && this.worker === worker) sew(parts.flatMap((f) => f ?? []));
+    });
   }
 
-  private answer(r: RestitchResponse): void {
+  private answer(r: RestitchResponse | FillsResponse): void {
+    if ('fills' in r) {
+      const done = this.own.get(r.id);
+      this.own.delete(r.id);
+      return done?.(r.fills);
+    }
     const b = this.busy;
     if (!b || b.id !== r.id) return;
     this.busy = null;

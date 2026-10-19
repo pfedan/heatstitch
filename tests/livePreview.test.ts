@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { sewObjects } from '../src/model/objects';
 import { designObjects, remembered, rememberedIn, restitch, restoreRemembered, type Settings } from '../src/model/restitch';
 import { parsePattern } from '../src/parsers';
-import { restitchShipped, ship, unship } from '../src/resew/live';
+import { fillsShipped, restitchShipped, ship, unship } from '../src/resew/live';
 import { decodeProject } from '../src/storage/project';
 import type { Pattern } from '../src/model/pattern';
 
@@ -56,4 +56,36 @@ describe('stitch settings sewn in the worker while pointed at', () => {
     expect(fill).toBeGreaterThanOrEqual(0);
     check(p, [fill], { kind: 'fill', s: { pattern: 'tatami', spacing: 0.4, spacingEnd: 0.8, offset: 0.25, angle: 30, stitch: 4, underlay: true, edge: 0, tolerance: 0.3 } });
   }, 60_000);
+});
+
+describe('fills of many objects sewn on several cores', () => {
+  it('give the very stitches and knowledge of sewing them on one', async () => {
+    const project = await decodeProject(new Uint8Array(readFileSync(new URL('../public/examples/demo/heatstitch-demo.heatstitch', import.meta.url))));
+    let tried = 0;
+    for (const f of project.files) {
+      const title = f.title;
+      const p = parsePattern(f.data, f.name);
+      restoreRemembered(p, f.objects);
+      const { kinds, objects } = designObjects(p);
+      const fills = objects.filter((o) => o.kind === 'fill' && remembered(p, o)?.fill);
+      if (fills.length < 3 || tried >= 3) continue;
+      tried++;
+      const which = objects.map((o) => o.index);
+      const s: Settings = { kind: 'fill', s: { ...remembered(p, fills[0])!.fill!, spacing: 0.35 } };
+      const here = restitch(p, objects, which, s, kinds, 2);
+      // Three cores, each sewing every third fill on a copy of its own, as the workers get it.
+      const shares = [0, 1, 2].map((k) => fills.filter((_, i) => i % 3 === k).map((o) => o.id));
+      const sewn = shares.flatMap((only) => fillsShipped(unship(structuredClone(ship(p))), which, only, structuredClone(s), 2));
+      expect(sewn.length, title).toBeGreaterThanOrEqual(fills.length);
+      const sent = restitchShipped(unship(structuredClone(ship(p))), which, structuredClone(s), 2, structuredClone(sewn));
+      const back = unship(structuredClone(sent.pattern), p);
+      expect(Array.from(back.x), title).toEqual(Array.from(here.pattern.x));
+      expect(Array.from(back.y), title).toEqual(Array.from(here.pattern.y));
+      expect(Array.from(back.cmd), title).toEqual(Array.from(here.pattern.cmd));
+      expect([sent.starts, sent.ends, sent.failed]).toEqual([here.starts, here.ends, here.failed]);
+      expect(structuredClone(rememberedIn(back))).toEqual(structuredClone(rememberedIn(here.pattern)));
+      expect(structuredClone(sent.memory)).toEqual(structuredClone(here.memory));
+    }
+    expect(tried).toBeGreaterThan(0);
+  }, 180_000);
 });

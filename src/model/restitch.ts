@@ -2385,6 +2385,47 @@ export interface NewFill {
   travel?: [number, number][];
 }
 
+/**
+ * Fills sewn elsewhere for one call of restitch (see withFills): a fill's stitches depend only on
+ * the design, the object, its settings and the side it starts from, never on the other objects sewn
+ * anew in the same call. So the fills of many objects can be sewn on several cores at once, each
+ * core sewing some of them in the same call, and the call here takes them over as they are.
+ */
+export interface Fills {
+  /** Only these objects' fills are sewn (by id), the rest left out: what one core does. */
+  only?: ReadonlySet<number>;
+  /** Fills sewn already, by fillKey: taken over instead of sewn. */
+  known?: ReadonlyMap<string, NewFill | null>;
+  /** Fills sewn in this call, by fillKey. */
+  made?: Map<string, NewFill | null>;
+}
+
+let fills: Fills | null = null;
+
+/** What restitch sews within `f` with `with` (see Fills). */
+export function withFills<T>(w: Fills, f: () => T): T {
+  const before = fills;
+  fills = w;
+  try {
+    return f();
+  } finally {
+    fills = before;
+  }
+}
+
+/** The key of a fill among the fills of one call of restitch: the object, its settings and its side. */
+const fillKey = (o: SewObject, s: FillSettings, reverse: boolean) => `${o.id}|${reverse ? 1 : 0}|${JSON.stringify(s)}`;
+
+function fillOf(p: Pattern, o: SewObject, a: Analysis, s: FillSettings, reverse: boolean, covers?: Cover[]): NewFill | null {
+  if (!fills) return newFill(p, o, a, s, reverse, covers);
+  const key = fillKey(o, s, reverse);
+  // A copy: the call may change what it was given.
+  if (fills.known?.has(key)) return structuredClone(fills.known.get(key)!);
+  const made = newFill(p, o, a, s, reverse, covers);
+  fills.made?.set(key, made && structuredClone(made));
+  return made;
+}
+
 function newFill(p: Pattern, o: SewObject, a: Analysis, s: FillSettings, reverse = false, covers?: Cover[]): NewFill | null {
   const first = a.parts.find((pt) => pt.kind === 'fill' && !pt.border);
   const last = a.parts.filter((pt) => pt.kind === 'fill' && !pt.border).pop();
@@ -4373,6 +4414,8 @@ function restitchOnce(
   let i = 0;
   for (const o of objs) {
     if (!set.has(o.index)) continue;
+    // Another core sews it (see Fills).
+    if (fills?.only && !fills.only.has(o.id)) continue;
     const known = remembered(p, o);
     // Loosed from its shape: its stitches stay as they are.
     if (known?.free) {
@@ -4440,7 +4483,7 @@ function restitchOnce(
     const guide = converting && settings.kind === 'satin' ? (guides?.get(o.index) ?? known?.kept?.satin) : undefined;
     const fillS = settings.s as FillSettings;
     const covers = together && !converting && fillS.underlay && fillS.underCover ? coversOver(p, objs, o, an.fill?.pxMm ?? 0.1) : undefined;
-    const filled = together && !converting ? newFill(p, o, an, fillS, reverse, covers) : null;
+    const filled = together && !converting ? fillOf(p, o, an, fillS, reverse, covers) : null;
     // A drawn line: sewn anew along its curves as a whole.
     const path = paths?.get(o.index) ?? lineGeoOf(known);
     const lineSt = !converting && path && settings.kind !== 'fill' ? asLine(settings, known?.line) : null;

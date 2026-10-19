@@ -2,7 +2,7 @@
 import type { Pattern } from '../model/pattern';
 import type { Mat } from '../shape/path';
 import type { Settings } from '../model/restitch';
-import { resew, restitchShipped, transformShipped, unship, type Shipped, type ShippedRestitch, type ShippedTransform } from './live';
+import { fillsShipped, resew, restitchShipped, transformShipped, unship, type SewnFills, type Shipped, type ShippedRestitch, type ShippedTransform } from './live';
 
 /**
  * Sews objects anew off the main thread: scaled while the frame is dragged and when it is let go,
@@ -13,12 +13,18 @@ import { resew, restitchShipped, transformShipped, unship, type Shipped, type Sh
 export type ResewRequest =
   | { type: 'load'; design: Shipped }
   | { type: 'scale'; id: number; sel: number[]; m: Mat; trimMm: number }
-  | { type: 'restitch'; id: number; which: number[]; settings: Settings; trimMm: number }
+  | { type: 'restitch'; id: number; which: number[]; settings: Settings; trimMm: number; fills?: SewnFills }
+  | { type: 'fills'; id: number; which: number[]; only: number[]; settings: Settings; trimMm: number }
   | { type: 'commit'; id: number; sel: number[]; m: Mat; trimMm: number };
 
 export interface ResewResponse {
   id: number;
   done: Shipped | null;
+}
+
+export interface FillsResponse {
+  id: number;
+  fills: SewnFills | null;
 }
 
 export interface CommitResponse {
@@ -43,7 +49,7 @@ ctx.onmessage = (e: MessageEvent<ResewRequest>) => {
   if (req.type === 'restitch') {
     let done: ShippedRestitch | null = null;
     try {
-      done = design && restitchShipped(design, req.which, req.settings, req.trimMm);
+      done = design && restitchShipped(design, req.which, req.settings, req.trimMm, req.fills);
     } catch {
       done = null;
     }
@@ -51,6 +57,16 @@ ctx.onmessage = (e: MessageEvent<ResewRequest>) => {
     const kept = design ? [design.x.buffer, design.y.buffer, design.cmd.buffer] : [];
     const own = done ? [done.pattern.x.buffer, done.pattern.y.buffer, done.pattern.cmd.buffer].filter((b) => !kept.includes(b)) : [];
     ctx.postMessage({ id: req.id, done } satisfies RestitchResponse, own);
+    return;
+  }
+  if (req.type === 'fills') {
+    let fills: SewnFills | null = null;
+    try {
+      fills = design && fillsShipped(design, req.which, req.only, req.settings, req.trimMm);
+    } catch {
+      fills = null;
+    }
+    ctx.postMessage({ id: req.id, fills } satisfies FillsResponse);
     return;
   }
   if (req.type === 'commit') {

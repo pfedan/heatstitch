@@ -2,7 +2,7 @@ import { isReadFromFile, nextVersion, readFromFile, type Pattern } from '../mode
 import { transformObjects } from '../model/reshape';
 import { syncBorders } from '../model/border';
 import { sewObjects } from '../model/objects';
-import { designObjects, objectKey, rememberedIn, restitch, restoreRemembered, type Remembered, type Settings, type StoredObjects } from '../model/restitch';
+import { designObjects, objectKey, rememberedIn, restitch, restoreRemembered, withFills, type NewFill, type Remembered, type Settings, type StoredObjects } from '../model/restitch';
 import type { Mat } from '../shape/path';
 
 /**
@@ -61,10 +61,24 @@ export interface ShippedRestitch {
  * The objects `which` of `p` sewn anew with `s`, as the stitch panel shows them while a setting is
  * pointed at or dragged. With what they know, so the preview looks the same as once applied.
  */
-export function restitchShipped(p: Pattern, which: number[], s: Settings, trimMm: number): ShippedRestitch {
+export function restitchShipped(p: Pattern, which: number[], s: Settings, trimMm: number, known?: SewnFills): ShippedRestitch {
   const { kinds, objects } = designObjects(p);
-  const r = restitch(p, objects, which, s, kinds, trimMm);
+  const r = known?.length ? withFills({ known: new Map(known) }, () => restitch(p, objects, which, s, kinds, trimMm)) : restitch(p, objects, which, s, kinds, trimMm);
   return { pattern: ship(r.pattern), starts: r.starts, ends: r.ends, failed: r.failed, memory: r.memory };
+}
+
+/** Fills sewn on one core for a restitch on another, by their key (see Fills). */
+export type SewnFills = [string, NewFill | null][];
+
+/**
+ * The fills of the objects `only` (ids) among `which` of `p` sewn with `s`, as restitchShipped of
+ * all of `which` would sew them: one core's share of a restitch of many objects.
+ */
+export function fillsShipped(p: Pattern, which: number[], only: number[], s: Settings, trimMm: number): SewnFills {
+  const { kinds, objects } = designObjects(p);
+  const made = new Map<string, NewFill | null>();
+  withFills({ only: new Set(only), made }, () => restitch(p, objects, which, s, kinds, trimMm));
+  return [...made];
 }
 
 /** A move, turn or scaling let go, sewn anew in the worker with all the objects know (see commitTransform). */
