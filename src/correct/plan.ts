@@ -1,7 +1,7 @@
 import { coversOver } from '../model/covers';
 import { setKnockout, isCovered, takeOver } from '../model/knockout';
 import { sewObjects, type ObjectKind, type SewObject } from '../model/objects';
-import { STITCH, TRIM, type Pattern } from '../model/pattern';
+import { STITCH, type Pattern } from '../model/pattern';
 import { analyze, holdMemory, measureFill, measureRun, measureSatin, objectKey, isGradient, isOpenPattern, openOnPurpose, remember, remembered, restitch, shapeTrust, SATIN_SPLIT, type Fixed, type Remembered, type SatinSettings, type Settings } from '../model/restitch';
 import { spacingOf } from '../model/along';
 import { TOLERANCE } from '../digitize/run';
@@ -14,6 +14,7 @@ import { fabricOf, recommendedSatin, recommendedSpacing, type Profile } from '..
 import { classify, CRITICAL, type Checks, type Reason, type ValidationResult, type Zone } from '../validation/validate';
 import type { CorrectionFocus } from './auto';
 import { areaOf, geoOf, lineGeoOf } from '../model/geo';
+import { core } from '../wasm/core';
 
 /**
  * Korrektur 2.0: the correction as a digitizer would do it. Instead of moving stitches it changes
@@ -131,40 +132,13 @@ function sewsIn(p: Pattern, o: SewObject, b: Box): boolean {
  * measured quickly. Thread leaving the window is cut there (a trim), `skip` follows the records.
  */
 export function crop(p: Pattern, b: Box, skip?: Uint8Array): { pattern: Pattern; skip?: Uint8Array } {
-  const x0 = b.minX * 10;
-  const y0 = b.minY * 10;
-  const x1 = b.maxX * 10;
-  const y1 = b.maxY * 10;
-  const xs: number[] = [];
-  const ys: number[] = [];
-  const cs: number[] = [];
-  const sk: number[] = [];
-  let cut = true;
-  for (let i = 0; i < p.cmd.length; i++) {
-    if (p.cmd[i] !== STITCH) {
-      cut = true;
-      continue;
-    }
-    const x = p.x[i];
-    const y = p.y[i];
-    if (x < x0 || x > x1 || y < y0 || y > y1) {
-      cut = true;
-      continue;
-    }
-    if (cut && xs.length) {
-      xs.push(x);
-      ys.push(y);
-      cs.push(TRIM);
-      sk.push(0);
-    }
-    xs.push(x);
-    ys.push(y);
-    cs.push(STITCH);
-    sk.push(skip?.[i] ?? 0);
-    cut = false;
+  const r = core().cropRecords(p.x, p.y, p.cmd, Float64Array.of(b.minX * 10, b.minY * 10, b.maxX * 10, b.maxY * 10), skip);
+  try {
+    const pattern = withRecords(p, r.takeX(), r.takeY(), r.takeCmd());
+    return { pattern, skip: skip ? r.takeMask() : undefined };
+  } finally {
+    r.free();
   }
-  const pattern = withRecords(p, Int32Array.from(xs), Int32Array.from(ys), Uint8Array.from(cs));
-  return { pattern, skip: skip ? Uint8Array.from(sk) : undefined };
 }
 
 interface Score {

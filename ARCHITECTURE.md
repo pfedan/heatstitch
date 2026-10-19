@@ -207,8 +207,10 @@ flowchart LR
 - **`src/material/`**: fabrics, threads and the rules derived from them.
 - **`src/correct/`**: the correction. `plan.ts` proposes new object settings (spacing, underlay,
   pull compensation, knockouts) and sews them anew; the fine corrections on raw stitches are in
-  `pullback.ts`, `respace.ts`, `thin.ts`, `shorts.ts` and friends. `correct/engine/` is the solver
-  behind *Will it stitch?* (cells, variants, a MIP solver, validation), run in workers.
+  `pullback.ts`, `respace.ts`, `thin.ts`, `shorts.ts` and friends, each one call to Rust
+  (`core/src/correct/`). `correct/engine/` is the solver behind *Will it stitch?* (cells,
+  variants, a MIP solver, validation), run in workers; its additive field and the search over the
+  variants are in Rust (`core/src/correct/engine/`), sewing the variants stays in TypeScript.
 
 ## Web Workers
 

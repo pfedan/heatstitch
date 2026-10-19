@@ -1,9 +1,9 @@
-import { computeDensity } from '../../density/grid';
-import { STITCH, type Pattern } from '../../model/pattern';
-import { BLUR_MM, HOLE_RADIUS_MM, VALIDATION_CELL_MM } from '../../validation/measure';
-import { satinMask } from '../../validation/satin';
-import { SHORT, tagShortStitches, TIE } from '../../validation/shortStitches';
-import { CAUTION, classifyDensity, classifyHoles, densityLimits, CRITICAL, SAFE, SHORT_STITCH_COUNT, type Thresholds } from '../../validation/thresholds';
+import { computeDensity } from '../../../../../src/density/grid';
+import { STITCH, type Pattern } from '../../../../../src/model/pattern';
+import { BLUR_MM, HOLE_RADIUS_MM, VALIDATION_CELL_MM } from '../../../../../src/validation/measure';
+import { satinMask } from '../../../../../src/validation/satin';
+import { SHORT, tagShortStitches, TIE } from '../../../../../src/validation/shortStitches';
+import { CAUTION, classifyDensity, classifyHoles, densityLimits, CRITICAL, SAFE, SHORT_STITCH_COUNT, type Thresholds } from '../../../../../src/validation/thresholds';
 
 /**
  * The fast measure behind the search: thread density, satin share, short stitches and

@@ -3,7 +3,7 @@ import { core } from '../wasm/core';
 
 /**
  * The constants of the measurement, as the core uses them (core/src/validation/measure.rs); the
- * correction engine builds its fast measure on the same grid (correct/engine/field.ts). Values are
+ * correction engine builds its fast measure on the same grid (core/src/correct/engine/field.rs). Values are
  * computed on 0.2 mm sub-cells, smoothed, then reduced to 1 mm cells: 0.2 mm divides the 0.1 mm
  * file resolution evenly, so regular row spacings do not alias.
  */

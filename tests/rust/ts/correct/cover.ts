@@ -1,4 +1,4 @@
-import { COLOR_CHANGE, STITCH, type Pattern } from '../model/pattern';
+import { COLOR_CHANGE, STITCH, type Pattern } from '../../../../src/model/pattern';
 import type { Run } from './structure';
 
 /** Raster cell for coverage lookups, 0.1 mm units (0.2 mm). */
