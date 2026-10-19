@@ -23,8 +23,6 @@ export function loadCore(): Promise<void> {
   return loading;
 }
 
-export const coreReady = (): boolean => ready;
-
 export function core(): Core {
   if (!ready) {
     const fs = (globalThis as { process?: { getBuiltinModule?: (id: string) => unknown } }).process?.getBuiltinModule?.('node:fs') as

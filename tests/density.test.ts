@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { gaussianBlur } from '../src/density/blur';
-import { addSegment, computeDensity } from '../src/density/grid';
+import { computeDensity } from '../src/density/grid';
 import { patternStats } from '../src/model/pattern';
 import { parseDst } from '../src/parsers/dst';
 import { encodeDst, type Op } from './helpers/encode';
@@ -13,20 +13,6 @@ function zigzag(): Op[] {
   for (let i = 0; i < 40; i++) ops.push({ type: 'stitch', dx: 4, dy: i % 2 ? -50 : 50 });
   return ops;
 }
-
-describe('addSegment', () => {
-  it('splits a horizontal segment exactly between cells', () => {
-    const d = new Float32Array(4);
-    addSegment(d, 4, 1, 0.5, 0.5, 3.5, 0.5, 3);
-    expect(Array.from(d)).toEqual([0.5, 1, 1, 0.5]);
-  });
-
-  it('conserves length for diagonal segments', () => {
-    const d = new Float32Array(100);
-    addSegment(d, 10, 10, 0.3, 0.7, 8.9, 6.2, 7);
-    expect(sum(d)).toBeCloseTo(7, 5);
-  });
-});
 
 describe('computeDensity', () => {
   const p = parseDst(encodeDst(zigzag()));

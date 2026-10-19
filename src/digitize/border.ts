@@ -1,8 +1,7 @@
 import { core } from '../wasm/core';
 import type { LinesOut } from '../wasm/pkg/heatstitch_core';
-import { flatOf, linesOf, ptsOf } from './fill';
+import { flatOf, linesOf } from './fill';
 import { regionIn, type Region } from './region';
-import { TOLERANCE } from './run';
 import type { Pt } from './skeleton';
 
 /**
@@ -64,15 +63,9 @@ export function resample(pts: Pt[], step: number): Pt[] {
 
 /**
  * Rails of a satin of width `w` centered on a closed line `level` mm outside the edge (inside
- * when negative). Each side reaches half the width along the normal, less where the band around
- * that line is narrower (inside a corner), so the rails do not fold over at corners.
+ * when negative), each side less where the band around that line is narrower (inside a corner),
+ * with the points of the line they are centered on (one per rail point).
  */
-export function borderRails(r: Region, loop: Pt[], w: number, level = 0): { left: Pt[]; right: Pt[] } {
-  const { left, right } = railsAlong(r, loop, w, level);
-  return { left, right };
-}
-
-/** borderRails, with the points of the line they are centered on (one per rail point). */
 function railsAlong(r: Region, loop: Pt[], w: number, level: number): { left: Pt[]; right: Pt[]; center: Pt[] } {
   const [left, right, center] = lines(core().borderRails(regionIn(r), flatOf(loop), w, level, true));
   return { left, right, center };
@@ -106,7 +99,7 @@ const span = <T>(pts: T[], n: number, a: number, b: number): T[] => Array.from({
 
 const lengthOf = (l: Pt[]) => l.reduce((s, q, i) => (i ? s + dist(l[i - 1], q) : 0), 0);
 
-/** borderRails cut where `keep` does not hold at the line they are centered on: one rails pair per piece. */
+/** railsAlong cut where `keep` does not hold at the line they are centered on: one rails pair per piece. */
 export function keptRails(r: Region, loop: Pt[], w: number, level: number, keep: (q: Pt) => boolean): { left: Pt[]; right: Pt[] }[] {
   const { left, right, center } = railsAlong(r, loop, w, level);
   const n = center.length - 1;
@@ -123,9 +116,4 @@ export function keptRails(r: Region, loop: Pt[], w: number, level: number, keep:
 export function lineRails(line: Pt[], closed: boolean, w: number): { left: Pt[]; right: Pt[] } {
   const [left, right] = lines(core().lineRails(flatOf(line), closed, w));
   return { left, right };
-}
-
-/** Running stitch along a line (closed or not), each stitch sewn `times` times (3 or 5: bean stitch). */
-export function borderRun(loop: Pt[], times = 1, tol = TOLERANCE, len = BORDER_STITCH): Pt[] {
-  return ptsOf(core().borderRun(flatOf(loop), times, tol, len));
 }

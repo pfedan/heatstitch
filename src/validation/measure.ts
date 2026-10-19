@@ -8,14 +8,6 @@ import { core } from '../wasm/core';
  * file resolution evenly, so regular row spacings do not alias.
  */
 
-/** Validation always uses 1 mm cells, independent of the display settings. */
-export const VALIDATION_CELL_MM = 1;
-/**
- * Smoothing radius. Large enough to even out row spacing, 0.1 mm coordinate rounding and sparse
- * underlay rows (uniform fills read within about 7 % above their nominal density), small enough
- * to resolve 1 to 2 mm columns such as lettering.
- */
-export const BLUR_MM = 0.6;
 /** Penetrations closer than this (mm) to a penetration count as its neighbours. */
 export const HOLE_RADIUS_MM = 1;
 

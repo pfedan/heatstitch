@@ -11,7 +11,7 @@ use super::digitize::{RegionData, lines_from};
 use super::fill::RegionIn;
 use crate::geom::{Pt, pts_from_flat, pts_to_flat};
 use crate::model::along::{self, PathStitch};
-use crate::model::applique::{self, AppliqueSettings};
+use crate::model::applique::AppliqueSettings;
 use crate::model::covers::Cover;
 use crate::model::fill::{self, FillSettings, FillWay, FollowZigzag};
 use crate::model::line;
@@ -290,23 +290,6 @@ pub fn line_stitches(
     let s: PathStitch = from_js(s)?;
     let runs = line::line_stitches(&form, &s, reverse, pt_of(from));
     Ok(runs_out(&runs, None))
-}
-
-/// The runs of an appliqué (flag 2: the machine stops before it), with `under` set.
-#[wasm_bindgen(js_name = appliqueRuns)]
-pub fn applique_runs(
-    area: RegionIn,
-    s: JsValue,
-    from_x: f64,
-    from_y: f64,
-    shared: Option<RegionIn>,
-) -> Result<RunsOut, JsError> {
-    let s: AppliqueSettings = from_js(s)?;
-    let shared = shared.map(|r| r.r);
-    let (runs, under) = applique::applique_runs(&area.r, &s, [from_x, from_y], shared.as_ref());
-    let mut out = runs_out(&runs, None);
-    out.under = under;
-    Ok(out)
 }
 
 /// The lines a border lies on: points, count per line and 1 for each closed one.

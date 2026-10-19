@@ -91,16 +91,6 @@ export function flowFill(r: Region, graph: Graph | null, orient: Orientation, p:
 export const contourField = (r: Region): DirField => fieldOf(core().contourField(regionIn(r)));
 
 /**
- * Field of the directions of given stitches (rows as sewn), spread over the whole region: keeps
- * the look of curved rows when they are sewn anew at another spacing.
- */
-export function stitchField(r: Region, lines: [Pt, Pt][]): DirField {
-  const flat = new Float64Array(4 * lines.length);
-  lines.forEach(([a, b], i) => flat.set([a[0], a[1], b[0], b[1]], 4 * i));
-  return fieldOf(core().stitchField(regionIn(r), flat));
-}
-
-/**
  * Field of guide lines drawn on a fill (Ink/Stitch's guided fill): every cell takes the direction
  * of the nearest point of each guide, weighted by the inverse square of its distance, so one guide
  * gives rows parallel to it and several guides blend from one to the next.

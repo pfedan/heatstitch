@@ -60,12 +60,3 @@ export const MOTIF_STITCH = 1.2;
 export function motifStitches(line: Pt[], closed: boolean, motif: LineMotif, width: number, period: number, side: 1 | -1 = 1, shift = 0, stitch = MOTIF_STITCH, layers = HAND_LAYERS, cord = false): Pt[] {
   return ptsOf(core().motifStitches(flatOf(line), closed, motif, width, period, side, shift, stitch, layers, cord));
 }
-
-/** Longest stitch of a hand stitch (mm): longer arms are split, the same holes in every pass. */
-export const HAND_STITCH_MAX = 4.5;
-/**
- * Longest stitch of a cord (mm): it covers like a satin column, so it splits where a satin would
- * (SATIN_MAX). Split at the hand stitch's 4.5 mm, a cord over 3 mm wide got a seam of holes down
- * its middle.
- */
-export const CORD_STITCH_MAX = 7;

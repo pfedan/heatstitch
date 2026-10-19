@@ -2,9 +2,6 @@ import type { Hoop } from '../model/hoop';
 import type { Pattern } from '../model/pattern';
 import { writeWithCore } from './bytes';
 
-/** Largest move per PEC record and axis (12-bit long form). */
-export const PEC_MAX_DELTA = 2047;
-
 /**
  * Writes a PES version 1 file (core/src/writers/pes.rs): the PES header with one CEmbOne/CSewSeg
  * object (for design software) followed by the PEC block (what embroidery machines read). Thread

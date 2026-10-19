@@ -1,11 +1,9 @@
-import { regionIn, type Region } from '../digitize/region';
-import { core } from '../wasm/core';
+import type { Region } from '../digitize/region';
 import type { Pt } from '../digitize/skeleton';
 import { FABRICS, type FabricId } from '../material/fabrics';
 import { segment, segments, type Form } from '../shape/path';
 import { FIT_TOLERANCE, vectorize } from '../shape/vectorize';
 import type { PathStitch } from './along';
-import { takeRuns } from './restitch';
 import { tableOf } from './objects';
 import { blockIndex } from './sequence';
 import { COLOR_CHANGE, STITCH, type Pattern, type ThreadColor } from './pattern';
@@ -66,8 +64,6 @@ export const APPLIQUE_FABRICS: readonly AppliqueFabric[] = ['woven', 'felt', 'wo
 /** A satin edge 3 mm wide: in the 2.5 to 4 mm digitizing guides give for appliqué cover. */
 export const APPLIQUE_WIDTH = 3;
 export const APPLIQUE_WIDTHS: [number, number] = [1.5, 6];
-/** Stitch length of placement and tack-down (mm): long enough to sew fast, short enough to follow curves. */
-export const PLACE_STITCH = 2.5;
 export const TACK_STITCH = 2;
 /** How far the tack-down of a raw edge lies inside the cut edge (mm): it holds the edge without the needle tearing it. */
 export const RAW_INSET = 1.5;
@@ -140,31 +136,11 @@ export function appliqueFrom(v: unknown): AppliqueSettings | null {
  */
 export const storeApplique = (s: AppliqueSettings): AppliqueSettings => appliqueFrom(s)!;
 
-/** How many stops lie inside an appliqué sewn with `s`: after the placement line, and before the cover (see appliqueRuns). */
+/** How many stops lie inside an appliqué sewn with `s`: after the placement line, and before the cover (core/src/model/applique.rs). */
 export const innerStopCount = (s: AppliqueSettings): number => (s.place === false ? 0 : 1) + (s.edge === 'none' ? 0 : 1);
 
 /** Runs the machine stops before (the fabric laid on, cut off): see objectRecords. */
 export const stopBefore = new WeakSet<Pt[]>();
-
-/**
- * The runs of an appliqué in sewing order: placement line, tack-down and cover edge along the
- * outline (`shared`: where later appliqués cover the edge, the area the cover leaves out its edge
- * on). The machine stops before the tack-down (the fabric laid on the placement line) and before
- * the cover (the fabric cut off). Without a placement line the fabric is laid on before the
- * appliqué; without a cover it is cut after it (see stopsAround). Sewn by the core
- * (core/src/model/applique.rs).
- */
-export function appliqueRuns(area: Region, s: AppliqueSettings, from: Pt, shared?: Region | null): { runs: Pt[][]; under: number } {
-  const out = core().appliqueRuns(regionIn(area), s, from[0], from[1], shared ? regionIn(shared) : undefined);
-  try {
-    const under = out.under;
-    const { runs, flags } = takeRuns(out);
-    runs.forEach((r, k) => flags[k] & 2 && stopBefore.add(r));
-    return { runs, under };
-  } finally {
-    out.free();
-  }
-}
 
 /**
  * The stops an appliqué sewn with `s` needs between it and its neighbours in the same thread: one

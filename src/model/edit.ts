@@ -5,10 +5,6 @@ export function withRecords(p: Pattern, x: Int32Array, y: Int32Array, cmd: Uint8
   return nextVersion(p, { x, y, cmd, colors, bounds: computeBounds(x, y, cmd) });
 }
 
-export function clonePattern(p: Pattern): Pattern {
-  return withRecords(p, p.x.slice(), p.y.slice(), p.cmd.slice(), p.colors.map((c) => ({ ...c })));
-}
-
 /**
  * Removes every record with `remove[i]` set. Only STITCH records may be removed; the command
  * structure around them (jumps, trims, color changes) stays as it is, so removing a stitch simply

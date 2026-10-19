@@ -42,11 +42,6 @@ export const CAP_DEG = 160;
 
 type Rails = { left: Pt[]; right: Pt[] };
 
-/** The style a corner is sewn in. */
-export function cornerStyle(style: SatinCorner, turn: number): SatinCorner {
-  return style === 'miter' && turn >= CAP_DEG ? 'cap' : style;
-}
-
 /**
  * Rails of a satin `w` wide centered on `line` (closed: its first point repeated at the end), with
  * its corners in `corner` and its ends in `ends` (an open line only); see the top.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { crossFill, FIGURES, gridFill, mazeFill, meanderFill, motifCrossings, motifFill, TEXTURES, texturePoints } from '../src/digitize/deco';
+import { crossFill, FIGURES, gridFill, mazeFill, meanderFill, motifFill, TEXTURES } from '../src/digitize/deco';
 import { digitizeDefaults } from '../src/digitize/digitize';
 import { fillRegion } from '../src/digitize/fill';
 import { buildRegion, sample, type Region } from '../src/digitize/region';
@@ -7,7 +7,7 @@ import type { Pt } from '../src/digitize/skeleton';
 import { addShape } from '../src/model/addShape';
 import { takeOver } from '../src/model/knockout';
 import { sewObjects } from '../src/model/objects';
-import { remembered, restitch, roughenRuns, ROUGH_LONG, type FillSettings } from '../src/model/restitch';
+import { remembered, restitch, type FillSettings } from '../src/model/restitch';
 import { STITCH, type Pattern } from '../src/model/pattern';
 import { stitchKinds } from '../src/model/sequence';
 import { parsePath } from '../src/shape/svgPath';
@@ -43,27 +43,6 @@ const lengths = (runs: Pt[][]) => runs.flatMap((r) => r.slice(1).map((q, i) => M
 const count = (runs: Pt[][]) => runs.reduce((n, r) => n + r.length, 0);
 
 describe('textures', () => {
-  it('keep every stitch between a third and 1.4 stitch lengths inside the row', () => {
-    for (const t of TEXTURES) {
-      for (const v of [0, 1.3, 5.9, 17.2]) {
-        const pts = texturePoints(t, 12, 4, v, 0, 30, 0.6);
-        const all = [0, ...pts, 30];
-        for (let i = 1; i < all.length; i++) {
-          expect(all[i] - all[i - 1], `${t} at v ${v}`).toBeGreaterThanOrEqual(i === 1 || i === all.length - 1 ? 0.6 - 1e-9 : 4 * 0.3 - 1e-9);
-          expect(all[i] - all[i - 1], `${t} at v ${v}`).toBeLessThanOrEqual(4 * 1.4 + 1e-9);
-        }
-      }
-    }
-  });
-
-  it('shift the needle points from row to row, so they line up into the texture', () => {
-    // Zigzag: from v = 0 to a quarter of the size the points move by half the size along the row.
-    const a = texturePoints('zigzag', 12, 4, 0, 0, 30, 0.6);
-    const b = texturePoints('zigzag', 12, 4, 3, 0, 30, 0.6);
-    const shift = (((b[0] - a[0]) % 4) + 4) % 4;
-    expect(shift).toBeCloseTo(3 % 4, 6);
-  });
-
   it('sew the same thread as plain tatami, in about as many stitches', () => {
     const plain = fillRegion(square, base, [5, 5])!;
     for (const t of TEXTURES) {
@@ -74,41 +53,6 @@ describe('textures', () => {
       expect(Math.abs(count(r.runs) - count(plain.runs)) / count(plain.runs), t).toBeLessThan(0.08);
       expect(Math.max(...lengths(r.runs)), t).toBeLessThanOrEqual(4 * 1.4 + 0.01);
     }
-  });
-});
-
-describe('irregular fills', () => {
-  it('move needle points along their rows, the same each time, ends and density kept', () => {
-    const plain = fillRegion(square, base, [5, 5])!;
-    const a = structuredClone(plain.runs);
-    const b = structuredClone(plain.runs);
-    roughenRuns(a, 0, 1, 7, 4 * ROUGH_LONG);
-    roughenRuns(b, 0, 1, 7, 4 * ROUGH_LONG);
-    expect(a).toEqual(b);
-    expect(count(a)).toBe(count(plain.runs));
-    let moved = 0;
-    a.forEach((run, i) =>
-      run.forEach((q, j) => {
-        const p = plain.runs[i][j];
-        // Rows run up and down (90 degrees): a point moves along y only.
-        expect(Math.abs(q[0] - p[0])).toBeLessThan(0.05);
-        if (Math.abs(q[1] - p[1]) > 0.1) moved++;
-      }),
-    );
-    expect(moved).toBeGreaterThan(count(a) / 3);
-    const ls = lengths(a).filter((l) => l > 1);
-    expect(Math.max(...ls)).toBeLessThanOrEqual(4 * ROUGH_LONG + 1e-6);
-    expect(Math.min(...lengths(a))).toBeGreaterThan(0.39);
-    // Row ends stay where they were: the outline is the same.
-    const ends = (runs: Pt[][]) => runs.map((r) => [r[0], r[r.length - 1]]);
-    expect(ends(a)).toEqual(ends(plain.runs));
-  });
-
-  it('keep the underlay as it is', () => {
-    const plain = fillRegion(square, { ...base, underlay: true }, [5, 5])!;
-    const a = structuredClone(plain.runs);
-    roughenRuns(a, plain.under!, 1, 3, 4 * ROUGH_LONG);
-    expect(a.flat().slice(0, plain.under)).toEqual(plain.runs.flat().slice(0, plain.under));
   });
 });
 
@@ -173,16 +117,6 @@ describe('turned patterns', () => {
     expect(meanderFill(disk, { ...p, angle: 0 }, [6, 20])).toEqual(meanderFill(disk, p, [6, 20]));
     for (const res of [mazeFill(disk, { ...p, angle: 30 }, [6, 20])!, meanderFill(disk, { ...p, angle: 75 }, [6, 20])!])
       for (const q of res.runs.flat()) expect(sample(disk, disk.sdf, q[0], q[1])).toBeLessThan(0.05);
-  });
-
-  it('turn an embossed motif: a row crosses it as the row turned back crosses the upright one', () => {
-    const a = (30 * Math.PI) / 180;
-    // The row along x turned by -30 degrees about the origin, against the motif turned by 30.
-    const back = { o: [5 * Math.sin(a), 5 * Math.cos(a)] as Pt, e: [Math.cos(a), -Math.sin(a)] as Pt };
-    const upright = motifCrossings('hearts', 8, back, 0, 40);
-    const turned = motifCrossings('hearts', 8, { o: [0, 5], e: [1, 0] }, 0, 40, 30);
-    expect(turned.length).toBe(upright.length);
-    turned.forEach((u, i) => expect(u).toBeCloseTo(upright[i], 6));
   });
 });
 

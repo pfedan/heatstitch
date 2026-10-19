@@ -2,7 +2,6 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { COLOR_CHANGE, STITCH, TRIM, type Pattern } from '../src/model/pattern';
 import { parsePattern, SUPPORTED_EXTENSIONS } from '../src/parsers';
-import { jefColor } from '../src/parsers/jefPalette';
 import { cleanName, OUTPUT_FORMATS, writePattern, type OutputFormat } from '../src/writers';
 import { writeJef } from '../src/writers/jef';
 import { Shape } from './helpers/shapes';
@@ -88,6 +87,9 @@ describe('readers agree with pyembroidery', () => {
 });
 
 describe('writers', () => {
+  // The first two threads of the Janome palette.
+  const black = { r: 0, g: 0, b: 0, name: 'Black' };
+  const white = { r: 255, g: 255, b: 255, name: 'White' };
   const designs = ['demos/sun.dst', 'demos/confetti.pes', 'demos/letters.pes', 'cat-60mm.pes'];
 
   it.each(designs)('%s: every format reads back with the same stitches and colors blocks', (file) => {
@@ -169,8 +171,7 @@ describe('writers', () => {
 
   it('JEF: different colors get different Janome threads, even when not neighbors', () => {
     const p = example('demos/sun.dst');
-    const black = jefColor(1);
-    p.colors = [black, jefColor(2), { ...black, r: black.r + 3 }];
+    p.colors = [black, white, { ...black, r: black.r + 3 }];
     const q = parsePattern(writeJef(p), 'out.jef');
     expect(q.colors[0]).toEqual(black);
     expect(q.colors[2]).not.toEqual(q.colors[0]);
@@ -184,8 +185,7 @@ describe('writers', () => {
 
   it('JEF: neighboring colors that round to the same Janome thread stay apart', () => {
     const p = example('demos/sun.dst');
-    const black = jefColor(1);
-    p.colors = [black, { ...black, r: black.r + 3 }, jefColor(2)];
+    p.colors = [black, { ...black, r: black.r + 3 }, white];
     const q = parsePattern(writeJef(p), 'out.jef');
     expect(q.colors[0]).not.toEqual(q.colors[1]);
   });
@@ -208,5 +208,47 @@ describe('writers', () => {
     expect(cleanName('  Sonne: für/Oma?.pes ')).toBe('Sonne fürOma');
     expect(cleanName('a.b.jef')).toBe('a.b');
     expect(cleanName('<>')).toBe('');
+  });
+});
+
+describe('damaged files', () => {
+  const files: { name: string; data: Uint8Array }[] = ['demos/sun.dst', 'demos/confetti.pes', 'cat-60mm.pes', 'demos/leather-patch.dst'].map((f) => ({
+    name: f.split('/').pop()!,
+    data: new Uint8Array(readFileSync(new URL(`../public/examples/${f}`, import.meta.url))),
+  }));
+  for (const format of OUTPUT_FORMATS) files.push({ name: `out.${format}`, data: writePattern(example('demos/confetti.pes'), format) });
+  files.push({ name: 'sun.sew', data: fixture('sun.sew') });
+
+  /** Small deterministic generator, so a failure repeats. */
+  const random = (seed: number) => {
+    let s = seed >>> 0;
+    return () => {
+      s = (s * 1664525 + 1013904223) >>> 0;
+      return s / 2 ** 32;
+    };
+  };
+  /** A design or an Error, never a trap that would leave the core unusable. */
+  const read = (data: Uint8Array, name: string) => {
+    try {
+      parsePattern(data, name);
+    } catch (e) {
+      expect(e, name).toBeInstanceOf(Error);
+    }
+  };
+
+  it('are read or refused with an error, and the core reads on', () => {
+    const rnd = random(7);
+    for (const { name, data } of files) {
+      // Cut short anywhere.
+      for (let k = 0; k < 40; k++) read(data.subarray(0, Math.floor(rnd() * data.length)), name);
+      // Bytes changed anywhere, also in the headers.
+      for (let k = 0; k < 40; k++) {
+        const bad = data.slice();
+        for (let j = 0; j < 4; j++) bad[Math.floor(rnd() * (j < 2 ? Math.min(600, bad.length) : bad.length))] = Math.floor(rnd() * 256);
+        read(bad, name);
+      }
+    }
+    for (const name of ['a.dst', 'a.jef', 'a.exp', 'a.xxx', 'a.sew', 'a.pes', 'a.vp3', 'a.txt']) read(new Uint8Array(10), name);
+    expect(stitches(example('demos/sun.dst')).length).toBeGreaterThan(100);
   });
 });

@@ -1,27 +1,30 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { sewObjects } from '../../src/model/objects';
-import { transformObjects } from '../../src/model/reshape';
-import { sewDesign } from '../../src/model/sew';
-import { scaling } from '../../src/shape/path';
-import { designs, hashOf } from './designs';
-import { v8Math } from './v8math';
+import { sewObjects } from '../src/model/objects';
+import { transformObjects } from '../src/model/reshape';
+import { sewDesign } from '../src/model/sew';
+import { scaling } from '../src/shape/path';
+import { designs, hashOf } from './helpers/exampleDesigns';
 
 /**
- * Stage 4 of the Rust core: whole designs sewn anew from their objects, as they are and scaled to
- * 110 %, give the very stitches they gave before the sewing moved to the core (hashes recorded
- * with the TypeScript, tests/rust/fixtures/stage4-hashes.json). By default a quick share of the
- * designs; STAGE4_ALL=1 takes all of public/examples (about two minutes), STAGE4_OUT=<file>
- * writes each design's hashes and times there.
+ * Whole designs sewn anew from their objects, as they are and scaled to 110 %, give the stitches
+ * recorded in tests/fixtures/sew-hashes.json (recorded with the TypeScript before the sewing moved
+ * to the Rust core, unchanged since). A change that moves stitches on purpose records them anew:
+ * SEW_HASHES_ALL=1 SEW_HASHES_OUT=<file> writes every design's hashes and times there. By default
+ * a quick share of the designs; SEW_HASHES_ALL=1 takes all of public/examples (about two minutes).
+ *
+ * The stitches come from the core alone, whose sin, cos and pow are its own (core/src/trig.rs), so
+ * the hashes are the same on every platform: with Math.sin, cos, pow and atan2 off by one ulp for
+ * half the inputs, as another system's libm might give, all designs still matched.
  */
 
-const expected = JSON.parse(readFileSync('tests/rust/fixtures/stage4-hashes.json', 'utf8')) as Record<string, { sew: string; scaled: string }>;
+const expected = JSON.parse(readFileSync('tests/fixtures/sew-hashes.json', 'utf8')) as Record<string, { sew: string; scaled: string }>;
 
 /** Designs sewn in a few seconds, with lines, borders, satins, appliqués, fills and files of every kind. */
 const QUICK = new Set(['Blume', 'Musterkarte Offen', 'Linienstiche', 'Linien mit Parametern', 'Handstiche', 'Linieneffekte', 'Redwork', 'Satinflächen', 'Applikation', 'demos/confetti.pes', 'demos/overlap.pes', 'demos/sun.dst', 'svg kirschen', 'svg abzeichen', 'svg apfel', 'svg blumenzweig', 'svg overlapping-circles']);
-const all = process.env.STAGE4_ALL === '1';
+const all = process.env.SEW_HASHES_ALL === '1';
 
-describe.runIf(v8Math)('stage 4: whole designs sewn anew', () => {
+describe('whole designs sewn anew', () => {
   it(
     'give the stitches they gave before, as they are and at 110 %',
     async () => {
@@ -40,7 +43,7 @@ describe.runIf(v8Math)('stage 4: whole designs sewn anew', () => {
         const scaleMs = Math.round(performance.now() - t);
         got[name] = { sew: hashOf(sewn), scaled: r ? hashOf(r.pattern) : 'null', sewMs, scaleMs };
       }
-      if (process.env.STAGE4_OUT) writeFileSync(process.env.STAGE4_OUT, JSON.stringify(got, null, 1));
+      if (process.env.SEW_HASHES_OUT) writeFileSync(process.env.SEW_HASHES_OUT, JSON.stringify(got, null, 1));
       const hashes = Object.fromEntries(Object.entries(got).map(([k, v]) => [k, { sew: v.sew, scaled: v.scaled }]));
       expect(hashes).toEqual(Object.fromEntries(Object.keys(got).map((k) => [k, expected[k]])));
     },

@@ -56,9 +56,6 @@ export function medialAxis(outsides: Pt[][], holes: Pt[][] = []): Axis {
   return core().medialAxis(flat, lens, outsides.length) as Axis;
 }
 
-/** A bend at least this sharp (degrees) between two sides is mitered. */
-export const BEND_DEG = 45;
-
 /** The direction a branch leaves node n in, over about the node's radius. */
 export function leaving(b: AxisBranch, n: number, r: number): Pt {
   const pts = b.a === n ? b.pts : b.pts.slice().reverse();

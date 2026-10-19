@@ -8,11 +8,6 @@ use crate::image::thread_match::{Thread, threads_of};
 use crate::image::{edt, filters, labels, orientation, prepare, quantize, raster, thread_match};
 use crate::pattern::ThreadColor;
 
-#[wasm_bindgen(js_name = distanceToSeeds)]
-pub fn distance_to_seeds(seed: &[u8], w: usize, h: usize, border: bool) -> Vec<f32> {
-    edt::distance_to_seeds(seed, w, h, border)
-}
-
 #[wasm_bindgen(js_name = distanceInside)]
 pub fn distance_inside(mask: &[u8], w: usize, h: usize) -> Vec<f32> {
     edt::distance_inside(mask, w, h)
@@ -51,17 +46,6 @@ pub struct LabOut {
     pub opaque: Vec<u8>,
 }
 
-#[wasm_bindgen(js_name = resizeArea)]
-pub fn resize_area(
-    data: Clamped<Vec<u8>>,
-    sw: usize,
-    sh: usize,
-    w: usize,
-    h: usize,
-) -> Clamped<Vec<u8>> {
-    Clamped(raster::resize_area(&raster_of(data, sw, sh), w, h).data)
-}
-
 #[wasm_bindgen(js_name = toLab)]
 pub fn to_lab(data: Clamped<Vec<u8>>, w: usize, h: usize) -> LabOut {
     let l = raster::to_lab(&raster_of(data, w, h));
@@ -69,19 +53,6 @@ pub fn to_lab(data: Clamped<Vec<u8>>, w: usize, h: usize) -> LabOut {
         lab: l.lab,
         opaque: l.opaque,
     }
-}
-
-#[wasm_bindgen]
-pub fn bilateral(
-    lab: &[f32],
-    opaque: &[u8],
-    w: usize,
-    h: usize,
-    iterations: usize,
-    sigma_s: f64,
-    sigma_r: f64,
-) -> Vec<f32> {
-    filters::bilateral(&lab_image(lab, opaque, w, h), iterations, sigma_s, sigma_r).lab
 }
 
 #[wasm_bindgen(js_name = looksLikePhoto)]
@@ -175,11 +146,6 @@ pub fn components(labels: &[u16], w: usize, h: usize) -> ComponentsOut {
         max_x: c.max_x,
         max_y: c.max_y,
     }
-}
-
-#[wasm_bindgen(js_name = modeFilter)]
-pub fn mode_filter(labels: &[u8], w: usize, h: usize) -> Vec<u8> {
-    labels::mode_filter(labels, w, h)
 }
 
 #[wasm_bindgen]

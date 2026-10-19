@@ -102,11 +102,3 @@ export function pecThreads(): ThreadColor[] {
   }
   return out;
 }
-
-
-/** Distinct colors for formats without color info (DST). */
-const DEFAULTS = [2, 5, 14, 13, 7, 12, 32, 20, 25, 37, 55, 33];
-
-export function defaultColor(block: number): ThreadColor {
-  return pecColor(DEFAULTS[block % DEFAULTS.length]);
-}

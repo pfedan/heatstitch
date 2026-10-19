@@ -91,7 +91,7 @@ export interface FillParams {
   tolerance?: number;
   /** Straight rows put their needle points on the lines of this motif (embossing, see deco.ts). */
   emboss?: { motif: Motif; size: number; strong?: boolean; angle?: number };
-  /** Straight rows shift their needle points into a texture (see texturePoints in deco.ts), in place of `offset`. */
+  /** Straight rows shift their needle points into a texture (see texture_points in core/src/digitize/deco.rs), in place of `offset`. */
   texture?: { kind: Texture; size: number };
   /**
    * Wave rows (see Frame.wave): every row is the same wave, `height` mm from crest to middle and

@@ -57,11 +57,6 @@ export function rotation(deg: number, cx: number, cy: number): Mat {
 
 export const scaling = (sx: number, sy: number, cx: number, cy: number): Mat => [sx, 0, 0, sy, cx - sx * cx, cy - sy * cy];
 
-/** Turn of a map in degrees, and whether it mirrors. */
-export function turnOf(m: Mat): { deg: number; mirror: boolean } {
-  return { deg: (Math.atan2(m[1], m[0]) * 180) / Math.PI, mirror: m[0] * m[3] - m[1] * m[2] < 0 };
-}
-
 export const cloneForm = (f: Form): Form => ({
   ...(f.nonzero ? { nonzero: true } : {}),
   paths: f.paths.map((p) => ({ closed: p.closed, nodes: p.nodes.map((n) => ({ p: [...n.p] as Pt, a: [...n.a] as Pt, b: [...n.b] as Pt, smooth: n.smooth })) })),

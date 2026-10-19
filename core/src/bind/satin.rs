@@ -17,7 +17,7 @@ use crate::digitize::rungs::{self, Cut, Rung};
 use crate::digitize::satin::{self, Column, ColumnEnds, SatinParams, UnderInset, UnderlayKind};
 use crate::digitize::satin_forms;
 use crate::digitize::satin_joins::{self, SatinCorner, SatinEnd};
-use crate::digitize::satin_shapes::{self, Blob, Material, Shape};
+use crate::digitize::satin_shapes::{self, Material};
 use crate::digitize::skeleton::Graph;
 use crate::digitize::{satin_ease, satin_suggest};
 use crate::geom::{Pt, pts_from_flat, pts_to_flat};
@@ -339,15 +339,6 @@ pub fn stroke_rails(
     Ok(out)
 }
 
-#[wasm_bindgen(js_name = smallHoles)]
-pub fn small_holes(graph: JsValue, holes: &[f64], hole_lens: &[u32]) -> Result<Vec<u32>, JsError> {
-    let g: Graph = from_js(graph)?;
-    Ok(satin_shapes::small_holes(&g, &lines_from(holes, hole_lens))
-        .into_iter()
-        .map(|k| k as u32)
-        .collect())
-}
-
 #[wasm_bindgen(js_name = filledRegion)]
 pub fn filled_region(
     mask: Vec<u8>,
@@ -377,70 +368,6 @@ pub fn filled_region(
     }
 }
 
-#[wasm_bindgen(js_name = splitBlobs)]
-pub fn split_blobs(graph: JsValue) -> Result<JsValue, JsError> {
-    let g: Graph = from_js(graph)?;
-    to_js(&satin_shapes::split_blobs(&g))
-}
-
-#[wasm_bindgen(js_name = wholeShape)]
-pub fn whole_shape(
-    outsides: &[f64],
-    out_lens: &[u32],
-    holes: &[f64],
-    hole_lens: &[u32],
-) -> Result<JsValue, JsError> {
-    let (o, hs) = (lines_from(outsides, out_lens), lines_from(holes, hole_lens));
-    to_js(&satin_shapes::whole_shape(&o, &hs, &Material::new(&o, &hs)))
-}
-
-#[wasm_bindgen(js_name = blobShape)]
-pub fn blob_shape(
-    blob: JsValue,
-    lines: JsValue,
-    outsides: &[f64],
-    out_lens: &[u32],
-    holes: &[f64],
-    hole_lens: &[u32],
-) -> Result<JsValue, JsError> {
-    let blob: Blob = from_js(blob)?;
-    let lines: Graph = from_js(lines)?;
-    let (o, hs) = (lines_from(outsides, out_lens), lines_from(holes, hole_lens));
-    to_js(&satin_shapes::blob_shape(
-        &blob,
-        &lines,
-        &o,
-        &hs,
-        &Material::new(&o, &hs),
-    ))
-}
-
-/// `outsides` and `holes`: the area the shape lies in (its material).
-#[wasm_bindgen(js_name = planShape)]
-pub fn plan_shape(
-    shape: JsValue,
-    outsides: &[f64],
-    out_lens: &[u32],
-    holes: &[f64],
-    hole_lens: &[u32],
-    max: f64,
-    split: bool,
-    column: bool,
-) -> Result<JsValue, JsError> {
-    let s: Shape = from_js(shape)?;
-    let m = Material::new(
-        &lines_from(outsides, out_lens),
-        &lines_from(holes, hole_lens),
-    );
-    to_js(&satin_shapes::plan_shape(
-        &s,
-        &|q| m.test(q),
-        max,
-        split,
-        column,
-    ))
-}
-
 #[wasm_bindgen(js_name = formCornerCuts)]
 pub fn form_corner_cuts(
     outsides: &[f64],
@@ -454,31 +381,6 @@ pub fn form_corner_cuts(
         &o,
         &hs,
         &Material::new(&o, &hs),
-        max,
-    ))
-}
-
-/// Per part its lines across, or the stroke the TypeScript plans (see satin_forms::PartPlan); null
-/// when a part fits no plan.
-#[wasm_bindgen(js_name = planParts)]
-pub fn plan_parts(
-    outsides: &[f64],
-    out_lens: &[u32],
-    holes: &[f64],
-    hole_lens: &[u32],
-    cuts: &[f64],
-    tips: &[f64],
-    tip_lens: &[u32],
-    graph: JsValue,
-    max: f64,
-) -> Result<JsValue, JsError> {
-    let g: Graph = from_js(graph)?;
-    to_js(&satin_forms::plan_parts(
-        &lines_from(outsides, out_lens),
-        &lines_from(holes, hole_lens),
-        &segs_from(cuts),
-        &lines_from(tips, tip_lens),
-        &g,
         max,
     ))
 }

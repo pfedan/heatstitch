@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { COLOR_CHANGE, JUMP, STITCH, TRIM, patternStats } from '../src/model/pattern';
-import { decodeDx, decodeDy, parseDst } from '../src/parsers/dst';
+import { parseDst } from '../src/parsers/dst';
 import { parsePattern } from '../src/parsers';
 import { parsePes } from '../src/parsers/pes';
-import { encodeDst, encodeDstRecord, encodePes, type Op } from './helpers/encode';
+import { encodeDst, encodePes, type Op } from './helpers/encode';
 
 const square: Op[] = [
   { type: 'stitch', dx: 0, dy: 0 },
@@ -15,13 +15,11 @@ const square: Op[] = [
 
 describe('DST', () => {
   it('decodes every delta in range', () => {
-    for (let dx = -121; dx <= 121; dx += 7) {
-      for (let dy = -121; dy <= 121; dy += 11) {
-        const [b0, b1, b2] = encodeDstRecord(dx, dy, 'stitch');
-        expect(decodeDx(b0, b1, b2)).toBe(dx);
-        expect(decodeDy(b0, b1, b2)).toBe(dy);
-      }
-    }
+    const ops: Op[] = [];
+    for (let dx = -121; dx <= 121; dx += 7) for (let dy = -121; dy <= 121; dy += 11) ops.push({ type: 'stitch', dx, dy });
+    const p = parseDst(encodeDst(ops));
+    expect(p.cmd.length).toBe(ops.length);
+    for (let i = 1; i < ops.length; i++) expect([p.x[i] - p.x[i - 1], p.y[i] - p.y[i - 1]]).toEqual([ops[i].dx, ops[i].dy]);
   });
 
   it('parses a square with label and inverted y', () => {

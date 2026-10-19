@@ -18,7 +18,3 @@ export const TIE_MAX = 6;
  * Rust core (core/src/validation/short_stitches.rs), with SHORT_STITCH_MM of thresholds.ts.
  */
 export const tagShortStitches = (p: Pattern): Uint8Array => core().tagShortStitches(p.x, p.y, p.cmd);
-
-/** Counts non-exempt short stitches per 1 mm cell. */
-export const shortStitchCounts = (p: Pattern, tags: Uint8Array, originX: number, originY: number, cols: number, rows: number): Uint16Array =>
-  core().shortStitchCounts(p.x, p.y, tags, originX, originY, cols, rows);

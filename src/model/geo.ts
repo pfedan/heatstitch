@@ -17,7 +17,7 @@ import { stitchKinds } from './sequence';
  *
  * - `geoOf`: the form someone gave (drawn, from an SVG, the Image mode, or read and then edited).
  * - `guessGeo`: that form, or else one traced from the stitches (guessed: shown dashed, kept only
- *   once edited, see `geoGuessed`).
+ *   once edited).
  * - `withGeo`: the same object with another form, in the same place.
  */
 
@@ -194,9 +194,6 @@ export function satinOutline(p: Pattern, o: SewObject, kinds: Uint8Array): Form 
 export function guessGeo(p: Pattern, o: SewObject, kinds: Uint8Array): Form | null {
   return sewnAlong(p, o) ? guessLine(p, o, kinds) : (guessArea(p, o, kinds) ?? satinOutline(p, o, kinds));
 }
-
-/** Whether object `o` has no form given to it, so any form shown for it is guessed from its stitches. */
-export const geoGuessed = (p: Pattern, o: SewObject): boolean => !geoOf(remembered(p, o));
 
 /**
  * What a form allows, the one rule of the vector model for it (asked by the kind switch, the level

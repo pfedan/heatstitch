@@ -3,8 +3,6 @@
 use wasm_bindgen::prelude::*;
 
 use crate::pattern::Records;
-use crate::validation::coverage::{self, CoverageMeasure};
-use crate::validation::kinds;
 use crate::validation::measure::{self, Measurement};
 use crate::validation::satin;
 use crate::validation::short_stitches;
@@ -31,76 +29,6 @@ pub fn e_stitch_mask(x: Vec<i32>, y: Vec<i32>, cmd: Vec<u8>) -> Vec<u8> {
 #[wasm_bindgen(js_name = tagShortStitches)]
 pub fn tag_short_stitches(x: Vec<i32>, y: Vec<i32>, cmd: Vec<u8>) -> Vec<u8> {
     short_stitches::tag_short_stitches(&records(x, y, cmd))
-}
-
-#[wasm_bindgen(js_name = shortStitchCounts)]
-pub fn short_stitch_counts(
-    x: Vec<i32>,
-    y: Vec<i32>,
-    tags: &[u8],
-    origin_x: f64,
-    origin_y: f64,
-    cols: usize,
-    rows: usize,
-) -> Vec<u16> {
-    let cmd = vec![0; x.len()];
-    short_stitches::short_stitch_counts(&records(x, y, cmd), tags, origin_x, origin_y, cols, rows)
-}
-
-#[wasm_bindgen(js_name = stitchKinds)]
-pub fn stitch_kinds(x: Vec<i32>, y: Vec<i32>, cmd: Vec<u8>) -> Vec<u8> {
-    kinds::stitch_kinds(&records(x, y, cmd))
-}
-
-/// The lower-limit measurements, taken out array by array.
-#[wasm_bindgen]
-pub struct CoverageResult(CoverageMeasure);
-
-#[wasm_bindgen]
-impl CoverageResult {
-    #[wasm_bindgen(js_name = takeCover)]
-    pub fn take_cover(&mut self) -> Vec<f32> {
-        std::mem::take(&mut self.0.cover)
-    }
-    #[wasm_bindgen(js_name = takeGapsLow)]
-    pub fn take_gaps_low(&mut self) -> Vec<u8> {
-        std::mem::take(&mut self.0.gaps_low)
-    }
-    #[wasm_bindgen(js_name = takeGapsHigh)]
-    pub fn take_gaps_high(&mut self) -> Vec<u8> {
-        std::mem::take(&mut self.0.gaps_high)
-    }
-    #[wasm_bindgen(js_name = takeLongest)]
-    pub fn take_longest(&mut self) -> Vec<u16> {
-        std::mem::take(&mut self.0.longest)
-    }
-}
-
-#[wasm_bindgen(js_name = measureCoverage)]
-pub fn measure_coverage(
-    x: Vec<i32>,
-    y: Vec<i32>,
-    cmd: Vec<u8>,
-    mean: &[f32],
-    origin_x: f64,
-    origin_y: f64,
-    cols: usize,
-    rows: usize,
-    skip: Option<Vec<u8>>,
-    gaps: bool,
-) -> CoverageResult {
-    let p = records(x, y, cmd);
-    CoverageResult(coverage::measure_coverage(
-        &p,
-        mean,
-        origin_x,
-        origin_y,
-        cols,
-        rows,
-        skip.as_deref(),
-        gaps,
-        || kinds::stitch_kinds(&p),
-    ))
 }
 
 /// A measurement handed to JavaScript: numbers as getters, each array taken once.
