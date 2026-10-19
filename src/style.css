@@ -2864,9 +2864,10 @@ button.tool:disabled {
   height: 15px;
 }
 
-/* A setting pointed at or picked is being sewn (a large fill takes a moment); the page stays usable. */
+/* A setting pointed at or picked, or a scaling let go, is being sewn (a large fill takes a moment); the page stays usable. */
 body.preview-busy #object-stitches button:hover,
-body.preview-busy #canvas {
+body.preview-busy #canvas,
+body.sew-busy #canvas {
   cursor: progress !important;
 }
 

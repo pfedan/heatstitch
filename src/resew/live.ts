@@ -1,6 +1,8 @@
 import { isReadFromFile, nextVersion, readFromFile, type Pattern } from '../model/pattern';
 import { transformObjects } from '../model/reshape';
-import { designObjects, rememberedIn, restitch, restoreRemembered, type Remembered, type Settings, type StoredObjects } from '../model/restitch';
+import { syncBorders } from '../model/border';
+import { sewObjects } from '../model/objects';
+import { designObjects, objectKey, rememberedIn, restitch, restoreRemembered, type Remembered, type Settings, type StoredObjects } from '../model/restitch';
 import type { Mat } from '../shape/path';
 
 /**
@@ -63,4 +65,29 @@ export function restitchShipped(p: Pattern, which: number[], s: Settings, trimMm
   const { kinds, objects } = designObjects(p);
   const r = restitch(p, objects, which, s, kinds, trimMm);
   return { pattern: ship(r.pattern), starts: r.starts, ends: r.ends, failed: r.failed, memory: r.memory };
+}
+
+/** A move, turn or scaling let go, sewn anew in the worker with all the objects know (see commitTransform). */
+export interface ShippedTransform {
+  pattern: Shipped;
+  hand: number;
+  restitched: boolean;
+  /** The objects that were moved, in the design with its borders along; null when borders changed nothing. */
+  moved: number[] | null;
+}
+
+/**
+ * The objects `sel` of `p` transformed by `m` and sewn anew, their borders along, as the frame
+ * takes it over when let go. What it does on the main thread, there in one step that takes seconds
+ * on a large design, here off it.
+ */
+export function transformShipped(p: Pattern, sel: number[], m: Mat, trimMm: number): ShippedTransform | null {
+  const r = transformObjects(p, sel, m, trimMm);
+  if (!r) return null;
+  const cur = r.pattern;
+  const objs = sewObjects(cur);
+  const keys = new Set(sel.map((o) => objectKey(cur, objs[o])));
+  const synced = syncBorders(cur, trimMm);
+  const moved = synced !== cur ? sewObjects(synced).flatMap((o, i) => (keys.has(objectKey(synced, o)) ? [i] : [])) : null;
+  return { pattern: ship(synced), hand: r.hand, restitched: r.restitched, moved };
 }
