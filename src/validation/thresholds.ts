@@ -43,7 +43,10 @@ export const BASE = {
 export const HOLES_CAUTION = 6;
 export const HOLES_CRITICAL = 9;
 
-/** Stitches shorter than this (mm) count towards the short-stitch cluster rule. */
+/**
+ * Stitches shorter than this (mm) count towards the short-stitch cluster rule. The core tags them
+ * with the same value (core/src/validation/short_stitches.rs).
+ */
 export const SHORT_STITCH_MM = 1.0;
 /** This many non-exempt short stitches in one 1 mm cell make it Critical. */
 export const SHORT_STITCH_COUNT = 8;
