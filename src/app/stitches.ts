@@ -17,7 +17,7 @@ import { isCovered, setOverlapShare } from '../model/knockout';
 import { strokeLike, SATIN_MAX, pullFor, digitizeDefaults, gapOf } from '../digitize/digitize';
 import { fillOfLine, lineGoes, lineSettings, lineToFill } from '../model/line';
 import { outline } from '../digitize/region';
-import { recommendedSpacing } from '../validation/profiles';
+import { recommendedSatin, recommendedSpacing } from '../validation/profiles';
 import { rememberObjects, type SewObject } from '../model/objects';
 import { loosable } from '../model/handEdit';
 import { backToOriginal, loadedOriginal, originalOf } from '../model/original';
@@ -133,7 +133,7 @@ export function bindStitches(app: StitchesApp) {
     // A part of a fill cut apart: its border goes around all parts.
     const piece = fillObj && remembered(p, fillObj)?.piece;
     const pieces = piece ? q.objects.filter((obj) => obj.kind === 'fill' && remembered(p, obj)?.piece === piece).length : 0;
-    const info: StitchInfo = { key: ui.selectionKey, lock, free, fixed, fabricPull, auto, hand, measured, counts, recommended: recommendedSpacing(app.settings.profile), shape: worst, outlines: shapes, toSatin: stroke, knockout, depth, color: q.objects[firstFill]?.color, area: (fillObj && remembered(p, fillObj)?.region) || undefined, ...(pieces > 1 ? { pieces } : {}) };
+    const info: StitchInfo = { key: ui.selectionKey, lock, free, fixed, fabricPull, auto, hand, measured, counts, recommended: recommendedSpacing(app.settings.profile), recommendedSatin: recommendedSatin(app.settings.profile), shape: worst, outlines: shapes, toSatin: stroke, knockout, depth, color: q.objects[firstFill]?.color, area: (fillObj && remembered(p, fillObj)?.region) || undefined, ...(pieces > 1 ? { pieces } : {}) };
     // Appliqués: their own settings (all selected are one), or the switch to make one.
     const sel = [...ui.selectedObjects].sort((a, b) => a - b).map((o) => q.objects[o]).filter(Boolean);
     const firstApplique = sel.length && sel.every((o) => remembered(p, o)?.applique) ? sel[0] : undefined;

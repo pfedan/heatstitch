@@ -22,7 +22,8 @@ const KNIT: Profile = { fabric: 'knit', thread: '40' };
 const thread = (p: Pattern) => patternStats(p).threadLength;
 const stitchCount = (p: Pattern) => p.cmd.filter((c) => c === STITCH).length;
 const layers = (n: number, s = new Shape()) => {
-  for (let i = 0; i < n; i++) s.fillAt(20, 20, 10, i * 0.8 + 0.2);
+  // Woven's fill rows: 0.4 mm counted across two rows.
+  for (let i = 0; i < n; i++) s.fillAt(20, 20, 10, i * 0.8 + 0.2, 0.2);
   return s;
 };
 /** Zigzag column along x, `width` mm wide, advancing `step` mm per stitch. */
@@ -196,7 +197,7 @@ describe('automatic correction', () => {
 
   it('only touches the given region', () => {
     const s = new Shape();
-    for (const cx of [20, 60]) for (let i = 0; i < 5; i++) s.fillAt(cx, 20, 10, i * 0.8 + 0.2);
+    for (const cx of [20, 60]) for (let i = 0; i < 5; i++) s.fillAt(cx, 20, 10, i * 0.8 + 0.2, 0.2);
     const p = s.build();
     const r = autoCorrect(p, WOVEN, { ...FULL, region: { minX: 5, minY: 5, maxX: 35, maxY: 35 } });
     const v = classify(r.measurement, WOVEN);

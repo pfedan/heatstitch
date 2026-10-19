@@ -1,6 +1,6 @@
 import { settledBy, type Acknowledgement } from '../../validation/acks';
 import { fabricOf } from '../../validation/profiles';
-import { CAUTION, CRITICAL, SAFE, type Level } from '../../validation/thresholds';
+import { CAUTION, CRITICAL, densityLimits, SAFE, type Level } from '../../validation/thresholds';
 import type { ValidationResult } from '../../validation/validate';
 import { REASON_BITS, type Reason, type Zone } from '../../validation/zones';
 
@@ -60,8 +60,7 @@ function criticalBy(v: ValidationResult, i: number, k: FixKind): boolean {
   const m = v.measurement;
   const th = v.thresholds;
   if (k === 'density') {
-    const s = Math.min(1, Math.max(0, m.satin[i]));
-    return m.density[i] >= th.critical + s * (th.satinCritical - th.critical);
+    return m.density[i] >= densityLimits(th, m.satin[i])[1];
   }
   if (k === 'holes') return (!!th.holes && m.holes[i] >= th.holes.critical) || (v.reasons[i] & REASON_BITS.shortStitches) !== 0;
   return false;

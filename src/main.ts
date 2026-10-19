@@ -1543,6 +1543,8 @@ const swatchPanel = bindSwatch(settings, {
   make: (kind) => void makeSwatch(kind),
   changed: () => {
     saveSettings(settings);
+    // Measured values belong to the active design too: it is checked against them at once.
+    storeMaterial();
     profilePanel.refresh();
     imageMode.profileChanged();
     controls.refresh();

@@ -411,7 +411,7 @@ export class CorrectPanel {
     });
     top.append(l, name, vis);
     li.append(top);
-    const changes = [...r.changes.map(fixText), ...(r.knockout ? [fixText({ field: 'knockout', from: false, to: true })] : [])];
+    const changes = [...r.changes.map((c) => fixText(c, r.kind)), ...(r.knockout ? [fixText({ field: 'knockout', from: false, to: true })] : [])];
     const why = r.reasons.map((x) => t(`validation.reason.${x}` as Key)).join(', ');
     li.append(Object.assign(document.createElement('p'), { className: 'small plan-change', textContent: changes.join(' · ') }));
     if (why) li.title = t('plan.against', { list: why });

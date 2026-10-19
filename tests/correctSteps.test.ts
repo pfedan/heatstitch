@@ -135,7 +135,7 @@ describe('correction focus', () => {
 
   it('does not touch thread density with the hole focus on woven fabric', () => {
     const s = new Shape();
-    for (let i = 0; i < 5; i++) s.fillAt(20, 20, 10, i * 0.8 + 0.2);
+    for (let i = 0; i < 5; i++) s.fillAt(20, 20, 10, i * 0.8 + 0.2, 0.2);
     const p = s.build();
     const r = autoCorrect(p, WOVEN, { ...DEFAULT_CORRECTION, focus: 'holes' });
     expect(r.report.respaced).toBe(0);

@@ -1,4 +1,4 @@
-import { CRITICAL } from '../../validation/thresholds';
+import { CRITICAL, densityLimits } from '../../validation/thresholds';
 import type { Contribution, Field } from './field';
 import { RISK, SUB } from './field';
 
@@ -95,7 +95,7 @@ export async function solveMip(f: Field, units: MipUnit[], target: Uint8Array, b
   const th = f.th;
   const critOf = (c: number) => {
     const { share } = f.densityOf(c);
-    return th.critical + share * (th.satinCritical - th.critical);
+    return densityLimits(th, share)[1];
   };
   const crit = new Map<number, number>();
   const rows: string[] = [];
