@@ -27,6 +27,8 @@
 
 use serde::Deserialize;
 
+pub use super::border::Rails;
+use super::border::{line_rails, resample};
 use super::rungs::{norm, sub};
 use crate::geom::Pt;
 use crate::js::{dist, round};
@@ -58,12 +60,6 @@ const STEP: f64 = 0.1;
 /// Pairs of points this far apart on the rails made here (mm).
 const PAIR: f64 = 0.1;
 
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct Rails {
-    pub left: Vec<Pt>,
-    pub right: Vec<Pt>,
-}
-
 fn add(a: Pt, b: Pt) -> Pt {
     [a[0] + b[0], a[1] + b[1]]
 }
@@ -85,114 +81,6 @@ fn left_of(d: Pt) -> Pt {
 }
 fn length_of(l: &[Pt]) -> f64 {
     l.windows(2).map(|w| dist(w[0], w[1])).sum()
-}
-fn nonzero(l: f64) -> f64 {
-    if l == 0.0 || l.is_nan() { 1.0 } else { l }
-}
-
-// The line's points and rails as border.ts makes them (resample, lineRails); stage 3a ports
-// border.ts to core/src/digitize/border.rs: use those once both are in.
-
-/// Points every `step` mm along a line, its end kept.
-fn resample(pts: &[Pt], step: f64) -> Vec<Pt> {
-    let mut out = vec![pts[0]];
-    let mut carry = 0.0;
-    for i in 1..pts.len() {
-        let a = pts[i - 1];
-        let b = pts[i];
-        let l = dist(a, b);
-        let mut t = step - carry;
-        while t <= l {
-            out.push([
-                a[0] + ((b[0] - a[0]) * t) / l,
-                a[1] + ((b[1] - a[1]) * t) / l,
-            ]);
-            t += step;
-        }
-        carry = l - (t - step);
-    }
-    let end = pts[pts.len() - 1];
-    let n = out.len();
-    if dist(out[n - 1], end) > step * 0.3 {
-        out.push(end);
-    } else {
-        out[n - 1] = end;
-    }
-    out
-}
-
-/// A closed line smoothed by a moving average (the pixel steps of a traced edge go).
-fn smooth_loop(pts: Vec<Pt>, k: usize) -> Vec<Pt> {
-    let open = &pts[..pts.len() - 1];
-    let n = open.len();
-    if n < 2 * k + 1 {
-        return pts;
-    }
-    let mut out: Vec<Pt> = (0..n)
-        .map(|i| {
-            let (mut x, mut y) = (0.0, 0.0);
-            for j in 0..=2 * k {
-                let q = open[(i + j + 2 * n - k) % n];
-                x += q[0];
-                y += q[1];
-            }
-            [x / (2 * k + 1) as f64, y / (2 * k + 1) as f64]
-        })
-        .collect();
-    out.push(out[0]);
-    out
-}
-
-/// An open line smoothed by a moving average; the ends stay where they are.
-fn smooth_line(pts: Vec<Pt>, k: usize) -> Vec<Pt> {
-    let n = pts.len();
-    if n < 2 * k + 1 {
-        return pts;
-    }
-    (0..n)
-        .map(|i| {
-            if i == 0 || i == n - 1 {
-                return pts[i];
-            }
-            let r = k.min(i).min(n - 1 - i);
-            let (mut x, mut y) = (0.0, 0.0);
-            for j in i - r..=i + r {
-                x += pts[j][0];
-                y += pts[j][1];
-            }
-            [x / (2 * r + 1) as f64, y / (2 * r + 1) as f64]
-        })
-        .collect()
-}
-
-/// Rails of a satin of width `w` centered on a line with no area around it (a drawn line): each
-/// side half the width out along the normal. A closed line repeats its first point at the end.
-fn line_rails(line: &[Pt], closed: bool, w: f64) -> Rails {
-    let half = w / 2.0;
-    let center = if closed {
-        smooth_loop(resample(line, 0.2), 3)
-    } else {
-        smooth_line(resample(line, 0.2), 3)
-    };
-    let n = center.len() as i64;
-    let at = |i: i64| {
-        if closed {
-            center[i.rem_euclid(n - 1) as usize]
-        } else {
-            center[i.clamp(0, n - 1) as usize]
-        }
-    };
-    let mut r = Rails::default();
-    for i in 0..n {
-        let a = at(i - 3);
-        let b = at(i + 3);
-        let l = nonzero(dist(a, b));
-        let nn = [-(b[1] - a[1]) / l, (b[0] - a[0]) / l];
-        let c = center[i as usize];
-        r.left.push([c[0] + nn[0] * half, c[1] + nn[1] * half]);
-        r.right.push([c[0] - nn[0] * half, c[1] - nn[1] * half]);
-    }
-    r
 }
 
 #[derive(Clone, Copy, Debug)]

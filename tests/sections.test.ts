@@ -50,7 +50,7 @@ describe('spacing along the column', () => {
   it('blends a spacing set at a rung towards the neighbouring rungs and ends', () => {
     const r: Rails = { ...straight(), rungs: [[10, 10], [20, 20]], spacings: [[20, 0.8]] };
     const col = columnOf(r);
-    const at = spacingAlong(col, r, 0.4, false)!;
+    const at = spacingAlong(r, 0.4, false)!;
     const near = (x: number) => at[col.left.findIndex((p) => p[0] >= x)];
     expect(near(5)).toBeCloseTo(0.4);
     expect(near(15)).toBeCloseTo(0.6, 1);

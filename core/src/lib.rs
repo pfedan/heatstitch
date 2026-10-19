@@ -11,6 +11,7 @@ pub mod geom;
 pub mod image;
 pub mod js;
 pub mod material;
+pub mod model;
 pub mod parsers;
 pub mod pattern;
 pub mod shape;
