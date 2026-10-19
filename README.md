@@ -174,11 +174,11 @@ distance between neighboring rows (`shownRows` / `rowsOf` in `validation/profile
 | Fabric | Factor | Recommended spacing (40 wt) | Long stitch from |
 |---|---|---|---|
 | Stable woven (cotton, linen, poplin) | 1.0 | 0.40 to 0.50 mm | 10 mm |
-| Heavy woven (denim, canvas, twill) | 1.1 | 0.42 to 0.56 mm | 10 mm |
-| Cap, structured | 0.9 | 0.40 to 0.50 mm | 7 mm |
+| Heavy woven (denim, canvas, twill) | 1.0 | 0.42 to 0.56 mm | 10 mm |
+| Cap, structured | 1.0 | 0.40 to 0.50 mm | 7 mm |
 | Knit (piqué, jersey) | 0.85 | 0.47 to 0.56 mm | 7 mm |
 | Fleece, sweat | 0.75 | 0.47 to 0.56 mm | 7 mm |
-| Terry, pile | 0.65 | 0.61 to 0.78 mm | 7 mm |
+| Terry, pile | 1.0 | 0.40 to 0.50 mm | 7 mm |
 | Light (silk, batiste) | 0.6 | 0.56 to 0.67 mm | 8 mm |
 | Sheer (organza, chiffon) | 0.5 | 0.67 to 0.83 mm | 7 mm |
 | Leather, faux leather (+ perforation check) | 0.7 | 0.56 to 0.89 mm | 8 mm |

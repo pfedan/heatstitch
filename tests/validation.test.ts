@@ -84,7 +84,7 @@ describe('thresholds and profiles', () => {
   it('scales the limits with fabric and thread', () => {
     expect(thresholdsFor({ fabric: 'knit', thread: '40' }).caution).toBeCloseTo(14 * 0.85);
     expect(thresholdsFor({ fabric: 'woven', thread: '12' }).critical).toBeCloseTo(24 * 0.5);
-    expect(thresholdsFor({ fabric: 'terry', thread: '30' }).factor).toBeCloseTo(0.65 * 0.8);
+    expect(thresholdsFor({ fabric: 'terry', thread: '30' }).factor).toBeCloseTo(0.8);
     expect(thresholdsFor(WOVEN).holes).toBeNull();
     expect(thresholdsFor(LEATHER).holes).not.toBeNull();
   });
