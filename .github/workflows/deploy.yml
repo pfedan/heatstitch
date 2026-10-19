@@ -6,6 +6,8 @@ name: CI and Pages
 # A push to main runs the checks only: main follows the releases (a hotfix is merged there, see CONTRIBUTING).
 # Other branches are checked through their pull request only: a push to them would run every job a
 # second time next to the pull request's own run.
+# A newer push to a pull request cancels its older checks; a push to develop or main never cancels
+# another commit's checks (each commit has its own group), since a release waits for exactly those.
 
 on:
   push:
@@ -24,7 +26,7 @@ jobs:
     if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     concurrency:
-      group: build-${{ github.ref }}
+      group: build-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
       cancel-in-progress: true
     steps:
       # The whole history with its tags: the build shows the last release and the commits since (src/build/version.ts).
@@ -56,7 +58,7 @@ jobs:
       matrix:
         shard: [1, 2, 3]
     concurrency:
-      group: test-${{ github.ref }}-${{ matrix.shard }}
+      group: test-${{ github.event_name == 'pull_request' && github.ref || github.sha }}-${{ matrix.shard }}
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
@@ -72,7 +74,7 @@ jobs:
     if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     concurrency:
-      group: load-${{ github.ref }}
+      group: load-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
@@ -94,7 +96,7 @@ jobs:
     if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     concurrency:
-      group: browser-${{ github.ref }}
+      group: browser-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
@@ -139,7 +141,7 @@ jobs:
     if: github.event.action != 'closed'
     runs-on: ubuntu-latest
     concurrency:
-      group: oracle-${{ github.ref }}
+      group: oracle-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
@@ -168,7 +170,7 @@ jobs:
       matrix:
         shard: [1, 2, 3]
     concurrency:
-      group: korrektur-${{ github.ref }}-${{ matrix.shard }}
+      group: korrektur-${{ github.event_name == 'pull_request' && github.ref || github.sha }}-${{ matrix.shard }}
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
