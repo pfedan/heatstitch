@@ -1,8 +1,11 @@
+import { core } from '../wasm/core';
 import type { ExactLabels, Stroke } from './prepare';
 
 /**
  * Zuschneiden: the part of the picture that becomes the design, a rectangle as shares (0..1) of the
- * picture as opened. The picture itself stays whole, so the cut can be widened again later.
+ * picture as opened. The picture itself stays whole, so the cut can be widened again later. The
+ * small helpers for the frame stay in TypeScript (one call per pointer move); the scans over a whole
+ * picture run in the Rust core (core/src/image/crop.rs, which has the helpers' twins too).
  */
 export interface Crop {
   x: number;
@@ -104,35 +107,12 @@ export function moveStroke(s: Stroke, from: Crop | undefined, to: Crop | undefin
 /**
  * The part of the picture that differs from its background, as a cut with a small margin; none when
  * the picture has no plain background or the motif fills it. The background is the color of the
- * corners when at least three of them agree; transparent pixels count as background too.
+ * corners when at least three of them agree; transparent pixels count as background too. Computed
+ * by the Rust core (core/src/image/crop.rs).
  */
 export function contentCrop(data: Uint8ClampedArray, W: number, H: number): Crop | undefined {
-  if (W < 4 || H < 4) return undefined;
-  const at = (x: number, y: number) => (y * W + x) * 4;
-  const corners = [at(0, 0), at(W - 1, 0), at(0, H - 1), at(W - 1, H - 1)];
-  const near = (i: number, j: number) =>
-    (data[i + 3] < 16 && data[j + 3] < 16) ||
-    (Math.abs(data[i] - data[j]) + Math.abs(data[i + 1] - data[j + 1]) + Math.abs(data[i + 2] - data[j + 2]) < 48 && Math.abs(data[i + 3] - data[j + 3]) < 48);
-  const bg = corners.find((i) => corners.filter((j) => near(i, j)).length >= 3);
-  if (bg === undefined) return undefined;
-  let x0 = W;
-  let y0 = H;
-  let x1 = -1;
-  let y1 = -1;
-  for (let y = 0; y < H; y++) {
-    for (let x = 0; x < W; x++) {
-      if (near(at(x, y), bg)) continue;
-      if (x < x0) x0 = x;
-      if (x > x1) x1 = x;
-      if (y < y0) y0 = y;
-      if (y > y1) y1 = y;
-    }
-  }
-  if (x1 < 0) return undefined;
-  // A margin of 2 % of the motif keeps its edge stitches clear of the cut.
-  const m = Math.ceil(0.02 * Math.max(x1 - x0 + 1, y1 - y0 + 1));
-  const c = readCrop({ x: Math.max(0, x0 - m) / W, y: Math.max(0, y0 - m) / H, w: (Math.min(W, x1 + 1 + m) - Math.max(0, x0 - m)) / W, h: (Math.min(H, y1 + 1 + m) - Math.max(0, y0 - m)) / H });
-  return c;
+  const c = core().contentCrop(data, W, H);
+  return c && { x: c[0], y: c[1], w: c[2], h: c[3] };
 }
 
 /**
@@ -140,13 +120,6 @@ export function contentCrop(data: Uint8ClampedArray, W: number, H: number): Crop
  */
 export function cutLabels(full: ExactLabels, c: Crop | undefined, w: number, h: number): ExactLabels {
   const k = cropOf(c);
-  const labels = new Uint8Array(w * h);
-  for (let y = 0; y < h; y++) {
-    const sy = Math.min(full.height - 1, Math.floor((k.y + ((y + 0.5) / h) * k.h) * full.height));
-    for (let x = 0; x < w; x++) {
-      const sx = Math.min(full.width - 1, Math.floor((k.x + ((x + 0.5) / w) * k.w) * full.width));
-      labels[y * w + x] = full.labels[sy * full.width + sx];
-    }
-  }
+  const labels = core().cutLabels(full.labels, full.width, full.height, Float64Array.of(k.x, k.y, k.w, k.h), w, h);
   return { width: w, height: h, labels, colors: full.colors };
 }

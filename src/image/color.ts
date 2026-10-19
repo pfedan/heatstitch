@@ -5,6 +5,9 @@
  *
  * Clustering averages colors, so it uses plain Euclidean distance in Lab; CIEDE2000 is used where
  * single colors are compared (matching threads, merging clusters).
+ *
+ * These convert one color per call for TypeScript callers (thread slots, the thread picker); the
+ * Rust core has its twin (core/src/image/color.rs) for its own pixel work.
  */
 
 export type Lab = [number, number, number];

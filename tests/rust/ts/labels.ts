@@ -1,0 +1,353 @@
+// The TypeScript implementation as it was before stage 1a moved it to the Rust core, kept for the
+// differential test (tests/rust/pixel.test.ts). Not used by the app.
+import { distanceToSeeds } from '../../../src/image/edt';
+import { NONE } from './quantize';
+
+/**
+ * Operations on label maps (one palette index per pixel, NONE = not sewn): connected components
+ * with their adjacency, and the cleanup that turns a quantized image into regions that can be
+ * embroidered, as commercial tools describe it (they remove anti-aliasing, noise and dithering, and
+ * colors below a given area) and as the Goldman patent (US 6,836,695) does
+ * it: small objects are reassigned to their neighbours.
+ */
+
+export interface Components {
+  /** Component per pixel. */
+  comp: Int32Array;
+  /** Per component: label, pixel count, bounding box. */
+  label: number[];
+  area: number[];
+  minX: number[];
+  minY: number[];
+  maxX: number[];
+  maxY: number[];
+}
+
+/**
+ * 4-connected components of equal labels (two-pass union-find). 4-connectivity keeps every region
+ * a union of whole pixel squares, so outlines never pinch at a diagonal.
+ */
+export function components(labels: Uint8Array | Uint16Array, w: number, h: number): Components {
+  const n = w * h;
+  const parent = new Int32Array(n);
+  const find = (i: number) => {
+    while (parent[i] !== i) {
+      parent[i] = parent[parent[i]];
+      i = parent[i];
+    }
+    return i;
+  };
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      parent[i] = i;
+      const l = labels[i];
+      if (x > 0 && labels[i - 1] === l) parent[i] = find(i - 1);
+      if (y > 0 && labels[i - w] === l) {
+        const a = find(i);
+        const b = find(i - w);
+        if (a !== b) parent[Math.max(a, b)] = Math.min(a, b);
+      }
+    }
+  }
+  const comp = new Int32Array(n);
+  const id = new Map<number, number>();
+  const out: Components = { comp, label: [], area: [], minX: [], minY: [], maxX: [], maxY: [] };
+  for (let i = 0; i < n; i++) {
+    const r = find(i);
+    let c = id.get(r);
+    if (c === undefined) {
+      c = out.label.length;
+      id.set(r, c);
+      out.label.push(labels[i]);
+      out.area.push(0);
+      out.minX.push(w);
+      out.minY.push(h);
+      out.maxX.push(-1);
+      out.maxY.push(-1);
+    }
+    comp[i] = c;
+    const x = i % w;
+    const y = (i - x) / w;
+    out.area[c]++;
+    if (x < out.minX[c]) out.minX[c] = x;
+    if (x > out.maxX[c]) out.maxX[c] = x;
+    if (y < out.minY[c]) out.minY[c] = y;
+    if (y > out.maxY[c]) out.maxY[c] = y;
+  }
+  return out;
+}
+
+/** Shared border length (pixel edges) between components, per component: neighbour -> edges. */
+function adjacency(c: Components, w: number, h: number): Map<number, number>[] {
+  const adj = c.label.map(() => new Map<number, number>());
+  const add = (a: number, b: number) => {
+    adj[a].set(b, (adj[a].get(b) ?? 0) + 1);
+    adj[b].set(a, (adj[b].get(a) ?? 0) + 1);
+  };
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      const a = c.comp[i];
+      if (x + 1 < w && c.comp[i + 1] !== a) add(a, c.comp[i + 1]);
+      if (y + 1 < h && c.comp[i + w] !== a) add(a, c.comp[i + w]);
+    }
+  }
+  return adj;
+}
+
+/**
+ * 3 x 3 majority filter: a pixel takes the label most of its neighbourhood has, if that is a clear
+ * majority (5 of 9). Removes single-pixel specks and smooths stair steps; lines of 2 pixels survive.
+ */
+export function modeFilter(labels: Uint8Array, w: number, h: number): Uint8Array {
+  const out = labels.slice();
+  const count = new Map<number, number>();
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      const own = labels[i];
+      let mixed = false;
+      count.clear();
+      for (let dy = -1; dy <= 1; dy++) {
+        const yy = Math.min(h - 1, Math.max(0, y + dy));
+        for (let dx = -1; dx <= 1; dx++) {
+          const xx = Math.min(w - 1, Math.max(0, x + dx));
+          const l = labels[yy * w + xx];
+          if (l !== own) mixed = true;
+          count.set(l, (count.get(l) ?? 0) + 1);
+        }
+      }
+      if (!mixed) continue;
+      for (const [l, k] of count) {
+        if (k >= 5 && l !== own) out[i] = l;
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Narrow details that are not specks: a band at least this many times as long as it is wide
+ * (length to width, as for a region kept as a line or a satin column) ...
+ */
+export const BAND_RATIO = 4;
+/** ... at least this wide (mm, about a thread: narrower is a speck) ... */
+export const BAND_MIN_WIDTH = 0.3;
+/** ... and this long (mm). */
+export const BAND_MIN_LENGTH = 2;
+
+/**
+ * Which components are bands (see BAND_RATIO): long and narrow, judged by width and length, not by
+ * area. The width is that of the widest place (twice the largest distance to another region, Blum's
+ * medial axis radius), the length the area over that width; so a vein, a stem or an outline is a
+ * band, a blot of the same area is not. Only sewn regions: a narrow gap of background stays a gap.
+ */
+export function bands(c: Components, labels: Uint8Array, w: number, h: number, pxMm: number): Uint8Array {
+  const edge = new Uint8Array(labels.length);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      const l = labels[i];
+      if ((x > 0 && labels[i - 1] !== l) || (x + 1 < w && labels[i + 1] !== l) || (y > 0 && labels[i - w] !== l) || (y + 1 < h && labels[i + w] !== l)) edge[i] = 1;
+    }
+  }
+  const dist = distanceToSeeds(edge, w, h);
+  const half = new Float32Array(c.label.length);
+  for (let i = 0; i < labels.length; i++) half[c.comp[i]] = Math.max(half[c.comp[i]], dist[i]);
+  return Uint8Array.from(c.label, (l, k) => {
+    if (l === NONE) return 0;
+    // An edge pixel lies half a pixel inside: a line 2r + 1 pixels wide has r at its middle.
+    const width = 2 * half[k] + 1;
+    const length = c.area[k] / width;
+    return length >= BAND_RATIO * width && width * pxMm >= BAND_MIN_WIDTH && length * pxMm >= BAND_MIN_LENGTH ? 1 : 0;
+  });
+}
+
+/**
+ * Merges every component smaller than `minArea` pixels into the neighbour it shares the longest
+ * border with, smallest first, until none is left. NONE regions take part too, so small holes in a
+ * region are closed and stray pixels on the background disappear. With `pxMm` given, bands (long
+ * narrow details, see `bands`) stay whatever their area: a vein or a fine ring is a detail, not a
+ * speck.
+ */
+export function mergeSmall(labels: Uint8Array, w: number, h: number, minArea: number, pxMm?: number): Uint8Array {
+  const c = components(labels, w, h);
+  const adj = adjacency(c, w, h);
+  const count = c.label.length;
+  const keep = pxMm ? bands(c, labels, w, h, pxMm) : null;
+  const target = Int32Array.from({ length: count }, (_, i) => i);
+  const root = (i: number) => {
+    while (target[i] !== i) {
+      target[i] = target[target[i]];
+      i = target[i];
+    }
+    return i;
+  };
+  const area = c.area.slice();
+  const order = [...Array(count).keys()].filter((i) => area[i] < minArea).sort((a, b) => area[a] - area[b]);
+  for (const i of order) {
+    if (root(i) !== i || area[i] >= minArea) continue;
+    if (keep && keep[i]) continue;
+    let best = -1;
+    let bestLen = 0;
+    for (const [nb, len] of adj[i]) {
+      const r = root(nb);
+      if (r === i) continue;
+      if (len > bestLen) {
+        bestLen = len;
+        best = r;
+      }
+    }
+    if (best < 0) continue;
+    target[i] = best;
+    area[best] += area[i];
+    for (const [nb, len] of adj[i]) {
+      const r = root(nb);
+      if (r === best) continue;
+      adj[best].set(r, (adj[best].get(r) ?? 0) + len);
+      adj[r].set(best, (adj[r].get(best) ?? 0) + len);
+    }
+  }
+  const out = new Uint8Array(labels.length);
+  for (let p = 0; p < labels.length; p++) out[p] = c.label[root(c.comp[p])];
+  return out;
+}
+
+/**
+ * Removes anti-aliasing seams: thin components (inscribed width below `maxWidth` pixels) whose
+ * color lies between the colors of the two regions they separate. A thin component in a color of
+ * its own (a drawn line) is kept; it will be sewn as a running stitch or satin.
+ */
+export function removeSeams(
+  labels: Uint8Array,
+  w: number,
+  h: number,
+  maxWidth: number,
+  between: (seam: number, a: number, b: number) => boolean,
+): Uint8Array {
+  // Distance to the nearest pixel of another region: half the local width of every region.
+  const edge = new Uint8Array(labels.length);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      const l = labels[i];
+      if ((x > 0 && labels[i - 1] !== l) || (x + 1 < w && labels[i + 1] !== l) || (y > 0 && labels[i - w] !== l) || (y + 1 < h && labels[i + w] !== l)) edge[i] = 1;
+    }
+  }
+  const dist = distanceToSeeds(edge, w, h);
+  // A seam can run into a wide region of its own color (the dark edge between a light and a dark
+  // area joining a dark area further on). Its thin parts count on their own: whatever a disc of
+  // `maxWidth` does not reach inside the region (a morphological opening) is a component of its own.
+  const r = maxWidth / 2;
+  const core = (i: number) => 2 * (dist[i] + 1) > maxWidth;
+  const covered = new Uint8Array(labels.length);
+  const reach = Math.ceil(r);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      if (!core(i)) continue;
+      covered[i] = 1;
+      // Inner core pixels are covered already; only the core's rim reaches out.
+      if (x > 0 && x + 1 < w && y > 0 && y + 1 < h && core(i - 1) && core(i + 1) && core(i - w) && core(i + w)) continue;
+      const l = labels[i];
+      for (let yy = Math.max(0, y - reach); yy <= Math.min(h - 1, y + reach); yy++) {
+        for (let xx = Math.max(0, x - reach); xx <= Math.min(w - 1, x + reach); xx++) {
+          const j = yy * w + xx;
+          if (labels[j] === l && (xx - x) ** 2 + (yy - y) ** 2 <= r * r) covered[j] = 1;
+        }
+      }
+    }
+  }
+  const THIN = 0x100;
+  const split = new Uint16Array(labels.length);
+  for (let i = 0; i < labels.length; i++) split[i] = labels[i] === NONE || covered[i] ? labels[i] : labels[i] | THIN;
+  const c = components(split, w, h);
+  const real = (k: number) => c.label[k] & 0xff;
+  const maxHalf = new Float32Array(c.label.length);
+  for (let i = 0; i < labels.length; i++) maxHalf[c.comp[i]] = Math.max(maxHalf[c.comp[i]], dist[i] + 1);
+  const adj = adjacency(c, w, h);
+  const out = labels.slice();
+  for (let k = 0; k < c.label.length; k++) {
+    if (real(k) === NONE || 2 * maxHalf[k] > maxWidth) continue;
+    const nbs = [...adj[k]].filter(([nb]) => real(nb) !== real(k)).sort((a, b) => b[1] - a[1]);
+    if (nbs.length < 2) continue;
+    const a = real(nbs[0][0]);
+    const second = nbs.find(([nb]) => real(nb) !== a);
+    if (!second) continue;
+    const b = real(second[0]);
+    if (!between(real(k), a, b)) continue;
+    // Each pixel goes to whichever of the two sides is nearer: grow both into the seam.
+    let todo: number[] = [];
+    for (let y = c.minY[k]; y <= c.maxY[k]; y++) {
+      for (let x = c.minX[k]; x <= c.maxX[k]; x++) if (c.comp[y * w + x] === k) todo.push(y * w + x);
+    }
+    const seam = real(k);
+    while (todo.length) {
+      const changes: number[] = [];
+      const rest: number[] = [];
+      for (const i of todo) {
+        const x = i % w;
+        let pick = -1;
+        for (const j of [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, i - w, i + w]) {
+          if (j < 0 || j >= out.length) continue;
+          const l = out[j];
+          if (c.comp[j] !== k ? l === a || l === b : l !== seam) {
+            pick = l;
+            break;
+          }
+        }
+        if (pick >= 0) changes.push(i, pick);
+        else rest.push(i);
+      }
+      if (!changes.length) break;
+      for (let q = 0; q < changes.length; q += 2) out[changes[q]] = changes[q + 1];
+      todo = rest;
+    }
+  }
+  return out;
+}
+
+/**
+ * Background: the label covering at least 60 % of the image border (and three of its corners) is
+ * removed where it is connected to the border (4-connected flood fill), so the same color inside the
+ * design (eyes, the counters of letters) is still sewn.
+ */
+export function removeBackground(labels: Uint8Array, w: number, h: number): Uint8Array {
+  const counts = new Map<number, number>();
+  let total = 0;
+  const ring: number[] = [];
+  for (let x = 0; x < w; x++) ring.push(x, (h - 1) * w + x);
+  for (let y = 1; y < h - 1; y++) ring.push(y * w, y * w + w - 1);
+  for (const i of ring) {
+    const l = labels[i];
+    if (l === NONE) continue;
+    counts.set(l, (counts.get(l) ?? 0) + 1);
+    total++;
+  }
+  // Mostly transparent border: the image has its own background removed already.
+  if (total < ring.length * 0.5) return labels;
+  let bg = -1;
+  let best = 0;
+  for (const [l, k] of counts) {
+    if (k > best) {
+      best = k;
+      bg = l;
+    }
+  }
+  const corners = [0, w - 1, (h - 1) * w, h * w - 1].filter((i) => labels[i] === bg).length;
+  if (best < total * 0.6 || corners < 3) return labels;
+  const out = labels.slice();
+  const stack: number[] = ring.filter((i) => labels[i] === bg);
+  for (const i of stack) out[i] = NONE;
+  while (stack.length) {
+    const i = stack.pop()!;
+    const x = i % w;
+    for (const j of [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, i - w, i + w]) {
+      if (j < 0 || j >= out.length || out[j] !== bg) continue;
+      out[j] = NONE;
+      stack.push(j);
+    }
+  }
+  return out;
+}
