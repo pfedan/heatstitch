@@ -1,15 +1,13 @@
 import { COLOR_CHANGE, JUMP, STITCH, type Pattern } from '../model/pattern';
 import type { Viewport } from './viewport';
 
-/** Visual thread width in mm; clamped to at least one device pixel when zoomed out. */
-const THREAD_MM = 0.3;
-
 export function drawStitches(
   ctx: CanvasRenderingContext2D,
   vp: Viewport,
   p: Pattern,
   opacity: number,
   showJumps: boolean,
+  lineMm: number,
   from = 0,
   to = p.cmd.length - 1,
 ): void {
@@ -17,7 +15,8 @@ export function drawStitches(
   ctx.save();
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
-  const width = Math.max(0.75, THREAD_MM * vp.scale);
+  // Clamped to about one device pixel when zoomed out.
+  const width = Math.max(0.75, lineMm * vp.scale);
   const s = vp.scale / 10;
   const ox = vp.offsetX;
   const oy = vp.offsetY;

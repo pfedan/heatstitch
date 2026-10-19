@@ -108,6 +108,8 @@ export interface Settings {
   opacity: number;
   /** Stitch plan drawn as shaded threads with shadows instead of flat lines. */
   realistic: boolean;
+  /** Width of the flat stitch lines (the view that is not realistic) in mm. */
+  lineMm: number;
   /** Ablauf: objects with a known shape drawn as flat areas of their color instead of stitches. */
   shapesView: boolean;
   /** A scale bar of round millimetres at the foot of the stage. */
@@ -168,6 +170,7 @@ export const DEFAULTS: Settings = {
   overlay: false,
   opacity: 0.6,
   realistic: false,
+  lineMm: 0.3,
   shapesView: false,
   scaleBar: true,
   wheelZooms: false,
@@ -234,6 +237,7 @@ export function loadSettings(): Settings {
       profile,
       own,
       threadMm: typeof s.threadMm === 'number' && s.threadMm > 0 ? s.threadMm : threadWidthMm(profile),
+      lineMm: typeof s.lineMm === 'number' && s.lineMm > 0 ? s.lineMm : DEFAULTS.lineMm,
       background: hexColor(s.background),
       liveLight: typeof s.liveLight === 'boolean' ? s.liveLight : DEFAULTS.liveLight,
       fabricLook: typeof s.fabricLook === 'boolean' ? s.fabricLook : DEFAULTS.fabricLook,

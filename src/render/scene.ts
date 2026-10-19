@@ -127,10 +127,10 @@ export function drawScene(ctx: CanvasRenderingContext2D, w: number, h: number, s
       const all = st;
       const threads = (from: number, to: number) => {
         const part = { ...all, from, limit: to };
-        if (!s.realistic || !drawThreads(ctx, vp, pattern, 1, s.threadMm, part)) drawFlatStitches(ctx, vp, pattern, part, 1);
+        if (!s.realistic || !drawThreads(ctx, vp, pattern, 1, s.threadMm, part)) drawFlatStitches(ctx, vp, pattern, part, 1, s.lineMm);
       };
       drawWithPieces(ctx, vp, pattern, st.limit, shown, 1, s.realistic && s.fabricLook, threads);
-    } else if (!s.realistic || !drawThreads(ctx, vp, pattern, 1, s.threadMm, st)) drawFlatStitches(ctx, vp, pattern, st, 1);
+    } else if (!s.realistic || !drawThreads(ctx, vp, pattern, 1, s.threadMm, st)) drawFlatStitches(ctx, vp, pattern, st, 1, s.lineMm);
     const marks = shownMarks(s);
     if (marks.jumps) drawJumps(ctx, vp, pattern, st.limit, st.alpha, st.carried?.jumps);
     if (marks.jumps && flow.hidden?.length) drawHiddenWays(ctx, vp, pattern, flow.hidden, st.limit, st.alpha);
@@ -159,7 +159,7 @@ export function drawScene(ctx: CanvasRenderingContext2D, w: number, h: number, s
   const opacity = edit ? Math.max(0.85, s.overlay ? s.opacity : 0) : s.overlay ? s.opacity : 0;
   if (pattern && opacity > 0) {
     const threads = (from: number, to: number) => {
-      if (!s.realistic || !drawThreads(ctx, vp, pattern, opacity, s.threadMm, from > 0 || to < pattern.cmd.length - 1 ? { ...threadStyle(pattern), limit: to, from } : undefined)) drawStitches(ctx, vp, pattern, opacity, false, from, to);
+      if (!s.realistic || !drawThreads(ctx, vp, pattern, opacity, s.threadMm, from > 0 || to < pattern.cmd.length - 1 ? { ...threadStyle(pattern), limit: to, from } : undefined)) drawStitches(ctx, vp, pattern, opacity, false, s.lineMm, from, to);
     };
     if (hasPieces(pattern)) drawWithPieces(ctx, vp, pattern, pattern.cmd.length - 1, null, opacity, s.realistic && s.fabricLook, threads);
     else threads(0, pattern.cmd.length - 1);
@@ -177,7 +177,7 @@ export function drawScene(ctx: CanvasRenderingContext2D, w: number, h: number, s
     ctx.fillRect(0, 0, w, h);
     ctx.restore();
     for (const f of scene.focus) {
-      if (!s.realistic || !drawThreads(ctx, vp, f.pattern, 1, s.threadMm)) drawStitches(ctx, vp, f.pattern, 1, false);
+      if (!s.realistic || !drawThreads(ctx, vp, f.pattern, 1, s.threadMm)) drawStitches(ctx, vp, f.pattern, 1, false, s.lineMm);
       if (f.under) drawUnderlay(ctx, vp, f.pattern, f.under);
       drawPoints(ctx, vp, f.pattern);
     }

@@ -1311,7 +1311,7 @@ export class ImageMode {
     const p = this.result?.pattern;
     if (view === 'stitches' && p && !this.stroke) {
       const s = this.h.settings;
-      if (!s.realistic || !drawThreads(ctx, vp, p, 1, s.threadMm)) drawStitches(ctx, vp, p, 1, shownMarks(s).jumps);
+      if (!s.realistic || !drawThreads(ctx, vp, p, 1, s.threadMm)) drawStitches(ctx, vp, p, 1, shownMarks(s).jumps, s.lineMm);
       this.drawVeil(ctx, x0, y0, W * vp.scale, H * vp.scale);
       this.drawLetters(ctx, vp);
     }
