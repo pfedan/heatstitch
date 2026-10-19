@@ -61,7 +61,16 @@ describe('sewing a design from its object list', () => {
 /** The stitches of object `o` (0.1 mm), tie-in left out. */
 const stitchesOf = (p: Pattern, o: SewObject) => {
   const out: string[] = [];
-  for (let i = o.first + o.tieIn; i <= o.last; i++) if (p.cmd[i] === STITCH) out.push(`${p.x[i]},${p.y[i]}`);
+  // Its own stitches: not the hidden travel to it (made anew with the object before), nor its tie-in
+  // (after travel the lock it starts with, there and back within 1 mm, up to where it returns).
+  const travel = remembered(p, o)?.travel ?? 0;
+  let from = o.first + o.tieIn;
+  if (travel) {
+    const at = o.first + travel;
+    from = at;
+    for (let i = at + 1; i <= Math.min(o.last, at + 8) && Math.hypot(p.x[i] - p.x[at], p.y[i] - p.y[at]) <= 10; i++) from = i;
+  }
+  for (let i = from; i <= o.last; i++) if (p.cmd[i] === STITCH) out.push(`${p.x[i]},${p.y[i]}`);
   return out.join(' ');
 };
 
@@ -140,7 +149,8 @@ describe('scaling through the list', () => {
     const kinds = stitchKinds(p);
     const box = (q: Pattern, o: SewObject) => {
       const xs: number[] = [];
-      for (let i = o.first; i <= o.last; i++) if (q.cmd[i] === STITCH) xs.push(q.x[i]);
+      // Its own stitches, not the hidden travel to it.
+      for (let i = o.first + (remembered(q, o)?.travel ?? 0); i <= o.last; i++) if (q.cmd[i] === STITCH) xs.push(q.x[i]);
       return Math.max(...xs) - Math.min(...xs);
     };
     for (const o of objs.filter((x) => x.kind === 'fill' && specOf(p, x))) {

@@ -4,14 +4,14 @@ import type { Settings } from '../settings';
 import { commandTitle, getCommand } from '../shell/commands';
 import { swap } from '../shell/h';
 
-export type JumpFilter = 'all' | 'uncut' | 'cut';
+export type JumpFilter = 'all' | 'uncut' | 'cut' | 'hidden';
 
 export interface JumpHooks {
   select: (index: number | null) => void;
   hover: (index: number | null) => void;
   step: (dir: 1 | -1) => void;
-  /** Cut (true) or carry (false) the given jumps; indices into the full list. */
-  apply: (indices: number[], cut: boolean) => void;
+  /** Trim and tie, carry or hide again the given joins; indices into the full list. */
+  apply: (indices: number[], how: 'cut' | 'carry' | 'hide') => void;
   limitChanged: () => void;
 }
 
@@ -23,7 +23,7 @@ export interface JumpState {
 }
 
 /** What can be done to the selected jump. */
-export type JumpAction = 'cut' | 'tie' | 'carry';
+export type JumpAction = 'cut' | 'tie' | 'carry' | 'hide';
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, className = '', text = ''): HTMLElementTagNameMap[K] => {
   const e = document.createElement(tag);
@@ -78,15 +78,16 @@ export class JumpsPanel {
 
   /** Indices (into the full list) the current filter shows. */
   visible(list: Transition[]): number[] {
-    return list.flatMap((j, i) => (this.filter === 'all' || (this.filter === 'cut') === j.trimmed ? [i] : []));
+    return list.flatMap((j, i) => (this.filter === 'all' || (this.filter === 'hidden' ? !!j.hidden : !j.hidden && (this.filter === 'cut') === j.trimmed) ? [i] : []));
   }
 
   /** Jumps the rule would trim (from the limit on, not trimmed yet) and carry (shorter, trimmed or tied). */
   private rule(list: Transition[]): { toCut: number[]; toCarry: number[] } {
     const limit = this.s.trimMm;
     return {
-      toCut: list.flatMap((j, i) => (j.lengthMm >= limit && !j.trimmed ? [i] : [])),
-      toCarry: list.flatMap((j, i) => (j.lengthMm < limit && (j.trimmed || j.tieIn || j.tieOff) ? [i] : [])),
+      // Hidden ways lie under what is sewn later: no loose thread, nothing the rule decides.
+      toCut: list.flatMap((j, i) => (j.lengthMm >= limit && !j.trimmed && !j.hidden ? [i] : [])),
+      toCarry: list.flatMap((j, i) => (j.lengthMm < limit && !j.hidden && (j.trimmed || j.tieIn || j.tieOff) ? [i] : [])),
     };
   }
 
@@ -100,7 +101,7 @@ export class JumpsPanel {
   applyRule(cut: boolean): void {
     const r = this.rule(this.last?.list ?? []);
     const which = cut ? r.toCut : r.toCarry;
-    if (which.length) this.hooks.apply(which, cut);
+    if (which.length) this.hooks.apply(which, cut ? 'cut' : 'carry');
   }
 
   /** The actions the selected jump offers. */
@@ -108,14 +109,15 @@ export class JumpsPanel {
     const i = this.last?.selected;
     const j = i !== null && i !== undefined ? this.last!.list[i] : undefined;
     if (!j) return [];
-    return j.trimmed ? [...(tied(j) ? [] : (['tie'] as const)), 'carry'] : ['cut'];
+    if (j.hidden) return ['cut'];
+    return j.trimmed ? [...(tied(j) ? [] : (['tie'] as const)), 'carry', ...(j.byHand ? (['hide'] as const) : [])] : ['cut'];
   }
 
   /** Runs an action on the selected jump. */
   act(a: JumpAction): void {
     const i = this.last?.selected;
     if (i === null || i === undefined || !this.actions().includes(a)) return;
-    this.hooks.apply([i], a !== 'carry');
+    this.hooks.apply([i], a === 'carry' || a === 'hide' ? a : 'cut');
   }
 
   update(st: JumpState, force = false): void {
@@ -125,11 +127,12 @@ export class JumpsPanel {
     this.last = st;
     const { list } = st;
     const cut = list.filter((j) => j.trimmed).length;
+    const hidden = list.filter((j) => j.hidden).length;
     const limit = this.s.trimMm;
-    const longUncut = list.filter((j) => !j.trimmed && j.lengthMm >= limit).length;
+    const longUncut = list.filter((j) => !j.trimmed && !j.hidden && j.lengthMm >= limit).length;
     // The section's line: how many, a dot when long ones are not trimmed. It stays one short line
     // next to the title; how many lie loose is its hint.
-    const said = cut === list.length ? t('check.jumps.sum.all', { n: list.length }) : t('check.jumps.sum', { n: list.length, u: list.length - cut });
+    const said = cut + hidden === list.length ? t('check.jumps.sum.all', { n: list.length }) : t('check.jumps.sum', { n: list.length, u: list.length - cut - hidden });
     if (this.sum) this.sum.title = list.length ? said : '';
     this.sum?.replaceChildren(...(list.length ? [...(longUncut ? [el('span', 'dot caution')] : []), el('span', '', formatNumber(list.length))] : []));
     if (!list.length) {
@@ -154,7 +157,9 @@ export class JumpsPanel {
     prev.addEventListener('click', () => this.hooks.step(-1));
     next.addEventListener('click', () => this.hooks.step(1));
     nav.append(prev, el('span', 'pos', at < 0 ? String(shown.length) : t('findings.pos', { i: at + 1, n: shown.length })), next);
-    head.append(el('p', 'jumps-summary', t('jumps.summary', { n: list.length, cut })), nav);
+    const jumps = list.length - hidden;
+    const summary = [jumps || !hidden ? t('jumps.summary', { n: jumps, cut }) : '', hidden ? t('jumps.summary.hidden', { n: hidden }) : ''].filter(Boolean).join(' · ');
+    head.append(el('p', 'jumps-summary', summary), nav);
     const out: HTMLElement[] = [head];
     if (longUncut) out.push(el('p', 'jumps-warn', t('jumps.longUncut', { n: longUncut, v: formatNumber(limit, 1) })));
 
@@ -191,8 +196,8 @@ export class JumpsPanel {
     // Filter chips.
     const chips = el('div', 'f-chips');
     chips.setAttribute('role', 'radiogroup');
-    const counts: Record<JumpFilter, number> = { all: list.length, uncut: list.length - cut, cut };
-    (['all', 'uncut', 'cut'] as JumpFilter[]).forEach((f) => {
+    const counts: Record<JumpFilter, number> = { all: list.length, uncut: list.length - cut - hidden, cut, hidden };
+    (['all', 'uncut', 'cut', 'hidden'] as JumpFilter[]).forEach((f) => {
       const b = el('button', 'f-chip');
       b.type = 'button';
       b.setAttribute('role', 'radio');
@@ -221,13 +226,14 @@ export class JumpsPanel {
   }
 
   private item(j: Transition, i: number, selected: boolean): HTMLLIElement {
-    const li = el('li', `jump ${j.trimmed ? 'cut' : 'carried'}${selected ? ' selected' : ''}`);
-    const states = [t(j.trimmed ? 'jumps.state.cut' : 'jumps.state.carried')];
+    const li = el('li', `jump ${j.hidden ? 'hidden' : j.trimmed ? 'cut' : 'carried'}${selected ? ' selected' : ''}`);
+    const states = [t(j.hidden ? 'jumps.state.hidden' : j.trimmed ? 'jumps.state.cut' : 'jumps.state.carried')];
     if (j.trimmed) states.push(t(tied(j) ? 'jumps.state.tied' : 'jumps.state.untied'));
+    if (j.byHand) states.push(t('jumps.state.byHand'));
     const top = el('div', 'j-top');
     top.append(
-      el('span', 'j-icon', j.trimmed ? '✂' : '⤳'),
-      el('span', 'j-name', t('jumps.item', { n: i + 1 })),
+      el('span', 'j-icon', j.hidden ? '⋯' : j.trimmed ? '✂' : '⤳'),
+      el('span', 'j-name', t(j.hidden ? 'jumps.item.hidden' : 'jumps.item', { n: i + 1 })),
       el('span', 'j-meta', t('jumps.color', { n: j.block + 1 })),
       el('span', 'num', `${formatNumber(j.lengthMm, 1)} mm`),
     );
@@ -238,20 +244,22 @@ export class JumpsPanel {
     if (selected) {
       const acts = el('div', 'j-actions');
       acts.append(el('span', 'meta', states.join(', ')));
-      const add = (k: Key, cmd: string, cut: boolean, primary = false) => {
+      const add = (k: Key, cmd: string, how: 'cut' | 'carry' | 'hide', primary = false) => {
         const b = el('button', primary ? 'primary' : '', t(k));
         b.type = 'button';
         b.title = titleOf(cmd, k);
         b.addEventListener('click', (e) => {
           e.stopPropagation();
-          this.hooks.apply([i], cut);
+          this.hooks.apply([i], how);
         });
         acts.append(b);
       };
-      if (!j.trimmed) add('jumps.cut', 'jumps.cut', true, true);
+      if (!j.trimmed) add('jumps.cut', 'jumps.cut', 'cut', true);
       else {
-        if (!tied(j)) add('jumps.tie', 'jumps.tie', true, true);
-        add('jumps.carry', 'jumps.carry', false);
+        if (!tied(j)) add('jumps.tie', 'jumps.tie', 'cut', true);
+        add('jumps.carry', 'jumps.carry', 'carry');
+        // Trimmed by hand where a hidden way was or may be: it can go back under what is sewn later.
+        if (j.byHand) add('jumps.hide', 'jumps.hide', 'hide');
       }
       li.append(acts);
     }

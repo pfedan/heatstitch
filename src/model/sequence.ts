@@ -127,6 +127,10 @@ export interface Transition {
   tieOff: number;
   tieIn: number;
   block: number;
+  /** Not a jump: hidden travel under what is sewn later, `to` the first stitch after it (see travel.ts). */
+  hidden?: true;
+  /** Trimmed by hand: it stays trimmed whatever is changed later (see Remembered.cutIn). */
+  byHand?: true;
 }
 
 /**
@@ -184,7 +188,7 @@ export function carriedJumps(p: Pattern, list: Transition[]): CarriedJumps {
   const from = new Int32Array(p.cmd.length).fill(-1);
   const jumps = new Uint8Array(p.cmd.length);
   for (const t of list) {
-    if (t.trimmed || (p.x[t.from] === p.x[t.to] && p.y[t.from] === p.y[t.to])) continue;
+    if (t.trimmed || t.hidden || (p.x[t.from] === p.x[t.to] && p.y[t.from] === p.y[t.to])) continue;
     from[t.to] = t.from;
     for (let i = t.from + 1; i < t.to; i++) if (p.cmd[i] === JUMP) jumps[i] = 1;
   }

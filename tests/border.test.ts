@@ -56,7 +56,9 @@ const sameAt = (q: Pattern, x: SewObject, p: Pattern, o: SewObject) => {
   return q.x[i] === p.x[j] && q.y[i] === p.y[j] && x.block === o.block;
 };
 const firstStitch = (p: Pattern, o: SewObject) => {
-  for (let i = o.first; i <= o.last; i++) if (p.cmd[i] === STITCH) return i;
+  // After the travel hidden under what is sewn later (see travel.ts), which can come and go.
+  let skip = remembered(p, o)?.travel ?? 0;
+  for (let i = o.first; i <= o.last; i++) if (p.cmd[i] === STITCH && skip-- <= 0) return i;
   return o.first;
 };
 

@@ -150,8 +150,9 @@ describe('split a fill', () => {
     expect(a.fill!.angle).not.toBe(b.fill!.angle);
     // Together they cover the old area.
     expect(uncovered(whole, [areaOf(s.pattern, 0), areaOf(s.pattern, 1)])).toBeLessThan(0.002);
-    // One trim between the two parts (objects of one thread are kept apart by trims).
-    expect(trims(s.pattern)).toBe(before + 1);
+    // One trim between the two parts (objects of one thread are kept apart by trims), or the
+    // second part's hidden travel to it under its own rows.
+    expect(trims(s.pattern) + (remembered(s.pattern, objs[1])?.travel ? 1 : 0)).toBe(before + 1);
   });
 
   it('cuts a fill that leaves out apart where one part lies all under a later fill', () => {

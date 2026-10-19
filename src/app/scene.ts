@@ -19,6 +19,7 @@ import { borderRanges } from '../model/border';
 import { borderOf, designObjects, remembered, underlayRanges, type RestitchResult, analyze, restitchedPieces } from '../model/restitch';
 import { overlaps, type SewObject } from '../model/objects';
 import { stitchNumbers, colorBlocks, markers as findMarkers, transitions, sewingSeconds, recordOfStitch, carriedJumps } from '../model/sequence';
+import { withHiddenJoins } from '../model/travel';
 import { type Pattern, TRIM, COLOR_CHANGE, STITCH, type ThreadColor } from '../model/pattern';
 import { type StitchStyle, stitchColors, stitchAlpha } from '../render/flow';
 import { ui } from './state';
@@ -67,7 +68,8 @@ export function bindScene(app: SceneApp) {
       objects,
       objectAt,
       markers: findMarkers(p),
-      transitions: transitions(p),
+      // Jumps and hidden ways under what is sewn later, both listed and chosen alike.
+      transitions: withHiddenJoins(p, transitions(p)),
       numbers,
       total: numbers.length ? numbers[numbers.length - 1] : 0,
       colors: {},
@@ -352,6 +354,7 @@ export function bindScene(app: SceneApp) {
       style,
       areas: flat?.areas ?? null,
       markers: q.markers,
+      hidden: q.transitions.filter((t) => t.hidden),
       hover: ui.hoverJump !== null ? (q.transitions[ui.hoverJump] ?? null) : null,
       selected: ui.selectedJump !== null ? (q.transitions[ui.selectedJump] ?? null) : null,
       needle: app.player.complete ? -1 : style.limit,
