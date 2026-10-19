@@ -1,7 +1,7 @@
-import { contourFill, type DirField, Grid, sewRows } from './flow';
-import { fillRegion, type FillParams, type FillResult } from './fill';
-import { outline, sample, type Region } from './region';
-import { runStitch } from './run';
+import { core } from '../wasm/core';
+import { coreParams, coreRegions, fillOf, fillRegion, type FillParams, type FillResult } from './fill';
+import { fieldOf, type DirField } from './flow';
+import { regionIn, sample, type Region } from './region';
 import type { Pt } from './skeleton';
 
 /**
@@ -20,8 +20,10 @@ import type { Pt } from './skeleton';
  *   Echo is the contour fill with wide spacing.
  *
  * Every random choice comes from `seed`, so the same settings always give the same stitches.
+ *
+ * The fills and fields are computed by the Rust core (core/src/digitize/deco.rs); what the model
+ * layer and the tests use point by point (motif lines, cross stitch cells, boxes) stays here too.
  */
-
 export type Motif = 'diamonds' | 'waves' | 'stars' | 'hearts';
 export const MOTIFS: Motif[] = ['diamonds', 'waves', 'stars', 'hearts'];
 export type GridKind = 'hex' | 'diamond' | 'brick';
@@ -315,33 +317,6 @@ export function texturePoints(t: Texture, size: number, len: number, v: number, 
 // ------------------------------------------------------------------------------------------------
 // Fields
 
-/** A smooth random function of the plane, about -1.6 to 1.6, with features about `scale` mm wide. */
-export function noise(seed: number, scale: number, octaves = 4): (x: number, y: number) => number {
-  const rnd = random(seed);
-  const waves = Array.from({ length: octaves }, (_, o) => {
-    const a = rnd() * 2 * Math.PI;
-    const f = ((2 * Math.PI) / scale) * 1.9 ** o;
-    return { cx: Math.cos(a) * f, cy: Math.sin(a) * f, ph: rnd() * 2 * Math.PI, w: 1 / 1.7 ** o };
-  });
-  return (x, y) => waves.reduce((s, q) => s + q.w * Math.sin(q.cx * x + q.cy * y + q.ph), 0);
-}
-
-/** A field from the direction (radians) at each point of the region's grid; null leaves a cell empty. */
-function fieldOf(r: Region, dir: (p: Pt) => number | null): DirField {
-  const g = new Grid(r);
-  const n = g.gw * g.gh;
-  const c = new Float32Array(n);
-  const s = new Float32Array(n);
-  for (let k = 0; k < n; k++) {
-    if (!g.dom[k]) continue;
-    const t = dir(g.center(k % g.gw, Math.floor(k / g.gw)));
-    if (t === null) continue;
-    c[k] = Math.cos(2 * t);
-    s[k] = Math.sin(2 * t);
-  }
-  return { g, c, s };
-}
-
 /**
  * Wave rows: every row is the same wave, `height` mm from crest to middle and `length` mm long,
  * one spacing below the last, running at `angle` degrees. The crests drift a little from row to
@@ -362,9 +337,6 @@ export interface ZigzagRows {
   phase: number;
 }
 
-/** Shorter stitches at the edge go into the peak beside them (mm). */
-const ZIG_SHORT = 0.3;
-
 /**
  * Straight rows that zigzag, `p.spacing` apart, their peaks where `z` puts them: each row's peaks
  * lie on the same lines as the next row's, so the slants line up into chevrons (the knit look).
@@ -373,90 +345,7 @@ const ZIG_SHORT = 0.3;
  * the middle.
  */
 export function zigzagFill(r: Region, p: FillParams, z: ZigzagRows, start: Pt): FillResult | null {
-  const a = (z.angle * Math.PI) / 180;
-  const e: Pt = [Math.cos(a), Math.sin(a)];
-  const n: Pt = [-e[1], e[0]];
-  // Along a row, the wave turns this fast (radians per mm).
-  const ke = z.wave[0] * e[0] + z.wave[1] * e[1];
-  const kn = z.wave[0] * n[0] + z.wave[1] * n[1];
-  if (Math.abs(ke) < 1e-6) return null;
-  const [x0, y0, x1, y1] = regionBox(r);
-  const corners: Pt[] = [
-    [x0, y0],
-    [x1, y0],
-    [x0, y1],
-    [x1, y1],
-  ];
-  const us = corners.map((q) => q[0] * e[0] + q[1] * e[1]);
-  const vs = corners.map((q) => q[0] * n[0] + q[1] * n[1]);
-  const reach = Math.max(0, p.pull);
-  const inside = (q: Pt) => sample(r, r.sdf, q[0], q[1]) < reach;
-  /** Where the stitch from q (inside) towards s (outside) leaves the area. */
-  const edge = (q: Pt, s: Pt): Pt => {
-    let lo = 0;
-    let hi = 1;
-    for (let i = 0; i < 12; i++) {
-      const m = (lo + hi) / 2;
-      if (inside([q[0] + (s[0] - q[0]) * m, q[1] + (s[1] - q[1]) * m])) lo = m;
-      else hi = m;
-    }
-    return [q[0] + (s[0] - q[0]) * lo, q[1] + (s[1] - q[1]) * lo];
-  };
-  const rows: Pt[][] = [];
-  let row: Pt[] = [];
-  const add = (q: Pt) => {
-    const last = row[row.length - 1];
-    if (last && dist(last, q) < ZIG_SHORT) row[row.length - 1] = q;
-    else row.push(q);
-  };
-  const end = () => {
-    let l = 0;
-    for (let i = 1; i < row.length; i++) l += dist(row[i - 1], row[i]);
-    if (row.length > 1 && l > 1) rows.push(row);
-    row = [];
-  };
-  // Peak j of the row at v: on the high side for even j, where the wave reaches phase + j pi.
-  const uMin = Math.min(...us) - 1;
-  const uMax = Math.max(...us) + 1;
-  const v0 = Math.floor((Math.min(...vs) - z.height / 2) / p.spacing) * p.spacing + p.spacing / 2;
-  for (let v = v0; v < Math.max(...vs) + z.height / 2; v += p.spacing) {
-    const at = (j: number): Pt => {
-      const w = v + ((((j % 2) + 2) % 2 === 0 ? 1 : -1) * z.height) / 2;
-      const u = (z.phase + j * Math.PI - kn * w) / ke;
-      return [e[0] * u + n[0] * w, e[1] * u + n[1] * w];
-    };
-    const jAt = (u: number) => (ke * u + kn * v - z.phase) / Math.PI;
-    const margin = Math.ceil((Math.abs(kn) * z.height) / 2 / Math.PI) + 1;
-    const j0 = Math.floor(Math.min(jAt(uMin), jAt(uMax))) - margin;
-    const j1 = Math.ceil(Math.max(jAt(uMin), jAt(uMax))) + margin;
-    let prev = at(j0);
-    let was = inside(prev);
-    for (let j = j0 + 1; j <= j1; j++) {
-      const q = at(j);
-      // Along the stitch in small steps: it may leave the area and come back (a notch).
-      const steps = Math.max(1, Math.ceil(dist(prev, q) / 0.2));
-      let from = prev;
-      for (let s = 1; s <= steps; s++) {
-        const t: Pt = [prev[0] + ((q[0] - prev[0]) * s) / steps, prev[1] + ((q[1] - prev[1]) * s) / steps];
-        const now = inside(t);
-        if (now && !was) add(edge(t, from));
-        else if (!now && was) {
-          add(edge(from, t));
-          end();
-        }
-        was = now;
-        from = t;
-      }
-      if (was) {
-        if (!row.length) add(prev);
-        add(q);
-      }
-      prev = q;
-    }
-    end();
-  }
-  // Rows chain at their ends along the edge, which lie up to a height apart.
-  return rows.length ? sewRows(r, rows, p, start, z.angle, Math.max(p.spacing, (z.height + p.spacing) / 2.5), true) : null;
+  return fillOf(core().zigzagFill(regionIn(r), coreParams(p), z, start[0], start[1], ...coreRegions(r, p)), true);
 }
 
 /** Grain: features about this wide (mm); wood rings, not ripples. */
@@ -464,38 +353,25 @@ const GRAIN_SCALE = 125;
 
 /** Rows that wander softly around `angle` degrees, like wood grain; `strength` 0 to 1. */
 export function grainField(r: Region, angle: number, strength: number, seed: number, scale = GRAIN_SCALE): DirField {
-  const n = noise(seed, scale, 5);
-  const a = (angle * Math.PI) / 180;
-  return fieldOf(r, (p) => a + strength * 1.1 * n(p[0], p[1]));
+  return fieldOf(core().grainField(regionIn(r), angle, strength, seed, scale));
 }
 
 /** Rows that run out from `focus` (mm) like rays. */
 export function rayField(r: Region, focus: Pt): DirField {
-  return fieldOf(r, (p) => (dist(p, focus) < 0.3 ? null : Math.atan2(p[1] - focus[1], p[0] - focus[0])));
+  return fieldOf(core().rayField(regionIn(r), focus[0], focus[1]));
 }
 
 /** Rows in rings around `focus` (mm), like Ink/Stitch's circle fill. */
 export function circleField(r: Region, focus: Pt): DirField {
-  return fieldOf(r, (p) => (dist(p, focus) < 0.3 ? null : Math.atan2(p[1] - focus[1], p[0] - focus[0]) + Math.PI / 2));
+  return fieldOf(core().circleField(regionIn(r), focus[0], focus[1]));
 }
 
 /**
  * Rows turning around a few points inside the region (`centers`, mm, or picked by `seed`), the
  * next one turning the other way.
  */
-export function swirlField(r: Region, seed: number, centers: Pt[] = swirlCenters(r, seed)): DirField {
-  return fieldOf(r, (p) => {
-    let vx = 0;
-    let vy = 0;
-    centers.forEach((c, i) => {
-      const dx = p[0] - c[0];
-      const dy = p[1] - c[1];
-      const w = (i % 2 ? -1 : 1) / (dx * dx + dy * dy + 16);
-      vx -= dy * w;
-      vy += dx * w;
-    });
-    return Math.hypot(vx, vy) < 1e-12 ? null : Math.atan2(vy, vx);
-  });
+export function swirlField(r: Region, seed: number, centers?: Pt[]): DirField {
+  return fieldOf(core().swirlField(regionIn(r), seed, centers && Float64Array.from(centers.flat())));
 }
 
 /** The extent of the region's pixels (mm): min x, min y, max x, max y. */
@@ -527,15 +403,6 @@ export function turning(angle = 0): { to: (q: Pt) => Pt; from: (q: Pt) => Pt } {
   const c = Math.cos(a);
   const s = Math.sin(a);
   return { to: (q) => [c * q[0] - s * q[1], s * q[0] + c * q[1]], from: (q) => [c * q[0] + s * q[1], c * q[1] - s * q[0]] };
-}
-
-/** The region's box in the frame of a pattern turned by `angle` degrees (see turning). */
-function turnedBox(r: Region, angle = 0): [number, number, number, number] {
-  const [x0, y0, x1, y1] = regionBox(r);
-  if (!angle) return [x0, y0, x1, y1];
-  const { from } = turning(angle);
-  const qs = ([[x0, y0], [x1, y0], [x1, y1], [x0, y1]] as Pt[]).map(from);
-  return [Math.min(...qs.map((q) => q[0])), Math.min(...qs.map((q) => q[1])), Math.max(...qs.map((q) => q[0])), Math.max(...qs.map((q) => q[1]))];
 }
 
 /** One to three points well inside the region, far enough apart, picked by `seed`. */
@@ -578,440 +445,22 @@ export interface OpenParams {
   origin?: Pt;
 }
 
-/** Bean stitch: forward, back, forward. */
-function tripled(run: Pt[]): Pt[] {
-  const out: Pt[] = [run[0]];
-  for (let i = 1; i < run.length; i++) out.push(run[i], run[i - 1], run[i]);
-  return out;
-}
-
-/** Closed loops sewn one after the other, each from its point nearest the needle. */
-function sewLoops(loops: Pt[][], start: Pt, p: OpenParams): Pt[][] {
-  const runs: Pt[][] = [];
-  let pos = start;
-  const todo = loops.filter((l) => l.length > 2);
-  while (todo.length) {
-    let bi = 0;
-    let bk = 0;
-    let bd = Infinity;
-    todo.forEach((l, i) =>
-      l.forEach((q, k) => {
-        const d = dist(pos, q);
-        if (d < bd) {
-          bd = d;
-          bi = i;
-          bk = k;
-        }
-      }),
-    );
-    const l = todo.splice(bi, 1)[0];
-    const loop = [...l.slice(bk), ...l.slice(0, bk), l[bk]];
-    let run = runStitch(loop, p.stitch, 0.2);
-    if (p.triple) run = tripled(run);
-    runs.push(run);
-    pos = run[run.length - 1];
-  }
-  return runs;
-}
-
-const DIRS: Pt[] = [
-  [1, 0],
-  [0, 1],
-  [-1, 0],
-  [0, -1],
-];
-
-/**
- * The outline of a random spanning tree on a grid of `cell` mm inside the region, one closed loop
- * per connected part. `maze` grows the tree depth first (long corridors, a labyrinth), else from a
- * random edge of all grown so far (short branches, a meander). The grid is turned by `angle`
- * degrees (see turning).
- */
-function treeLoops(r: Region, cell: number, seed: number, maze: boolean, margin: number, angle = 0, phase: Pt = [0, 0]): Pt[][] {
-  const rnd = random(seed);
-  const [bx0, by0, bx1, by1] = turnedBox(r, angle);
-  const { to } = turning(angle);
-  // Anchored to the design origin, like tatami rows (shifted by `phase` mm).
-  const i0 = Math.floor((bx0 - phase[0]) / cell);
-  const j0 = Math.floor((by0 - phase[1]) / cell);
-  const gw = Math.ceil((bx1 - phase[0]) / cell) - i0 + 1;
-  const gh = Math.ceil((by1 - phase[1]) / cell) - j0 + 1;
-  const at = (i: number, j: number): Pt => [(i0 + i + 0.5) * cell + phase[0], (j0 + j + 0.5) * cell + phase[1]];
-  // The loop runs through the centers of the cells' quarters (spanning tree coverage, Gabriely and
-  // Rimon): a quarter is free where its center keeps the margin left beyond the quarter cell.
-  const q = cell / 4;
-  const free = (i: number, j: number, dx: number, dy: number) => {
-    const [x, y] = at(i, j);
-    const [sx, sy] = to([x + dx * q, y + dy * q]);
-    return sample(r, r.sdf, sx, sy) < -(margin - q);
-  };
-  // Free quarters per cell, bit (dx > 0) + 2 (dy > 0); a cell with all four free joins the tree.
-  const quarters = new Uint8Array(gw * gh);
-  for (let j = 0; j < gh; j++) {
-    for (let i = 0; i < gw; i++) {
-      let m = 0;
-      for (let b = 0; b < 4; b++) if (free(i, j, b & 1 ? 1 : -1, b & 2 ? 1 : -1)) m |= 1 << b;
-      quarters[j * gw + i] = m;
-    }
-  }
-  const ok = quarters.map((m) => (m === 15 ? 1 : 0));
-  const seen = new Uint8Array(gw * gh);
-  // Tree edges per cell: bit d for direction d.
-  const links = new Uint8Array(gw * gh);
-  const grown: number[] = [];
-  const shuffled = (): number[] => {
-    const d = [0, 1, 2, 3];
-    for (let i = 3; i > 0; i--) {
-      const k = Math.floor(rnd() * (i + 1));
-      [d[i], d[k]] = [d[k], d[i]];
-    }
-    return d;
-  };
-  for (let root = 0; root < gw * gh; root++) {
-    if (!ok[root] || seen[root]) continue;
-    seen[root] = 1;
-    if (maze) {
-      const stack = [root];
-      while (stack.length) {
-        const c = stack[stack.length - 1];
-        const ci = c % gw;
-        const cj = Math.floor(c / gw);
-        let moved = false;
-        for (const d of shuffled()) {
-          const ni = ci + DIRS[d][0];
-          const nj = cj + DIRS[d][1];
-          if (ni < 0 || nj < 0 || ni >= gw || nj >= gh) continue;
-          const nk = nj * gw + ni;
-          if (!ok[nk] || seen[nk]) continue;
-          seen[nk] = 1;
-          links[c] |= 1 << d;
-          links[nk] |= 1 << ((d + 2) % 4);
-          stack.push(nk);
-          moved = true;
-          break;
-        }
-        if (!moved) stack.pop();
-      }
-    } else {
-      const front: [number, number][] = [];
-      const grow = (c: number) => {
-        for (let d = 0; d < 4; d++) front.push([c, d]);
-      };
-      grow(root);
-      while (front.length) {
-        const [c, d] = front.splice(Math.floor(rnd() * front.length), 1)[0];
-        const ni = (c % gw) + DIRS[d][0];
-        const nj = Math.floor(c / gw) + DIRS[d][1];
-        if (ni < 0 || nj < 0 || ni >= gw || nj >= gh) continue;
-        const nk = nj * gw + ni;
-        if (!ok[nk] || seen[nk]) continue;
-        seen[nk] = 1;
-        links[c] |= 1 << d;
-        links[nk] |= 1 << ((d + 2) % 4);
-        grow(nk);
-      }
-    }
-    grown.push(root);
-  }
-  // Cells along the edge with only two free quarters, on the side of a tree cell, hang on it as
-  // half leaves: the loop turns back through those two quarters (as in full spanning tree
-  // coverage), so the edge keeps no more than about one line spacing free.
-  const half = new Int8Array(gw * gh).fill(-1);
-  const sideFree = (m: number, d: number) => {
-    // The two quarters on side d of a cell (d as in DIRS).
-    const side = d === 0 ? 0b1010 : d === 1 ? 0b1100 : d === 2 ? 0b0101 : 0b0011;
-    return (m & side) === side;
-  };
-  for (const d of shuffledAll(rnd, gw * gh)) {
-    if (ok[d] || !quarters[d]) continue;
-    const ci = d % gw;
-    const cj = Math.floor(d / gw);
-    for (const t of [0, 1, 2, 3]) {
-      const ni = ci + DIRS[t][0];
-      const nj = cj + DIRS[t][1];
-      if (ni < 0 || nj < 0 || ni >= gw || nj >= gh) continue;
-      const nk = nj * gw + ni;
-      if (!ok[nk] || !sideFree(quarters[d], t)) continue;
-      // The tree cell's side towards it is free: it is a whole cell.
-      links[nk] |= 1 << ((t + 2) % 4);
-      links[d] |= 1 << t;
-      half[d] = t;
-      break;
-    }
-  }
-  return grown.map((root) => outlineOfTree(root, gw, links, at, q, half).map(to));
-}
-
-/** Shifts of the grid tried when the one anchored at the origin fits no cell, in quarters of a cell. */
-const PHASES = 4;
-
-/**
- * The loops of treeLoops on the grid anchored at the design origin. Where not one cell of that grid
- * fits (a narrow shape barely wider than a cell, lying across the grid lines), the grid shifted by
- * the quarter cells that fit the most of it: whether a shape can be sewn must not depend on where
- * it lies.
- */
-function anchoredTreeLoops(r: Region, cell: number, seed: number, maze: boolean, margin: number, angle = 0): Pt[][] {
-  const loops = treeLoops(r, cell, seed, maze, margin, angle);
-  if (loops.length) return loops;
-  let best = loops;
-  let most = 0;
-  for (let j = 0; j < PHASES; j++) {
-    for (let i = 0; i < PHASES; i++) {
-      if (!i && !j) continue;
-      const shifted = treeLoops(r, cell, seed, maze, margin, angle, [(i * cell) / PHASES, (j * cell) / PHASES]);
-      const length = shifted.reduce((n, l) => n + l.reduce((m, q, k) => (k ? m + dist(l[k - 1], q) : m), 0), 0);
-      if (length > most) {
-        most = length;
-        best = shifted;
-      }
-    }
-  }
-  return best;
-}
-
-/** The numbers 0 to n - 1 in a random order. */
-function shuffledAll(rnd: () => number, n: number): number[] {
-  const a = Array.from({ length: n }, (_, i) => i);
-  for (let i = n - 1; i > 0; i--) {
-    const k = Math.floor(rnd() * (i + 1));
-    [a[i], a[k]] = [a[k], a[i]];
-  }
-  return a;
-}
-
-/**
- * Walks round a tree with it on the left, a quarter cell off its edges, and returns the corners
- * of that walk: at every cell it takes the first link turning right, then straight on, left, back.
- */
-function outlineOfTree(root: number, gw: number, links: Uint8Array, at: (i: number, j: number) => Pt, q: number, half: Int8Array): Pt[] {
-  const right = (d: number) => (d + 1) % 4; // y grows downwards: (1,0) turned right is (0,1)
-  const off = (d: number): Pt => DIRS[right(d)];
-  const pos = (c: number) => at(c % gw, Math.floor(c / gw));
-  if (!links[root]) {
-    const [x, y] = pos(root);
-    return [
-      [x - q, y - q],
-      [x + q, y - q],
-      [x + q, y + q],
-      [x - q, y + q],
-      [x - q, y - q],
-    ];
-  }
-  let d0 = 0;
-  while (!(links[root] & (1 << d0))) d0++;
-  const out: Pt[] = [];
-  let c = root;
-  let d = d0;
-  for (let guard = 0; guard < 8 * links.length + 8; guard++) {
-    // Along the link from c in direction d, to its next cell.
-    const nc = c + DIRS[d][0] + DIRS[d][1] * gw;
-    // At nc: the next direction, right first.
-    let nd = -1;
-    for (const t of [right(d), d, (d + 3) % 4, (d + 2) % 4]) {
-      if (links[nc] & (1 << t)) {
-        nd = t;
-        break;
-      }
-    }
-    const v = pos(nc);
-    const o1 = off(d);
-    if (nd === d) {
-      // Straight on: no corner.
-    } else if (nd === (d + 2) % 4) {
-      // Dead end: round the cell's far side, or for a half leaf its near side (its two free quarters).
-      const f = half[nc] >= 0 ? -1 : 1;
-      out.push([v[0] + q * (o1[0] + f * DIRS[d][0]), v[1] + q * (o1[1] + f * DIRS[d][1])]);
-      out.push([v[0] + q * (-o1[0] + f * DIRS[d][0]), v[1] + q * (-o1[1] + f * DIRS[d][1])]);
-    } else {
-      const o2 = off(nd);
-      out.push([v[0] + q * (o1[0] + o2[0]), v[1] + q * (o1[1] + o2[1])]);
-    }
-    c = nc;
-    d = nd;
-    if (c === root && d === d0) break;
-  }
-  out.push(out[0]);
-  return out;
-}
-
-/**
- * A closed loop of straight runs with every corner rounded to an arc of `radius` mm (less where a
- * run is too short for both of its ends): unlike smoothing, the runs keep their place, so lines
- * that lie `2 * radius` apart stay that far apart and a dead end becomes a half circle.
- */
-function rounded(loop: Pt[], radius: number): Pt[] {
-  // Without repeated points and points in the middle of a straight run.
-  const pts: Pt[] = [];
-  for (const q of loop.slice(0, -1)) if (!pts.length || dist(pts[pts.length - 1], q) > 1e-9) pts.push(q);
-  const n0 = pts.length;
-  const corners = pts.filter((q, i) => {
-    const a = pts[(i + n0 - 1) % n0];
-    const b = pts[(i + 1) % n0];
-    return Math.abs((q[0] - a[0]) * (b[1] - q[1]) - (q[1] - a[1]) * (b[0] - q[0])) > 1e-9;
-  });
-  const n = corners.length;
-  if (n < 3) return loop;
-  const out: Pt[] = [];
-  for (let i = 0; i < n; i++) {
-    const a = corners[(i + n - 1) % n];
-    const c = corners[i];
-    const b = corners[(i + 1) % n];
-    const la = dist(a, c);
-    const lb = dist(c, b);
-    const ua: Pt = [(a[0] - c[0]) / la, (a[1] - c[1]) / la];
-    const ub: Pt = [(b[0] - c[0]) / lb, (b[1] - c[1]) / lb];
-    // Tangent length of an arc of the radius between the two runs.
-    const half = Math.acos(Math.max(-1, Math.min(1, ua[0] * ub[0] + ua[1] * ub[1]))) / 2;
-    const t = Math.min(radius / Math.tan(half), la / 2, lb / 2);
-    const p0: Pt = [c[0] + ua[0] * t, c[1] + ua[1] * t];
-    const p1: Pt = [c[0] + ub[0] * t, c[1] + ub[1] * t];
-    // The arc as a quadratic curve with its control point at the corner.
-    const steps = 6;
-    for (let k = 0; k <= steps; k++) {
-      const s = k / steps;
-      out.push([(1 - s) * (1 - s) * p0[0] + 2 * s * (1 - s) * c[0] + s * s * p1[0], (1 - s) * (1 - s) * p0[1] + 2 * s * (1 - s) * c[1] + s * s * p1[1]]);
-    }
-  }
-  return [...out, out[0]];
-}
-
-/** Points every `step` mm along a closed loop (keeping its corners close enough). */
-function densify(loop: Pt[], step: number): Pt[] {
-  const out: Pt[] = [loop[0]];
-  for (let i = 1; i < loop.length; i++) {
-    const a = loop[i - 1];
-    const b = loop[i];
-    const n = Math.max(1, Math.ceil(dist(a, b) / step));
-    for (let k = 1; k <= n; k++) out.push([a[0] + ((b[0] - a[0]) * k) / n, a[1] + ((b[1] - a[1]) * k) / n]);
-  }
-  return out;
-}
-
 /**
  * Meander (stippling): a tree outline with its corners rounded, bent by a smooth warp of the plane,
  * which keeps the line from crossing itself. Lines are `size` mm apart.
  */
 export function meanderFill(r: Region, p: OpenParams, start: Pt): FillResult | null {
-  const cell = 2 * p.size;
-  const amp = 0.2 * cell;
-  const nx = noise(p.seed * 31 + 1, 3 * cell, 2);
-  const ny = noise(p.seed * 31 + 2, 3 * cell, 2);
-  // The warp fades out towards the edge, so the line can come as close to it as a maze's and is
-  // never pushed out (it moves a point by less than half its depth beyond the 0.2 mm kept free).
-  const warp = ([x, y]: Pt): Pt => {
-    const f = amp * 0.6 * Math.min(1, Math.max(0, (-sample(r, r.sdf, x, y) - 0.2) / (2 * amp)));
-    return [x + f * nx(x, y), y + f * ny(x, y)];
-  };
-  const loops = anchoredTreeLoops(r, cell, p.seed, false, cell / 4 + 0.2, p.angle).map((l) => densify(rounded(l, cell / 4), cell / 8).map(warp));
-  const runs = sewLoops(loops, start, p);
-  return runs.length ? { runs, angle: 0, under: 0 } : null;
+  return openFill(r, 'meander', null, p, start);
 }
 
 /** Maze: the tree outline with straight corridors and sharp corners. Lines are `size` mm apart. */
 export function mazeFill(r: Region, p: OpenParams, start: Pt): FillResult | null {
-  const cell = 2 * p.size;
-  const runs = sewLoops(anchoredTreeLoops(r, cell, p.seed, true, cell / 4 + 0.2, p.angle), start, p);
-  return runs.length ? { runs, angle: 0, under: 0 } : null;
+  return openFill(r, 'maze', null, p, start);
 }
 
 /** Echo: rings `size` mm apart along the edge, like echo quilting. */
 export function echoFill(r: Region, p: OpenParams, start: Pt): FillResult | null {
-  const res = contourFill(r, { spacing: p.size, stitch: p.stitch, angle: 0, pull: 0, underlay: false, tolerance: 0.2 }, start);
-  if (!res) return null;
-  return { ...res, runs: p.triple ? res.runs.map(tripled) : res.runs, under: 0 };
-}
-
-/** A graph of points and their edges, keyed by the points rounded to 0.01 mm. */
-class Graph {
-  pts = new Map<string, Pt>();
-  adj = new Map<string, Set<string>>();
-  key = (q: Pt) => `${Math.round(q[0] * 100)},${Math.round(q[1] * 100)}`;
-  add(a: Pt, b: Pt): void {
-    const ka = this.key(a);
-    const kb = this.key(b);
-    if (ka === kb) return;
-    this.pts.set(ka, a);
-    this.pts.set(kb, b);
-    if (!this.adj.has(ka)) this.adj.set(ka, new Set());
-    if (!this.adj.has(kb)) this.adj.set(kb, new Set());
-    this.adj.get(ka)!.add(kb);
-    this.adj.get(kb)!.add(ka);
-  }
-  /** Takes away dead ends, again and again, so only closed cells stay. */
-  prune(): void {
-    const leaves = [...this.adj.keys()].filter((k) => this.adj.get(k)!.size < 2);
-    while (leaves.length) {
-      const k = leaves.pop()!;
-      const ns = this.adj.get(k);
-      if (!ns) continue;
-      this.adj.delete(k);
-      for (const n of ns) {
-        const m = this.adj.get(n);
-        if (!m) continue;
-        m.delete(k);
-        if (m.size < 2) leaves.push(n);
-      }
-    }
-  }
-  /**
-   * Every edge once there and back, depth first, one run per connected part, the parts in the
-   * order the needle reaches them.
-   */
-  walk(start: Pt): Pt[][] {
-    const used = new Set<string>();
-    const done = new Set<string>();
-    const runs: Pt[][] = [];
-    let pos = start;
-    for (;;) {
-      let first: string | null = null;
-      let fd = Infinity;
-      for (const [k] of this.adj) {
-        if (done.has(k)) continue;
-        const d = dist(pos, this.pts.get(k)!);
-        if (d < fd) {
-          fd = d;
-          first = k;
-        }
-      }
-      if (first === null) break;
-      const path: Pt[] = [this.pts.get(first)!];
-      const stack: string[] = [first];
-      done.add(first);
-      while (stack.length) {
-        const v = stack[stack.length - 1];
-        let next: string | null = null;
-        // The nearest unused edge, so the walk stays local.
-        let nd = Infinity;
-        for (const w of this.adj.get(v)!) {
-          const e = v < w ? `${v}|${w}` : `${w}|${v}`;
-          if (used.has(e)) continue;
-          const d = dist(this.pts.get(v)!, this.pts.get(w)!) + (done.has(w) ? 1e6 : 0);
-          if (d < nd) {
-            nd = d;
-            next = w;
-          }
-        }
-        if (next === null) {
-          stack.pop();
-          if (stack.length) path.push(this.pts.get(stack[stack.length - 1])!);
-          continue;
-        }
-        used.add(v < next ? `${v}|${next}` : `${next}|${v}`);
-        path.push(this.pts.get(next)!);
-        if (done.has(next)) {
-          // Already reached: back at once (the edge is sewn twice), the walk goes on from v.
-          path.push(this.pts.get(v)!);
-        } else {
-          done.add(next);
-          stack.push(next);
-        }
-      }
-      if (path.length > 1) runs.push(path);
-      pos = path[path.length - 1];
-    }
-    return runs;
-  }
+  return openFill(r, 'echo', null, p, start);
 }
 
 /**
@@ -1019,55 +468,7 @@ class Graph {
  * connected part.
  */
 export function gridFill(r: Region, p: OpenParams, kind: GridKind, start: Pt): FillResult | null {
-  const [x0, y0, x1, y1] = turnedBox(r, p.angle);
-  const { to } = turning(p.angle);
-  const s = p.size;
-  const pieces: Piece[] = [];
-  const add = (a0: Pt, b0: Pt) => {
-    const a = to(a0);
-    const b = to(b0);
-    // Each lattice line once, the same way round from either cell it borders.
-    pieces.push(...clipped(r, a[0] < b[0] || (a[0] === b[0] && a[1] < b[1]) ? [a, b] : [b, a], GRID_MARGIN));
-  };
-  if (kind === 'hex') {
-    const rad = s / Math.sqrt(3);
-    const hx = s;
-    const hy = 1.5 * rad;
-    for (let j = Math.floor(y0 / hy) - 1; j <= Math.ceil(y1 / hy) + 1; j++) {
-      for (let i = Math.floor(x0 / hx) - 1; i <= Math.ceil(x1 / hx) + 1; i++) {
-        const cx = i * hx + (j % 2 ? hx / 2 : 0);
-        const cy = j * hy;
-        const c: Pt[] = [];
-        for (let k = 0; k < 6; k++) c.push([cx + rad * Math.cos(((30 + 60 * k) * Math.PI) / 180), cy + rad * Math.sin(((30 + 60 * k) * Math.PI) / 180)]);
-        for (let k = 0; k < 6; k++) add(c[k], c[(k + 1) % 6]);
-      }
-    }
-  } else if (kind === 'diamond') {
-    // A square grid turned by 45 degrees, `size` across a diamond.
-    const h = s / 2;
-    for (let j = Math.floor(y0 / h) - 1; j <= Math.ceil(y1 / h) + 1; j++) {
-      for (let i = Math.floor(x0 / s) - 1; i <= Math.ceil(x1 / s) + 1; i++) {
-        const c: Pt = [i * s + (j % 2 ? h : 0), j * h];
-        add(c, [c[0] + h, c[1] + h]);
-        add(c, [c[0] - h, c[1] + h]);
-      }
-    }
-  } else {
-    // Bricks twice as long as high, every row shifted by half a brick.
-    const h = s / 2;
-    for (let j = Math.floor(y0 / h) - 1; j <= Math.ceil(y1 / h) + 1; j++) {
-      for (let i = Math.floor(x0 / h) - 1; i <= Math.ceil(x1 / h) + 1; i++) {
-        const a: Pt = [i * h, j * h];
-        add(a, [a[0] + h, a[1]]);
-        if ((((i + j) % 2) + 2) % 2 === 0) add(a, [a[0], a[1] + h]);
-      }
-    }
-  }
-  const g = latticeGraph(r, pieces, GRID_MARGIN);
-  g.prune();
-  let runs = g.walk(start).map((run) => runStitch(run, p.stitch, 0.05));
-  if (p.triple) runs = runs.map(tripled);
-  return runs.length ? { runs, angle: 0, under: 0 } : null;
+  return openFill(r, 'grid', kind, p, start);
 }
 
 /**
@@ -1078,179 +479,7 @@ export function gridFill(r: Region, p: OpenParams, kind: GridKind, start: Pt): F
  * as a double line.
  */
 export function motifFill(r: Region, p: OpenParams, figure: Figure, start: Pt): FillResult | null {
-  const [x0, y0, x1, y1] = turnedBox(r, p.angle);
-  const { to } = turning(p.angle);
-  const s = p.size;
-  const hy = s * FIGURE_ROW;
-  const shape = figureOutline(figure, s * FIGURE_SHARE);
-  // The points where a figure is strung: its leftmost and rightmost.
-  let li = 0;
-  let ri = 0;
-  shape.forEach((q, i) => {
-    if (q[0] < shape[li][0]) li = i;
-    if (q[0] > shape[ri][0]) ri = i;
-  });
-  const pieces: Piece[] = [];
-  const inside = (q: Pt) => sample(r, r.sdf, q[0], q[1]) < -GRID_MARGIN;
-  const add = (a0: Pt, b0: Pt) => {
-    const a = to(a0);
-    const b = to(b0);
-    // The short pieces of a curve are all kept (a grid drops pieces under MIN_PIECE where the edge
-    // cuts them), so a figure the edge cuts stays one line from edge to edge.
-    const m: Pt = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-    if (inside(a) && inside(b) && inside(m)) pieces.push({ a, b, cutA: false, cutB: false });
-    else pieces.push(...clipped(r, a[0] < b[0] || (a[0] === b[0] && a[1] < b[1]) ? [a, b] : [b, a], GRID_MARGIN, 0));
-  };
-  for (let j = Math.floor(y0 / hy) - 1; j <= Math.ceil(y1 / hy) + 1; j++) {
-    const dx = ((j % 2) + 2) % 2 ? s / 2 : 0;
-    let prev: Pt | null = null;
-    for (let i = Math.floor(x0 / s) - 1; i <= Math.ceil(x1 / s) + 1; i++) {
-      const c: Pt = [i * s + dx, j * hy];
-      const at = shape.map((q) => [c[0] + q[0], c[1] + q[1]] as Pt);
-      for (let k = 1; k < at.length; k++) add(at[k - 1], at[k]);
-      if (prev) add(prev, at[li]);
-      prev = at[ri];
-    }
-  }
-  const g = latticeGraph(r, pieces, GRID_MARGIN);
-  g.prune();
-  let runs = g.walk(start).map((run) => runStitch(run, p.stitch, 0.05));
-  if (p.triple) runs = runs.map(tripled);
-  return runs.length ? { runs, angle: 0, under: 0 } : null;
-}
-
-/** A figure's width as a share of the distance between figures: the rest is the link between them. */
-const FIGURE_SHARE = 0.62;
-/** Rows of figures this share of their distance apart. */
-const FIGURE_ROW = 0.9;
-
-/** The outline of a figure `w` mm wide around 0, closed (the last point is the first), upright. */
-export function figureOutline(f: Figure, w: number): Pt[] {
-  const r = w / 2;
-  const out: Pt[] = [];
-  if (f === 'hearts') {
-    // The heart curve is 32 units wide (x from -16 to 16).
-    for (let i = 0; i < 48; i++) {
-      const t = (2 * Math.PI * i) / 48;
-      const x = 16 * Math.sin(t) ** 3;
-      const y = 13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t);
-      out.push([(x / 16) * r, (-(y + 2.5) / 16) * r]);
-    }
-  } else if (f === 'stars') {
-    for (let i = 0; i < 10; i++) {
-      const rr = i % 2 ? r * 0.45 : r;
-      const a = -Math.PI / 2 + (i * Math.PI) / 5;
-      out.push([rr * Math.cos(a), rr * Math.sin(a) + r * 0.1]);
-    }
-  } else if (f === 'flowers') {
-    // Five round petals, one pointing up, with narrow notches between them.
-    for (let i = 0; i < 80; i++) {
-      const a = (2 * Math.PI * i) / 80;
-      const rr = r * (0.3 + 0.7 * Math.sqrt(Math.abs(Math.cos(2.5 * (a + Math.PI / 2)))));
-      out.push([rr * Math.cos(a), rr * Math.sin(a)]);
-    }
-  } else {
-    for (let i = 0; i < 36; i++) {
-      const a = (2 * Math.PI * i) / 36;
-      out.push([r * 0.9 * Math.cos(a), r * 0.9 * Math.sin(a)]);
-    }
-  }
-  out.push(out[0]);
-  return out;
-}
-
-/** How far inside the edge a grid stays (mm). */
-const GRID_MARGIN = 0.3;
-/** Lattice pieces shorter than this where the edge cuts them are left out (mm). */
-const MIN_PIECE = 0.4;
-
-/**
- * The parts of segment ab more than `margin` inside the region: sampled every 0.1 mm, each end
- * where it crosses that line found by bisection.
- */
-function clipped(r: Region, [a, b]: [Pt, Pt], margin: number, minPiece = MIN_PIECE): Piece[] {
-  const len = dist(a, b);
-  const at = (t: number): Pt => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
-  const inside = (t: number) => sample(r, r.sdf, ...at(t)) < -margin;
-  const n = Math.max(2, Math.ceil(len / 0.1));
-  const cross = (lo: number, hi: number) => {
-    // inside(lo) differs from inside(hi): the crossing between them.
-    const was = inside(lo);
-    for (let k = 0; k < 14; k++) {
-      const m = (lo + hi) / 2;
-      if (inside(m) === was) lo = m;
-      else hi = m;
-    }
-    return (lo + hi) / 2;
-  };
-  const out: Piece[] = [];
-  let from: number | null = inside(0) ? 0 : null;
-  for (let k = 1; k <= n; k++) {
-    const t0 = (k - 1) / n;
-    const t1 = k / n;
-    const now = inside(t1);
-    if (from === null && now) from = cross(t0, t1);
-    else if (from !== null && !now) {
-      const to = cross(t0, t1);
-      if ((to - from) * len >= minPiece) out.push(piece(from, to));
-      from = null;
-    }
-  }
-  if (from !== null && (1 - from) * len >= minPiece) out.push(piece(from, 1));
-  return out;
-
-  function piece(t0: number, t1: number): Piece {
-    return { a: at(t0), b: at(t1), cutA: t0 > 0, cutB: t1 < 1 };
-  }
-}
-
-/** A part of a lattice line, and which of its ends the edge cut. */
-interface Piece {
-  a: Pt;
-  b: Pt;
-  cutA: boolean;
-  cutB: boolean;
-}
-
-/**
- * A lattice cut by the edge as one graph, the way Ink/Stitch joins fill rows: the line `margin`
- * inside the edge joins the cut ends, so the lattice reaches the edge all round and is sewn in one
- * go, with no dead ends sewn twice and no part of the area left out because its cells are cut.
- */
-function latticeGraph(r: Region, pieces: Piece[], margin: number): Graph {
-  const g = new Graph();
-  const loops = outline(r, -margin, r.sdf).map((l) => l as Pt[]);
-  // Cut ends, put on the nearest point of the line along the edge: per loop, its place along it.
-  const onLoop = loops.map(() => [] as { s: number; q: Pt }[]);
-  const snap = (q: Pt): Pt => {
-    let best = { d: Infinity, loop: -1, s: 0, q };
-    loops.forEach((l, li) => {
-      for (let i = 1; i < l.length; i++) {
-        const a = l[i - 1];
-        const b = l[i];
-        const dx = b[0] - a[0];
-        const dy = b[1] - a[1];
-        const ll = dx * dx + dy * dy;
-        const t = ll > 0 ? Math.max(0, Math.min(1, ((q[0] - a[0]) * dx + (q[1] - a[1]) * dy) / ll)) : 0;
-        const c: Pt = [a[0] + dx * t, a[1] + dy * t];
-        const d = dist(c, q);
-        if (d < best.d) best = { d, loop: li, s: i - 1 + t, q: c };
-      }
-    });
-    // Too far from the line (a crossing where the edge is cut by the region's window): kept as it is.
-    if (best.loop < 0 || best.d > 0.2) return q;
-    onLoop[best.loop].push({ s: best.s, q: best.q });
-    return best.q;
-  };
-  for (const pc of pieces) g.add(pc.cutA ? snap(pc.a) : pc.a, pc.cutB ? snap(pc.b) : pc.b);
-  loops.forEach((l, li) => {
-    const cuts = onLoop[li];
-    if (!cuts.length) return;
-    // The loop's points and the cut ends on it, in order along it.
-    const along = [...l.slice(0, -1).map((q, i) => ({ s: i, q })), ...cuts].sort((x, y) => x.s - y.s);
-    for (let i = 0; i < along.length; i++) g.add(along[i].q, along[(i + 1) % along.length].q);
-  });
-  return g;
+  return openFill(r, 'motif', figure, p, start);
 }
 
 /**
@@ -1345,126 +574,15 @@ const CROSS_COARSE = 2.75;
  * Half and double crosses are graphs walked as the grids are: every line there and back.
  */
 export function crossFill(r: Region, p: OpenParams, kind: CrossKind, start: Pt): FillResult | null {
-  const g: CrossGrid = { size: p.size, angle: p.angle ?? 0, origin: p.origin ?? [0, 0] };
-  const cells = crossCells(r, g);
-  if (!cells.length) return null;
-  const to = offGrid(g);
-  if (kind === 'full') {
-    const runs = crossLoops(cells, crossPasses(g.size), onGrid(g)(start)).map((run) => run.map(to));
-    return runs.length ? { runs, angle: 0, under: 0 } : null;
-  }
-  const gr = new Graph();
-  const add = (a: Pt, b: Pt) => gr.add(to(a), to(b));
-  for (const [L, T] of cells) {
-    const tl: Pt = [L, T];
-    const tr: Pt = [L + 1, T];
-    const br: Pt = [L + 1, T + 1];
-    const bl: Pt = [L, T + 1];
-    if (kind === 'double') {
-      const m: Pt = [L + 0.5, T + 0.5];
-      for (const q of [tl, tr, br, bl, [L + 0.5, T], [L + 1, T + 0.5], [L + 0.5, T + 1], [L, T + 0.5]] as Pt[]) add(q, m);
-    } else add(bl, tr);
-  }
-  let runs = gr.walk(start);
-  if (p.triple) runs = runs.map(tripled);
-  return runs.length ? { runs, angle: 0, under: 0 } : null;
-}
-
-/**
- * The loop of one cross (cell `c`, see crossFill) from its corner `e` back to it, on the grid (in
- * cells), each diagonal `passes` times; the corner itself first and last.
- */
-function crossLoop([L, T]: Cell, e: Pt, passes: number): Pt[] {
-  const tl: Pt = [L, T];
-  const br: Pt = [L + 1, T + 1];
-  const bl: Pt = [L, T + 1];
-  const tr: Pt = [L + 1, T];
-  const m: Pt = [L + 0.5, T + 0.5];
-  const same = (a: Pt, b: Pt) => a[0] === b[0] && a[1] === b[1];
-  // Back and forth n times from a, ending on b.
-  const spans = (a: Pt, b: Pt, n: number) => Array.from({ length: n }, (_, k) => (k % 2 ? a : b));
-  const n = passes - 1;
-  if (same(e, bl) || same(e, tr)) {
-    // Entered on the bottom diagonal: it first, then the top one, back to the middle and home.
-    const x = e;
-    const y = same(e, bl) ? tr : bl;
-    return [x, ...spans(x, y, n), m, tl, ...spans(tl, br, n), m, x];
-  }
-  // Entered on the top diagonal: to the middle, the bottom diagonal, the top one home.
-  const a = e;
-  const b = same(e, tl) ? br : tl;
-  return [a, m, bl, ...spans(bl, tr, n), m, b, ...spans(b, a, n)];
-}
-
-/**
- * The crosses `cells` as runs on the grid (in cells): loops joined at shared corners into one run
- * per connected group, the groups in the order the needle reaches them from `start` (in cells).
- */
-function crossLoops(cells: Cell[], passes: number, start: Pt): Pt[][] {
-  const left = new Map(cells.map((c) => [cellKey(c[0], c[1]), c]));
-  // The cells around corner q that are still to sew, the one to the right and below first.
-  const around = (q: Pt): Cell | null => {
-    for (const [di, dj] of [
-      [0, 0],
-      [-1, 0],
-      [0, -1],
-      [-1, -1],
-    ]) {
-      const c = left.get(cellKey(q[0] + di, q[1] + dj));
-      if (c) return c;
-    }
-    return null;
-  };
-  const corners = (c: Cell): Pt[] => [
-    [c[0], c[1]],
-    [c[0] + 1, c[1]],
-    [c[0] + 1, c[1] + 1],
-    [c[0], c[1] + 1],
-  ];
-  const runs: Pt[][] = [];
-  let pos = start;
-  while (left.size) {
-    // The corner nearest the needle of a cross still to sew.
-    let first: Cell | null = null;
-    let entry: Pt = [0, 0];
-    let best = Infinity;
-    for (const c of left.values()) {
-      for (const q of corners(c)) {
-        const d = dist(q, pos);
-        if (d < best) {
-          best = d;
-          first = c;
-          entry = q;
-        }
-      }
-    }
-    left.delete(cellKey(first![0], first![1]));
-    const run: Pt[] = [entry];
-    // Loops being sewn, the innermost last, each with the place reached in it.
-    const stack: { loop: Pt[]; k: number }[] = [{ loop: crossLoop(first!, entry, passes), k: 0 }];
-    while (stack.length) {
-      const f = stack[stack.length - 1];
-      const q = f.loop[f.k];
-      // On a corner: crosses still to sew there are sewn now, their loops ending here again.
-      if (Number.isInteger(q[0]) && Number.isInteger(q[1])) {
-        const c = around(q);
-        if (c) {
-          left.delete(cellKey(c[0], c[1]));
-          stack.push({ loop: crossLoop(c, q, passes), k: 0 });
-          continue;
-        }
-      }
-      if (++f.k >= f.loop.length) {
-        stack.pop();
-        continue;
-      }
-      run.push(f.loop[f.k]);
-    }
-    runs.push(run);
-    pos = run[run.length - 1];
-  }
-  return runs;
+  return openFill(r, 'cross', kind, p, start);
 }
 
 /** Remembered and loaded: a point at the share (0 to 1) of a box's width and height. */
 export const atShare = (box: [number, number, number, number], f: Pt): Pt => [box[0] + f[0] * (box[2] - box[0]), box[1] + f[1] * (box[3] - box[1])];
+
+/** An open pattern by the core: `kind` names it, `variant` its grid, figure or cross kind. */
+function openFill(r: Region, kind: string, variant: string | null, p: OpenParams, start: Pt): FillResult | null {
+  const res = fillOf(core().openFill(regionIn(r), kind, variant, coreParams(p), start[0], start[1]));
+  // Echo is a contour fill and keeps its travel.
+  return res && (kind === 'echo' ? { ...res, under: 0 } : { runs: res.runs, angle: res.angle, under: 0 });
+}

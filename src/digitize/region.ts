@@ -1,5 +1,5 @@
 import { core } from '../wasm/core';
-import type { RegionData } from '../wasm/pkg/heatstitch_core';
+import type { RegionData, RegionIn } from '../wasm/pkg/heatstitch_core';
 
 /**
  * One connected color region, in its own pixel window, with a signed distance field.
@@ -36,12 +36,19 @@ export interface Region {
 const MARGIN = 6;
 
 /** A region the core made, put together as an object (each array crosses once). */
-function fromCore(o: RegionData, label: number, pxMm: number, dx = 0, dy = 0): Region {
+export function fromCore(o: RegionData, label: number, pxMm: number, dx = 0, dy = 0): Region {
   const sdfBase = o.takeSdfBase();
   const region: Region = { label, x0: o.x0 + dx, y0: o.y0 + dy, w: o.w, h: o.h, pxMm, mask: o.takeMask(), inside: o.takeInside(), sdf: o.grown ? o.takeSdf() : sdfBase, sdfBase, areaMm2: o.areaMm2 };
   o.free();
   return region;
 }
+
+/**
+ * The region as the core takes it: each array crosses once, the fill field only when it is one of
+ * its own (grown). The object is used up by the call it is passed to.
+ */
+export const regionIn = (r: Region): RegionIn =>
+  new (core().RegionIn)(r.label, r.x0, r.y0, r.w, r.h, r.pxMm, r.areaMm2 ?? 0, r.mask, r.inside ?? new Float32Array(0), r.sdfBase ?? r.sdf, r.sdfBase && r.sdf !== r.sdfBase ? r.sdf : undefined);
 
 export function maskHash(mask: Uint8Array): number {
   let h = 2166136261;

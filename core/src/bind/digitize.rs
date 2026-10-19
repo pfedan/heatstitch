@@ -30,7 +30,7 @@ fn to_js<T: serde::Serialize>(v: &T) -> Result<JsValue, JsError> {
 /// A region made in Rust. Its arrays are taken out once each (no second copy in WebAssembly memory).
 #[wasm_bindgen]
 pub struct RegionData {
-    r: region::Region,
+    pub(crate) r: region::Region,
 }
 
 #[wasm_bindgen]
