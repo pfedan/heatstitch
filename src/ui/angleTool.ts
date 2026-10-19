@@ -14,16 +14,20 @@ export interface AngleHooks {
   redraw: () => void;
 }
 
-/** The angle of the line from `a` to `b` (world mm, y down) in whole degrees, 0 to `turn` (exclusive), clockwise as the rows'. */
-export function lineAngle(a: Pt, b: Pt, turn: 180 | 360): number {
-  const deg = (Math.atan2(b[1] - a[1], b[0] - a[0]) * 180) / Math.PI;
+/**
+ * The angle of the rows across the line from `a` to `b` (world mm, y down): the line is their normal,
+ * the way they stack, as a fill is sewn row after row along it. Whole degrees, 0 to `turn`
+ * (exclusive), clockwise as the rows'. For a direction (figures) the line points where their top does.
+ */
+export function rowsAcross(a: Pt, b: Pt, turn: 180 | 360): number {
+  const deg = (Math.atan2(b[1] - a[1], b[0] - a[0]) * 180) / Math.PI + 90;
   return ((Math.round(deg) % turn) + turn) % turn;
 }
 
 /**
- * Setting the direction of a fill's rows by a line drawn across it on the stage: the rows follow
- * the line while it is dragged and are taken over when it is let go, which ends the tool (one undo
- * step). Shift holds the line to steps of 15 degrees, Esc during the drag puts the angle back. The
+ * Setting the direction of a fill's rows by a line drawn over it on the stage: the rows run across
+ * the line (it is their normal) while it is dragged and are taken over when it is let go, which
+ * ends the tool (one undo step). Shift holds the line to steps of 15 degrees, Esc during the drag puts the angle back. The
  * dial in the panel stays the way to set it by keyboard. World mm.
  */
 export class AngleTool {
@@ -84,7 +88,7 @@ export class AngleTool {
     if (!this.moved && Math.hypot(x - this.a[0], y - this.a[1]) * this.scale < CLICK_PX) return true;
     this.moved = true;
     this.b = shift ? angleSnapped(this.a, [x, y]) : [x, y];
-    const angle = lineAngle(this.a, this.b, this.turn);
+    const angle = rowsAcross(this.a, this.b, this.turn);
     if (angle !== this.angle) {
       this.angle = angle;
       this.hooks.set(angle, false);

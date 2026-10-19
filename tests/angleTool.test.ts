@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { AngleTool, lineAngle } from '../src/ui/angleTool';
+import { AngleTool, rowsAcross } from '../src/ui/angleTool';
 
 /** The tool over fills at `value` (NaN: automatic), with what it shows and takes over. */
 function setup(value = NaN, turn: 180 | 360 = 180, has = true) {
@@ -21,17 +21,20 @@ function setup(value = NaN, turn: 180 | 360 = 180, has = true) {
 }
 
 describe('angle drawn on the area', () => {
-  it('reads a line as the rows do: clockwise on screen, half a turn for rows, whole for a direction', () => {
-    expect(lineAngle([0, 0], [10, 0], 180)).toBe(0);
-    expect(lineAngle([0, 0], [10, 10], 180)).toBe(45);
-    expect(lineAngle([0, 0], [0, 10], 180)).toBe(90);
-    expect(lineAngle([0, 0], [-10, 10], 180)).toBe(135);
+  it('lays the rows across the line: clockwise on screen, half a turn for rows, whole for a direction', () => {
+    // A line to the right: rows stacked left to right, so they run up and down.
+    expect(rowsAcross([0, 0], [10, 0], 180)).toBe(90);
+    expect(rowsAcross([0, 0], [10, 10], 180)).toBe(135);
+    // A line down: rows across it, flat.
+    expect(rowsAcross([0, 0], [0, 10], 180)).toBe(0);
+    expect(rowsAcross([0, 0], [-10, 10], 180)).toBe(45);
     // Drawn the other way round it is the same rows.
-    expect(lineAngle([10, 10], [0, 0], 180)).toBe(45);
-    expect(lineAngle([10, 0], [0, 0], 180)).toBe(0);
-    // A direction (figures of a motif fill) keeps which way it points.
-    expect(lineAngle([10, 10], [0, 0], 360)).toBe(225);
-    expect(lineAngle([0, 0], [10, -10], 360)).toBe(315);
+    expect(rowsAcross([10, 10], [0, 0], 180)).toBe(135);
+    expect(rowsAcross([10, 0], [0, 0], 180)).toBe(90);
+    // A direction (figures of a motif fill): a line up stands them upright, the line points where their top does.
+    expect(rowsAcross([0, 10], [0, 0], 360)).toBe(0);
+    expect(rowsAcross([10, 10], [0, 0], 360)).toBe(315);
+    expect(rowsAcross([0, 0], [10, -10], 360)).toBe(45);
   });
 
   it('shows the rows while dragging and takes them over once, when let go, which ends the tool', () => {
@@ -41,11 +44,11 @@ describe('angle drawn on the area', () => {
     tool.dragTo(10, 0);
     tool.dragTo(10, 10);
     tool.dragTo(10, 10.01);
-    expect(log.shown).toEqual([0, 45]);
+    expect(log.shown).toEqual([90, 135]);
     expect(log.taken).toEqual([]);
     tool.up();
-    expect(log.taken).toEqual([45]);
-    expect(now()).toBe(45);
+    expect(log.taken).toEqual([135]);
+    expect(now()).toBe(135);
     expect(tool.active).toBe(false);
   });
 
@@ -55,7 +58,7 @@ describe('angle drawn on the area', () => {
     tool.down(0, 0, 10);
     tool.dragTo(10, 3.5, true);
     tool.up();
-    expect(log.taken).toEqual([15]);
+    expect(log.taken).toEqual([105]);
   });
 
   it('puts the angle back on Esc during the drag (also automatic) and stays on for another line', () => {
@@ -63,7 +66,7 @@ describe('angle drawn on the area', () => {
     tool.start();
     tool.down(0, 0, 10);
     tool.dragTo(0, 10);
-    expect(now()).toBe(90);
+    expect(now()).toBe(0);
     tool.cancel();
     expect(log.restored).toEqual([NaN]);
     expect(Number.isNaN(now())).toBe(true);

@@ -18,13 +18,15 @@ How it is kept (see [CONTRIBUTING.md](CONTRIBUTING.md#releases)):
 
 ### Deutsch
 
-- **Winkel auf der Fläche ziehen:** Den Winkel einer Füllung stellst du jetzt auch direkt auf dem Stickmuster ein: Knopf neben dem Winkel-Regler oder Taste W, dann eine Linie über die Fläche ziehen. Die Reihen folgen ihr schon beim Ziehen, Umschalt rastet auf 15°, Esc bricht ab.
+- **Realistische Fäden per Taste:** Umschalt+R schaltet die realistische Ansicht ein oder aus, ohne das Ansicht-Menü zu öffnen.
+- **Winkel auf der Fläche ziehen:** Den Winkel einer Füllung stellst du jetzt auch direkt auf dem Stickmuster ein: Knopf neben dem Winkel-Regler oder Taste W, dann eine Linie über die Fläche ziehen. Die Reihen laufen schon beim Ziehen quer dazu, so wie sie nacheinander gestickt werden, Umschalt rastet auf 15°, Esc bricht ab.
 - **Probestück für deinen Stoff:** Unter Material erstellt ein Klick ein beschriftetes Raster aus Füllungen oder Satinringen, Zeilen nach Stichabstand, Spalten nach Zugausgleich, mit einer Sollkante zum Vergleichen. Stick es auf deinem Stoff, wähle in der App das Feld, das am besten aussieht, und neue Objekte auf diesem Stoff bekommen diese Werte.
 - **Verbindungen versteckt statt geschnitten:** Liegt der Weg zwischen zwei Objekten derselben Farbe ganz unter einer dichten Füllung, die später gestickt wird, läuft der Faden dort als Steppstich hin. Satin ab 2 mm Breite deckt auch (Säulen, Satinlinien und Satinränder). Das spart Schnitte und Zeit. Unter offenen oder lichten Mustern, schmalem oder lichtem Satin, Laufstichlinien und ausgesparten Stellen bleibt der Schnitt, weil man den Faden dort sehen würde. Versteckte Verbindungen stehen gepunktet in der Liste *Sprünge und Schnitte* und auf der Bühne; ein Klick wählt sie aus, *Schneiden und vernähen* setzt dort einen Schnitt, *Verstecken* nimmt ihn zurück. Einen Schnitt von Hand merkt sich das Objekt, auch nach Rückgängig und Speichern.
 
 ### English
 
-- **Drag the angle on the area:** You can now set a fill's angle right on the design: the button beside the angle slider or the W key, then drag a line across the area. The rows follow it while you drag, Shift snaps to 15°, Esc cancels.
+- **Realistic threads by key:** Shift+R turns the realistic view on or off without opening the View menu.
+- **Drag the angle on the area:** You can now set a fill's angle right on the design: the button beside the angle slider or the W key, then drag a line over the area. The rows run across it while you drag, the way they are sewn one after the other, Shift snaps to 15°, Esc cancels.
 - **Test swatch for your fabric:** Under Material one click makes a labelled grid of fills or satin rings, rows by stitch spacing, columns by pull compensation, with a nominal edge to compare against. Stitch it on your fabric, pick the cell that looks best in the app, and new objects on that fabric get those values.
 - **Connections hidden instead of trimmed:** Where the way between two objects of one color lies wholly under a dense fill sewn later, the thread runs there as a running stitch. Satin 2 mm wide or wider covers too (columns, satin lines and satin borders). That saves trims and time. Under open or light patterns, narrow or open satin, running lines and knocked-out parts the trim stays, because the thread would show there. Hidden connections show dotted in the *Jumps and trims* list and on the stage; a click selects one, *Trim and tie* cuts there, *Hide* takes it back. A trim set by hand stays with the object, through undo and saving too.
 
