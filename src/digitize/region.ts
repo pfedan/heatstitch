@@ -36,7 +36,7 @@ export interface Region {
 const MARGIN = 6;
 
 /** A region the core made, put together as an object (each array crosses once). */
-function fromCore(o: RegionData, label: number, pxMm: number, dx = 0, dy = 0): Region {
+export function fromCore(o: RegionData, label: number, pxMm: number, dx = 0, dy = 0): Region {
   const sdfBase = o.takeSdfBase();
   const region: Region = { label, x0: o.x0 + dx, y0: o.y0 + dy, w: o.w, h: o.h, pxMm, mask: o.takeMask(), inside: o.takeInside(), sdf: o.grown ? o.takeSdf() : sdfBase, sdfBase, areaMm2: o.areaMm2 };
   o.free();

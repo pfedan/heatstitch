@@ -1,6 +1,7 @@
 /**
  * Rules by size that hold on every fabric, in one place (research: plans/voreinstellungen-recherche.md
- * in the project files). Values per fabric are in fabrics.ts.
+ * in the project files). Values per fabric are in fabrics.ts. The Rust core has the same values in
+ * core/src/material/rules.rs: change both together.
  */
 
 /**

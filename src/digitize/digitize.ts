@@ -346,7 +346,7 @@ function sewSatin(o: Obj, start: Pt, p: SatinParams, withUnderlay: boolean, tol:
     start,
     (b, fa, fb) => {
       const c = col(b, fa, fb);
-      return withUnderlay ? underlay(c, tol, undefined, undefined, stretch) : runStitch(c.center, 2.5, tol);
+      return withUnderlay ? underlay(c, tol, undefined, stretch) : runStitch(c.center, 2.5, tol);
     },
     (b, fa, fb) => {
       // Back from the far end: the same column reversed.

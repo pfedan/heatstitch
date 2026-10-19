@@ -5,6 +5,7 @@ mod density;
 mod digitize;
 mod image;
 mod parsers;
+mod satin;
 mod shape;
 mod validation;
 mod writers;
