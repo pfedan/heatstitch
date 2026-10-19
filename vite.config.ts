@@ -170,6 +170,9 @@ export default defineConfig({
         // (some 100 KB to 2 MB) only once it is used, then it works offline too. The tooltip pictures are small and come along.
         // So does the list of motifs; a category of motifs (up to some 300 KB) once it was opened.
         globPatterns: [...APP_PAGES, '**/*.{js,css,svg,png,webmanifest,pes,wasm}', 'tips/*.webp', 'fonts/index.json', 'threads/catalogs.json', 'library/index.json'],
+        // The compute core (core/, some 2.5 to 4 MB) is above the 2 MB default and the app does not run
+        // without it, so it is installed too.
+        maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
         runtimeCaching: [
           // The demo project is not part of the install (some 500 KB); it is kept once it was opened.
           {
