@@ -5,8 +5,9 @@ import type { SewObject } from './objects';
 import type { Pattern } from './pattern';
 import { runWays, traceLine } from './line';
 import { analyze, keepShape, remembered, type FillSettings, type Rails, type Remembered } from './restitch';
-import type { Region } from '../digitize/region';
-import { rasterize, rasterizeStroke, regionOf } from '../shape/rasterize';
+import { fromCore, type Region } from '../digitize/region';
+import { core } from '../wasm/core';
+import { rasterize, rasterizeStroke } from '../shape/rasterize';
 import { stitchKinds } from './sequence';
 
 /**
@@ -63,7 +64,8 @@ export function bandArea(geo: Form, fill: FillSettings, pxMm = 0.1): Region | nu
 
 /** Area `a` grown by `grow` mm (shrunk when negative): the pixels whose signed distance is below it. */
 export function grownArea(a: Region, grow: number): Region {
-  return regionOf(Uint8Array.from(a.sdf, (d) => (d < grow ? 1 : 0)), a.x0, a.y0, a.w, a.h, a.pxMm) ?? a;
+  const o = core().grownArea(a.sdf, grow, a.x0, a.y0, a.w, a.h, a.pxMm);
+  return o ? fromCore(o, 0, a.pxMm) : a;
 }
 
 /** The form's area grown by `grow` mm (see FillSettings.areaGrow); as rastered when 0. */

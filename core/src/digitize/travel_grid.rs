@@ -823,4 +823,40 @@ mod tests {
         g.cover([3.0, 6.0], [17.0, 6.0], 0.5);
         assert!(g.covered.iter().any(|&c| c != 0));
     }
+
+    #[test]
+    fn travel_keeps_off_the_strip_beside_row_ends() {
+        // A fill with a part left out sews in more sections; the travel between them took the strip
+        // between the ends of rows sewn already and the outline, and ran round the edge where it
+        // shows (moved here from tests/rimTravel.test.ts with the TypeScript grid).
+        let r = region_of(200, 0.1, |x, y| (x - 10.0).hypot(y - 10.0) < 9.0);
+        let mut g = TravelGrid::new(&r, true, None);
+        // Rows across the upper half, ending 0.3 mm inside the outline.
+        let spacing = 0.4;
+        let mut y = -8.0f64;
+        while y <= -1.0 {
+            let x = (81.0 - y * y).sqrt() - 0.3;
+            g.cover([10.0 - x, 10.0 + y], [10.0 + x, 10.0 + y], spacing / 2.0);
+            y += spacing;
+        }
+        let mut free = 0;
+        for j in 0..g.gh {
+            for i in 0..g.gw {
+                let c = j * g.gw + i;
+                let [x, y] = g.center(i, j);
+                // Passable cells beside the rows (not at their first and last one, where the band thins out).
+                let yy = y - 10.0;
+                if g.depth[c] <= 0.05
+                    || !(-7.5..=-1.5).contains(&yy)
+                    || -sample(&r, r.sdf(), x, y) > 1.0
+                {
+                    continue;
+                }
+                if g.covered[c] == 0 && g.row_ends[c] == 0 {
+                    free += 1;
+                }
+            }
+        }
+        assert_eq!(free, 0);
+    }
 }

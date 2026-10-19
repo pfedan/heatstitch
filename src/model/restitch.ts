@@ -6,14 +6,12 @@ import { isRunType, runLike, type PathStitch } from './along';
 import { wholeOf } from './knockout';
 import { LINE_MOTIFS } from '../digitize/motif';
 import { lineStitches, runAsLine, runWays } from './line';
-import { chooseAngle, CROSSHATCH_HALF, crosshatchFill, fillRegion, ROW_ENDS, type FillParams, type RowEnds } from '../digitize/fill';
-import { contourFill, fieldFill, guideField, stitchField } from '../digitize/flow';
-import { atShare, crossFill, CROSS_KINDS, FIGURES, motifFill, TEXTURES, TEXTURE_SIZE, TEXTURE_SIZE_RANGE, echoFill, circleField, grainField, GRID_KINDS, gridFill, mazeFill, meanderFill, MOTIFS, rayField, regionBox, swirlField, waveFill, zigzagFill, type CrossGrid, type CrossKind, type Figure, type GridKind, type Motif, type OpenParams, type Texture } from '../digitize/deco';
-import { spiralFill } from '../digitize/spiral';
+import { chooseAngle, CROSSHATCH_HALF, ROW_ENDS, type RowEnds } from '../digitize/fill';
+import { CROSS_KINDS, FIGURES, TEXTURES, GRID_KINDS, MOTIFS, regionBox, type CrossGrid, type CrossKind, type Figure, type GridKind, type Motif, type Texture } from '../digitize/deco';
 import { ECHO_GAP, isEcho } from '../digitize/echo';
 import { shadowFrom } from './shadow';
 import { coverage } from '../digitize/measure';
-import { expandRegion, outline, sample, signedField, type Region } from '../digitize/region';
+import { fromCore, outline, regionIn, sample, signedField, type Region } from '../digitize/region';
 import { withSplit } from '../digitize/satinSuggest';
 import { runStitch, TOLERANCE } from '../digitize/run';
 import { SATIN_CORNERS, SATIN_ENDS } from '../digitize/satinJoins';
@@ -24,9 +22,9 @@ import { flatten, formFrom, storeForm, type Form, type StoredPath } from '../sha
 import { FIT_TOLERANCE, READ_TOLERANCE, vectorize } from '../shape/vectorize';
 import { BORDER_WIDTH } from '../digitize/border';
 import { rasterize, type LineCap } from '../shape/rasterize';
-import { distanceInside, distanceToSeeds } from '../image/edt';
+import { distanceInside } from '../image/edt';
 import { tidy, withRecords } from './edit';
-import { coversOver, cutAway, type Cover } from './covers';
+import { coversOver, type Cover } from './covers';
 import { backToVersion, entryOf, hasTable, sewObjects, hold, keepVersion, knowKinds, relearn, rememberObjects, setMemory, setObjects, setObjectsFromKeys, stitchIndex, stitchKey, tableOf, type ObjectKind, type PlacedEntry, type SewObject } from './objects';
 import { END, JUMP, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
 import { dropTravel, travelOf as travelIn } from './travel';
@@ -141,22 +139,12 @@ export const DECO_DEFAULTS = {
 /** At most this many swirls in one fill. */
 export const MAX_SWIRLS = 3;
 
-/** Circles go round the middle of the shape when no point is set. */
-const CIRCLES_FOCUS: Pt = [0.5, 0.5];
-
 /** Open patterns: distance between lines or cell size when none is set (mm). */
 // Crosshatch: rows 1.6 mm apart in each layer, four times a usual fill's 0.4 mm: the two layers
 // together lay half its thread, as a light fill (0.8 mm), and leave diamonds of fabric between.
 export const OPEN_SIZE: Record<OpenPattern, number> = { meander: 2.5, maze: 2.5, grid: 6, motifs: 8, echo: 3, cross: 2.3, crosshatch: 1.6 };
 /** Open patterns: the range of `size` (mm). */
 export const OPEN_SIZE_RANGE: Record<OpenPattern, [number, number]> = { meander: [1.2, 8], maze: [1.2, 8], grid: [3, 20], motifs: [5, 25], echo: [1.2, 10], cross: [1, 5], crosshatch: [1, 4] };
-/**
- * Decorative fields may crowd rows more than a plain curved fill before they give up (in times the
- * nominal density): rows meet at the start of rays and wind tight at the eye of a swirl, as in the
- * radial and spiral fills of commercial software.
- */
-const DECO_PEAK = 3;
-const DECO_PEAK_POINT = 5;
 
 export interface FillSettings {
   pattern: FillPattern;
@@ -327,8 +315,6 @@ export interface Analysis {
 
 /** Fill rows touch when drawn this thick (mm on each side); travel lines vanish when opened by `OPEN`. */
 const REACH = 0.3;
-/** Highest density allowed for curved rows, in times the nominal (where rows meet). */
-const CONTOUR_PEAK = 3;
 /** Half width of the band along the old thread that new travel may follow (mm). */
 export const TRAVEL_REACH = 0.5;
 const OPEN = 0.36;
@@ -1037,8 +1023,6 @@ export function memoryFrom(e: StoredObject): Remembered | null {
 
 const isValue = (v: unknown) => finite(v) || typeof v === 'boolean' || typeof v === 'string';
 const isFixed = (x: unknown): x is Fixed => !!x && typeof (x as Fixed).field === 'string' && isValue((x as Fixed).from) && isValue((x as Fixed).to);
-/** Underlay is left out only this far inside what covers it (mm), so its edge stays held. */
-const UNDER_COVER_MARGIN = 0.5;
 const PATTERNS: FillPattern[] = ['tatami', 'gradient', 'contour', 'spiral', 'follow', 'guided', ...DECO_PATTERNS, ...OPEN_PATTERNS];
 const isLine = (l: unknown) => Array.isArray(l) && l.length >= 2 && l.every((q) => Array.isArray(q) && q.length === 2 && q.every(finite));
 const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
@@ -1864,61 +1848,12 @@ export function traceRegion(p: Pattern, segs: number[], reach: number, open = 0,
   return r && { ...r };
 }
 
+/** traceRegion without its cache, sewn by the core (core/src/model/trace.rs). */
 function traceRegionNow(p: Pattern, segs: number[], reach: number, open: number, close: boolean): Region | null {
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  for (const i of segs) {
-    for (const j of [i - 1, i]) {
-      minX = Math.min(minX, p.x[j]);
-      maxX = Math.max(maxX, p.x[j]);
-      minY = Math.min(minY, p.y[j]);
-      maxY = Math.max(maxY, p.y[j]);
-    }
-  }
-  if (!Number.isFinite(minX)) return null;
-  const wMm = (maxX - minX) / 10 + 2 * reach;
-  const hMm = (maxY - minY) / 10 + 2 * reach;
-  const pxMm = Math.max(0.05, Math.sqrt((wMm * hMm) / 1.5e6), reach / 5);
-  const x0 = Math.floor((minX / 10 - reach) / pxMm) - MARGIN;
-  const y0 = Math.floor((minY / 10 - reach) / pxMm) - MARGIN;
-  const w = Math.ceil(wMm / pxMm) + 2 * MARGIN + 2;
-  const h = Math.ceil(hMm / pxMm) + 2 * MARGIN + 2;
-  const seed = new Uint8Array(w * h);
-  const put = (xMm: number, yMm: number) => {
-    const x = Math.floor(xMm / pxMm) - x0;
-    const y = Math.floor(yMm / pxMm) - y0;
-    if (x >= 0 && y >= 0 && x < w && y < h) seed[y * w + x] = 1;
-  };
-  for (const i of segs) {
-    const ax = p.x[i - 1] / 10;
-    const ay = p.y[i - 1] / 10;
-    const bx = p.x[i] / 10;
-    const by = p.y[i] / 10;
-    const n = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / (pxMm / 2)));
-    for (let k = 0; k <= n; k++) put(ax + ((bx - ax) * k) / n, ay + ((by - ay) * k) / n);
-  }
-  // Pixel centers sit half a pixel off the seeds' corners: measure from the centers.
-  const r = reach / pxMm;
-  const near = distanceToSeeds(seed, w, h);
-  const outside = new Uint8Array(w * h);
-  for (let i = 0; i < outside.length; i++) outside[i] = near[i] <= r ? 0 : 1;
-  const far = distanceToSeeds(outside, w, h);
-  let mask = new Uint8Array(w * h);
-  for (let i = 0; i < mask.length; i++) mask[i] = (close ? far[i] > r : near[i] <= r) ? 1 : 0;
-  if (open > 0) {
-    const o = open / pxMm;
-    const toOut = distanceToSeeds(Uint8Array.from(mask, (m) => 1 - m), w, h);
-    const core = Uint8Array.from(toOut, (d) => (d > o ? 1 : 0));
-    const toCore = distanceToSeeds(core, w, h);
-    mask = Uint8Array.from(toCore, (d) => (d <= o ? 1 : 0));
-  }
-  let area = 0;
-  for (const m of mask) area += m;
-  if (!area) return null;
-  const sdf = signedField(mask, w, h, pxMm);
-  return { label: 0, x0, y0, w, h, pxMm, mask, inside: distanceInside(mask, w, h), sdf, sdfBase: sdf, areaMm2: area * pxMm * pxMm };
+  const ends = new Float64Array(4 * segs.length);
+  segs.forEach((i, k) => ends.set([p.x[i - 1], p.y[i - 1], p.x[i], p.y[i]], 4 * k));
+  const o = core().traceRegion(ends, reach, open, close);
+  return o ? fromCore(o, 0, o.pxMm) : null;
 }
 
 // Measuring what an object has now ------------------------------------------------------------
@@ -2498,98 +2433,28 @@ export interface FillWay {
 
 /**
  * The stitches of a fill in area `area` with settings `s`: everything they depend on is given, so
- * the same area, settings and way give the same stitches.
+ * the same area, settings and way give the same stitches. Sewn by the core (core/src/model/fill.rs):
+ * the area grown or shrunk, the fill its pattern asks for, irregular rows and the underlay left out
+ * under what covers it; the whole area it was cut from (wholeOf) is looked up here.
  */
 export function fillRuns(area: Region, s: FillSettings, way: FillWay): NewFill | null {
   const { start, travel, covers } = way;
-  // Grown or shrunk for the stitches only: the shape kept for the next edit stays as it is.
-  const r = expandRegion(area, s.expand ?? 0);
-  if (!r) return null;
-  // Grown, the travel may also use the new margin, so it stays one piece; shrunk, it stays inside
-  // the smaller area (the old thread runs where nothing is sewn now).
-  const ex = s.expand ?? 0;
-  const tw = ex > 0 && travel ? (unionRegion([travel, r]) ?? travel) : ex < 0 ? r : travel;
-  const fp: FillParams = { spacing: s.spacing, stitch: s.stitch, angle: s.angle, pull: s.edge, underlay: s.underlay, underCross: s.underCross, ...(s.underEdge ? { underEdge: true } : {}), ...(s.rowEnds && (s.pattern === 'tatami' || s.pattern === 'gradient') ? { rowEnds: s.rowEnds } : {}), underInset: s.underInset, underInsetShare: s.underInsetShare, underSpacing: s.underSpacing, travel: tw, tolerance: s.tolerance, ...(s.gapRows ? { gapRows: s.gapRows } : {}) };
-  // Parts left out (under what lies on top): travel keeps off the outline beside sewn rows.
   const whole = wholeOf(area);
-  if (whole) {
-    fp.offRowEnds = true;
-    fp.whole = whole;
+  const rows = way.rows && Float64Array.from(way.rows.flatMap(([a, b]) => [a[0], a[1], b[0], b[1]]));
+  const out = core().fillRuns(regionIn(area), s, start[0], start[1], way.end && Float64Array.from(way.end), travel && regionIn(travel), whole ? regionIn(whole) : undefined, (covers ?? []).map((c) => regionIn(c.region)), Float64Array.from(covers ?? [], (c) => c.overlap), rows, way.zigzag);
+  if (!out) return null;
+  try {
+    const under = out.under;
+    const t = out.takeWays();
+    const { runs } = takeRuns(out);
+    const border = runs.reduce((n, run) => n + run.length, 0);
+    if (!t) return { runs, under, border };
+    const ways: [number, number][] = [];
+    for (let i = 0; i + 1 < t.length; i += 2) ways.push([t[i], t[i + 1]]);
+    return { runs, under, border, travel: ways };
+  } finally {
+    out.free();
   }
-  // Under what lies on top completely, no underlay (it would only add thread under it).
-  if (s.underlay && s.underCover && covers?.length) {
-    const left = cutAway(r, covers.map((c) => ({ region: c.region, overlap: UNDER_COVER_MARGIN })));
-    if (left !== r) fp.underArea = left ?? undefined;
-    if (!left) fp.underlay = false;
-  }
-  if (s.saveTrims) fp.saveTrims = true;
-  if (way.end) fp.end = way.end;
-  let res;
-  if (s.pattern === 'gradient') {
-    res = fillRegion(r, { ...fp, spacingEnd: s.spacingEnd, ...(s.deco?.fade ? { fade: s.deco.fade } : {}) }, start);
-  } else if (s.pattern === 'contour') {
-    res = contourFill(r, fp, start);
-  } else if (s.pattern === 'spiral') res = spiralFill(r, fp, start);
-  else if (s.pattern === 'follow' && way.zigzag?.straight && !s.gradient) res = zigzagFill(r, fp, way.zigzag, start);
-  else if (s.pattern === 'follow') {
-    if (s.gradient) fp.spacingEnd = s.spacingEnd;
-    const f = stitchField(r, way.rows ?? []);
-    res = fieldFill(r, f.g, f, fp, start, false, CONTOUR_PEAK);
-  } else if (s.pattern === 'guided') {
-    if (!s.guides?.length) return null;
-    if (s.gradient) fp.spacingEnd = s.spacingEnd;
-    const f = guideField(r, s.guides);
-    res = fieldFill(r, f.g, f, fp, start, false, CONTOUR_PEAK);
-  } else if ((DECO_PATTERNS as FillPattern[]).includes(s.pattern)) {
-    res = decoFill(r, s, fp, start);
-  } else if (isOpenPattern(s.pattern)) {
-    res = openFill(r, s, fp, start);
-  } else {
-    const d = s.deco;
-    res = fillRegion(r, { ...fp, offset: s.offset, ...(s.pattern === 'tatami' ? looks(d) : {}) }, start);
-  }
-  if (!res) return null;
-  if (!res) return null;
-  const rough = Math.min(1, Math.max(0, s.rough ?? 0));
-  if (rough && !isOpenPattern(s.pattern)) roughenRuns(res.runs, res.under ?? 0, rough, s.roughSeed ?? 0, s.stitch * ROUGH_LONG);
-  // Underlay points in runs too short to sew are not sewn either.
-  let under = 0;
-  let seen = 0;
-  for (const run of res.runs) {
-    const take = Math.max(0, Math.min(run.length, (res.under ?? 0) - seen));
-    seen += run.length;
-    if (run.length > 1) under += take;
-  }
-  const runs = res.runs.filter((run) => run.length > 1);
-  // Crosses that meet nowhere: a trim between them, so no thread lies across the fabric beside
-  // the crosses (half crosses go on along the edge of their cells, as they always need to).
-  if (s.pattern === 'cross' && s.deco?.cross !== 'half') runs.forEach((run, k) => k && trimBefore.add(run));
-  // The border is an object of its own, sewn after the fill (see syncBorders).
-  const border = runs.reduce((n, run) => n + run.length, 0);
-  // Travel indices as in the runs kept (runs of one point are left out before them).
-  let ways: [number, number][] | undefined;
-  if (res.travel?.length) {
-    const left: number[] = [];
-    let n = 0;
-    let gone = 0;
-    for (const run of res.runs) {
-      for (let i = 0; i < run.length; i++) left[n + i] = gone;
-      if (run.length <= 1) gone += run.length;
-      n += run.length;
-    }
-    ways = res.travel.map(([a, b]) => [a - left[a], b - left[b]]);
-  }
-  return { runs, under, border, ...(ways ? { travel: ways } : {}) };
-}
-
-/** Embossing or a texture of a tatami (embossing wins when both are set). */
-function looks(d: DecoSettings | undefined): Pick<FillParams, 'emboss' | 'texture'> {
-  if (d?.emboss) return { emboss: { motif: d.emboss, size: d.embossSize ?? DECO_DEFAULTS.embossSize, strong: !!d.embossStrong, angle: d.embossAngle ?? 0 } };
-  if (d?.texture) {
-    const [lo, hi] = TEXTURE_SIZE_RANGE;
-    return { texture: { kind: d.texture, size: Math.min(hi, Math.max(lo, d.textureSize ?? TEXTURE_SIZE)) } };
-  }
-  return {};
 }
 
 /**
@@ -2644,43 +2509,6 @@ function roughHash(i: number, seed: number): number {
   h = Math.imul(h ^ (h >>> 16), 0x7feb352d);
   h = Math.imul(h ^ (h >>> 15), 0x846ca68b);
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
-}
-
-/** A dense fill with curved rows: wave rows, or rows on one of the decorative fields. */
-function decoFill(r: Region, s: FillSettings, fp: FillParams, start: Pt) {
-  const d = { ...DECO_DEFAULTS, ...s.deco };
-  const angle = Number.isFinite(s.angle) ? s.angle : 0;
-  if (s.pattern === 'waves') return waveFill(r, fp, angle, d.height, d.length, start);
-  const focus = atShare(regionBox(r), s.deco?.focus ?? (s.pattern === 'circles' ? CIRCLES_FOCUS : DECO_DEFAULTS.focus));
-  const f =
-    s.pattern === 'grain'
-      ? grainField(r, angle, d.strength, d.seed)
-      : s.pattern === 'rays'
-        ? rayField(r, focus)
-        : s.pattern === 'circles'
-          ? circleField(r, focus)
-          : swirlField(r, d.seed, s.deco?.centers?.map((c) => atShare(regionBox(r), c)));
-  return fieldFill(r, f.g, f, fp, start, true, s.pattern === 'grain' ? DECO_PEAK : DECO_PEAK_POINT);
-}
-
-/** One of the open patterns: no underlay, no pull; one line, or crosshatch's two layers of rows. */
-function openFill(r: Region, s: FillSettings, fp: FillParams, start: Pt) {
-  const pat = s.pattern as OpenPattern;
-  const d = { ...DECO_DEFAULTS, ...s.deco };
-  const [lo, hi] = OPEN_SIZE_RANGE[pat];
-  const p: OpenParams = { size: Math.min(hi, Math.max(lo, d.size ?? OPEN_SIZE[pat])), stitch: Math.min(s.stitch, 3), seed: d.seed, triple: d.triple, angle: d.angle ?? 0 };
-  if (pat === 'cross') {
-    // Its own grid is anchored at its whole shape, whatever lies on top of it.
-    const g = crossGridOf(s, fp.whole ?? r);
-    if (!g) return null;
-    return crossFill(r, { ...g, stitch: p.stitch, seed: p.seed, triple: p.triple }, d.cross, start);
-  }
-  if (pat === 'crosshatch') return crosshatchFill(r, { ...fp, spacing: p.size, stitch: p.stitch, angle: Number.isFinite(s.angle) ? s.angle : 0, pull: 0, underlay: false }, start);
-  if (pat === 'meander') return meanderFill(r, p, start);
-  if (pat === 'maze') return mazeFill(r, p, start);
-  if (pat === 'echo') return echoFill(r, p, start);
-  if (pat === 'grid') return gridFill(r, p, d.grid, start);
-  return motifFill(r, p, d.figure, start);
 }
 
 /**
@@ -2964,7 +2792,7 @@ export const SEAM_OVERLAP = 0.3;
 export const seamEnds = (rails: Rails[], s: SatinSettings): PushEnd[] => core().satinSeamEnds(rails.map(railsIn), s) as PushEnd[];
 
 /** Rails as the core sews them: the fill a chain was cut from (Rails.split) is not needed for that. */
-const railsIn = (r: Rails): Rails => (r.split ? { ...r, split: undefined } : r);
+export const railsIn = (r: Rails): Rails => (r.split ? { ...r, split: undefined } : r);
 
 /** Runs from the core, each marked as it says (bit 1: a trim before it). Returns the flags too. */
 export function takeRuns(out: { takePts(): Float64Array; takeLens(): Uint32Array; takeFlags(): Uint8Array; free(): void }): { runs: Pt[][]; flags: Uint8Array } {

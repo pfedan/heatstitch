@@ -145,9 +145,14 @@ blocks derived from the records alone), `hoop.ts`, `recolor.ts`, `handEdit.ts` (
 points), `addShape.ts`, `appendDesign.ts`.
 
 Sewing along lines and borders (`along.ts`, `line.ts`), satin from its rails (`satinRuns`,
-`bestChain` and their helpers in `restitch.ts`) and appliqués (`appliqueRuns`) run in the Rust
-core (`core/src/model/`). The TypeScript functions keep their names, pass plain specs and mark
-the runs they get back for a trim (`trimBefore`) or a stop (`stopBefore`).
+`bestChain` and their helpers in `restitch.ts`), fills from their settings (`fillRuns`) and
+appliqués (`appliqueRuns`) run in the Rust core (`core/src/model/`), and so does `sewOne`: one
+call per object, with the whole area it was cut from and what covers it looked up here. Areas
+traced from stitches (`traceRegion`) and grown (`grownArea`), the hidden way on its grid (the
+cells under the hiding areas are sampled here) and the order the optimizer plans
+(`planCandidates`) are the core's too. The TypeScript functions keep their names, pass plain specs
+and mark the runs they get back for a trim (`trimBefore`) or a stop (`stopBefore`); pattern
+versions, what objects remember, the caches and undo stay here.
 
 ## Shapes and digitizing
 

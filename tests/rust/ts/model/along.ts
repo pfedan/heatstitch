@@ -1,6 +1,6 @@
 import { SATIN_UNDER_MIN } from '../../../../src/material/rules';
-import { borderLoops, borderRails, borderRun, keptRails, lineRails, orderLoops, type BorderType } from '../../../../src/digitize/border';
-import { keptLines, keptOpen } from '../fills/border';
+import { borderLoops, borderRails, borderRun, keptRails, lineRails, type BorderType } from '../../../../src/digitize/border';
+import { keptLines, keptOpen, orderLoops } from '../fills/border';
 import { flatten, type Form } from '../../../../src/shape/path';
 import type { LineEcho } from '../../../../src/digitize/echo';
 import type { LineShadow } from '../../../../src/model/shadow';
