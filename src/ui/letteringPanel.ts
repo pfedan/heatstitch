@@ -300,7 +300,7 @@ export class LetteringPanel {
     if (entry) {
       const lic = Object.assign(document.createElement('p'), { className: 'muted small font-license' });
       const link = Object.assign(document.createElement('a'), { href: `${import.meta.env.BASE_URL}fonts/licenses/${entry.id}.txt`, target: '_blank', rel: 'noopener', textContent: licenseName(entry.license) });
-      lic.append(t('lettering.font.from'), ' ', link);
+      lic.append(t(entry.license === 'Hershey' ? 'lettering.font.fromHershey' : 'lettering.font.from'), ' ', link);
       parts.push(lic);
     }
     return this.field('lettering.font', ...parts);
@@ -681,5 +681,5 @@ export class LetteringPanel {
 }
 
 function licenseName(id: string): string {
-  return id === 'OFL-1.1' ? 'SIL Open Font License 1.1' : id === 'CC-BY-4.0' ? 'CC BY 4.0' : t('lettering.publicDomain');
+  return id === 'OFL-1.1' ? 'SIL Open Font License 1.1' : id === 'CC-BY-4.0' ? 'CC BY 4.0' : id === 'Hershey' ? t('lettering.hersheyLicense') : t('lettering.publicDomain');
 }

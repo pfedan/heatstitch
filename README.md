@@ -143,8 +143,8 @@ with this section when the site starts sending anything new.
 - **Single stitches**: move, insert, split and delete needle points; release an object from its shape
 - **Drawing**: rectangle, ellipse, pen, freehand, sewn at once with the material's settings; *Fill gap*
   makes a fill of the space shut in between shapes (enclosed, with bays, or a background under them)
-- **Lettering** in 41 fonts from Ink/Stitch: height, alignment, arcs and circle, spacing, single
-  letters, stays text
+- **Lettering** in 41 fonts from Ink/Stitch and a single line Hershey font for small text: height,
+  alignment, arcs and circle, spacing, single letters, stays text
 - **Jumps**: trim and tie, or remove trims, one jump at a time or by length
 
 **Checking and correcting (Check)**
