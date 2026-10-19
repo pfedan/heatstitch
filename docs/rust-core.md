@@ -32,7 +32,8 @@ src/wasm/pkg/         Built by `npm run wasm` (wasm-pack), not in git
   points as x, y pairs). Structured settings cross as plain objects (serde). The boundary is crossed
   per object or per design, never per point: a fine-grained export is only a step on the way.
 - The module is built for speed (`opt-level = 3`), not size: the stitches matter more than the
-  extra download on the first visit.
+  extra download on the first visit. The size is still watched (each stage PR states it) and must
+  not get in the way: what shrinks it without costing speed is taken (`strip`, `panic = "abort"`).
 - `npm test`, `npm run build`, `npm run dev` and `npm run typecheck` build the module first. CI does
   the same in `.github/actions/setup`, and runs `cargo fmt`, `cargo clippy` and `cargo test` on the
   crate in the `core` job.
