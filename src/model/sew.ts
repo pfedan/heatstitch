@@ -1,23 +1,23 @@
-import { borderStitches, openStitches, type PathStitch } from './along';
+import type { PathStitch } from './along';
 import type { Pt } from '../digitize/skeleton';
-import { expandRegion, type Region } from '../digitize/region';
+import { regionIn, type Region } from '../digitize/region';
 import { apply, type Form, type Mat } from '../shape/path';
 import { coversFrom, type Cover } from './covers';
 import { tidyKept, withRecords } from './edit';
 import { cutKey, wholeOf } from './knockout';
-import { lineStitches } from './line';
 import { joinedUncut, setObjects, sewObjects, stitchKey, tableOf, trimmedBetween, type ObjectKind, type PlacedEntry, type SewObject } from './objects';
 import { COLOR_CHANGE, END, JUMP, nextVersion, STITCH, TRIM, type Pattern, type ThreadColor } from './pattern';
 import { tieIn, tieOff } from './jumps';
 import { tagShortStitches, TIE_MAX } from '../validation/shortStitches';
 import { blockKeys } from './order';
 import { blockIndex } from './sequence';
-import { appliqueRuns, stopBefore, stopsAround, type AppliqueSettings } from './applique';
+import { stopBefore, stopsAround, type AppliqueSettings } from './applique';
 import { sharedArea } from './appliqueShare';
-import { borderOf, fillRuns, knownKind, TRAVEL_REACH, lockAt, remember, remembered, satinRuns, trimBefore, type FillSettings, type Rails, type Remembered, type SatinSettings } from './restitch';
+import { borderOf, knownKind, lockAt, railsIn, remember, remembered, takeRuns, trimBefore, type FillSettings, type Rails, type Remembered, type SatinSettings } from './restitch';
 import { bandArea, fillArea, formKey, geoOf, geoUse, openOf } from './geo';
 import { exitToward, hiddenAlong, hiddenWay, hidingOf, travelOf, withTravel, type Hiding } from './travel';
 import { TRAVEL_STITCH } from '../digitize/fill';
+import { core } from '../wasm/core';
 
 /**
  * Sewing from the object list (stage C of the object model): what an object is (its shape and
@@ -84,35 +84,53 @@ export function specOf(p: Pattern, o: SewObject, m: Remembered | null | undefine
   return null;
 }
 
-/** The stitches of an object sewn from `spec` along `way`, and how many of them are underlay. */
+/**
+ * The stitches of an object sewn from `spec` along `way`, and how many of them are underlay. Sewn
+ * by the core in one call (core/src/model/sew.rs); the whole area an area was cut from (wholeOf)
+ * is looked up here and given with it.
+ */
 export function sewOne(spec: Spec, way: Way): { runs: Pt[][]; under: number } | null {
-  const ok = (runs: Pt[][], under = 0) => {
-    const out = runs.filter((r) => r.length > 1);
-    return out.length ? { runs: out, under } : null;
-  };
+  let plain: object;
+  let area: Region | undefined;
+  let whole: Region | null | undefined;
+  let kept: Region | null | undefined;
+  let covers: Cover[] = [];
   switch (spec.kind) {
     case 'line':
-      return ok(lineStitches(spec.path, spec.line));
+      plain = { kind: 'line', path: spec.path, line: spec.line };
+      break;
     case 'satin':
-      return ok(spec.columns.flatMap((rails) => satinRuns(rails, spec.satin)));
-    case 'applique': {
-      const { runs, under } = appliqueRuns(spec.area, spec.applique, way.from, spec.shared);
-      return ok(runs, under);
-    }
-    case 'border': {
-      const whole = wholeOf(spec.area, spec.memory);
-      const runs = borderStitches(spec.area, spec.border, way.from, whole);
-      const end = runs[runs.length - 1];
-      return ok(spec.open ? [...runs, ...openStitches(spec.open, spec.border, end ? end[end.length - 1] : way.from, spec.area, whole)] : runs);
-    }
+      plain = { kind: 'satin', columns: spec.columns.map((rails) => rails.map(railsIn)), satin: spec.satin };
+      break;
+    case 'applique':
+      plain = { kind: 'applique', applique: spec.applique };
+      area = spec.area;
+      whole = spec.shared;
+      break;
+    case 'border':
+      plain = { kind: 'border', border: spec.border, open: spec.open ?? undefined };
+      area = spec.area;
+      whole = wholeOf(spec.area, spec.memory);
+      break;
     case 'fill': {
-      // Travel may run where it is hidden: across the whole area where shapes on top left parts
-      // out (knockout), and a little beyond the edge where the rows end (as far as travel along
-      // an old thread may, TRAVEL_REACH).
-      const travel = expandRegion(wholeOf(spec.area, spec.memory) ?? spec.area, TRAVEL_REACH) ?? undefined;
-      const f = fillRuns(spec.area, spec.fill, { start: way.from, end: way.to, travel, covers: way.covers });
-      return f ? ok(f.runs, f.under) : null;
+      area = spec.area;
+      whole = wholeOf(spec.area);
+      // Travel may run across the whole area as the object remembers it (see core sew_one).
+      kept = wholeOf(spec.area, spec.memory);
+      plain = { kind: 'fill', fill: spec.fill, keptSame: kept === whole };
+      covers = way.covers ?? [];
+      break;
     }
+  }
+  const out = core().sewOne(plain, area && regionIn(area), whole ? regionIn(whole) : undefined, kept && kept !== whole ? regionIn(kept) : undefined, covers.map((c) => regionIn(c.region)), Float64Array.from(covers, (c) => c.overlap), way.from[0], way.from[1], way.to && Float64Array.from(way.to));
+  if (!out) return null;
+  try {
+    const under = out.under;
+    const { runs, flags } = takeRuns(out);
+    runs.forEach((r, k) => flags[k] & 2 && stopBefore.add(r));
+    return { runs, under };
+  } finally {
+    out.free();
   }
 }
 

@@ -93,9 +93,6 @@ export function lineGoes(form: Form, gap?: number): { apart: number; redwork: nu
   return { apart: paths.length, redwork: paths.length > 1 ? redworkWalks(redworkGraph(paths, gap)).length : paths.length };
 }
 
-/** Running stitch along the paths of `form` (see lineStitches). */
-export const lineRuns = (form: Form, s: RunSettings, reverse = false): Pt[][] => lineStitches(form, runAsLine(s), reverse);
-
 /** The lines the echo of a line along `form` lies on, each with its copy number (see EchoLine.k). */
 export function echoCopyLines(form: Form, st: PathStitch): EchoLine[] {
   if (!st.echo) return [];

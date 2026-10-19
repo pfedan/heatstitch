@@ -1,6 +1,6 @@
-import { pathLength, TRAVEL_STITCH, TravelGrid } from '../digitize/fill';
+import { TRAVEL_STITCH } from '../digitize/fill';
+import { core } from '../wasm/core';
 import { outline, sample, type Region } from '../digitize/region';
-import { runStitch } from '../digitize/run';
 import type { Pt } from '../digitize/skeleton';
 import { rasterize, rasterizeStroke, regionOf, unionOf } from '../shape/rasterize';
 import type { Form } from '../shape/path';
@@ -46,10 +46,6 @@ const CHECK_SLACK = 0.25;
 export const HIDE_ENDS = 1;
 /** Grid travel is planned on (mm). */
 const CELL = 0.25;
-/** The cells round a cell within HIDE_INSET (as offsets): all under, the cell lies off every edge. */
-const DISC: [number, number][] = [];
-for (let dj = -Math.round(HIDE_INSET / CELL); dj <= Math.round(HIDE_INSET / CELL); dj++)
-  for (let di = -Math.round(HIDE_INSET / CELL); di <= Math.round(HIDE_INSET / CELL); di++) if ((di || dj) && Math.hypot(di, dj) * CELL <= HIDE_INSET) DISC.push([di, dj]);
 
 /** An area that hides what is sewn under it, and how far inside its edge it does (its rows may stop short of it). */
 export interface Hiding {
@@ -253,60 +249,12 @@ function search(a: Pt, b: Pt, areas: Hiding[], box: Box, reach: number): Pt[] | 
       }
     }
   }
-  // Off the edges: cells whose disc of HIDE_INSET lies under all of it (the union shrunk), and the
-  // discs round the two ends.
-  const deep = new Uint8Array(w * h);
-  const disc = DISC.map(([di, dj]) => dj * w + di);
-  for (let j = 2; j < h - 2; j++) {
-    for (let i = 2; i < w - 2; i++) {
-      const k = j * w + i;
-      if (!mask[k]) continue;
-      let all = true;
-      for (let n = 0; n < disc.length && all; n++) all = mask[k + disc[n]] === 1;
-      if (all) deep[k] = 1;
-    }
-  }
-  const ends = HIDE_ENDS * 0.9;
-  for (const e of [a, b]) {
-    const [ci, cj] = [Math.floor(e[0] / CELL) - x0, Math.floor(e[1] / CELL) - y0];
-    const r = Math.ceil(ends / CELL) + 1;
-    for (let j = Math.max(2, cj - r); j <= Math.min(h - 3, cj + r); j++)
-      for (let i = Math.max(2, ci - r); i <= Math.min(w - 3, ci + r); i++) if (Math.hypot((x0 + i + 0.5) * CELL - e[0], (y0 + j + 0.5) * CELL - e[1]) < ends) deep[j * w + i] = 1;
-  }
-  // Not joined there at all: no way (a quick answer for most pairs, before the field is worked out).
-  if (!joins(deep, w, h, [Math.floor(a[0] / CELL) - x0, Math.floor(a[1] / CELL) - y0], [Math.floor(b[0] / CELL) - x0, Math.floor(b[1] / CELL) - y0])) return null;
-  const region = regionOf(deep, x0, y0, w, h, CELL);
-  if (!region) return null;
-  const grid = new TravelGrid(region);
-  const path = grid.path(a, b, false);
-  if (!path || pathLength(path) > reach) return null;
-  const pts = runStitch(path, TRAVEL_STITCH, 0.1).map((q): Pt => [Math.round(q[0] * 10) / 10, Math.round(q[1] * 10) / 10]);
-  let inner = pts.slice(1, -1);
-  // A way of one stitch still gets a point of its own: the object it leads to knows its travel by its stitches.
-  if (!inner.length) inner = [[Math.round(((a[0] + b[0]) / 2) * 10) / 10, Math.round(((a[1] + b[1]) / 2) * 10) / 10]];
+  // Off the edges, joined, the shortest way and its stitches: the core (core/src/model/travel.rs).
+  const flat = core().hiddenSearch(mask, x0, y0, w, h, a[0], a[1], b[0], b[1], reach);
+  if (!flat) return null;
+  const inner: Pt[] = [];
+  for (let i = 0; i + 1 < flat.length; i += 2) inner.push([flat[i], flat[i + 1]]);
   return hiddenAlong([a, ...inner, b], areas) ? inner : null;
-}
-
-/** Whether cells `s` and `t` (column, row) are joined through set cells of `m` (w by h). */
-function joins(m: Uint8Array, w: number, h: number, s: [number, number], t: [number, number]): boolean {
-  const at = (c: [number, number]) => (c[0] >= 0 && c[1] >= 0 && c[0] < w && c[1] < h ? c[1] * w + c[0] : -1);
-  const [from, to] = [at(s), at(t)];
-  if (from < 0 || to < 0 || !m[from] || !m[to]) return false;
-  const seen = new Uint8Array(w * h);
-  const queue = new Int32Array(w * h);
-  let [head, tail] = [0, 0];
-  queue[tail++] = from;
-  seen[from] = 1;
-  while (head < tail) {
-    const k = queue[head++];
-    if (k === to) return true;
-    for (const n of [k - 1, k + 1, k - w, k + w]) {
-      if (n < 0 || n >= w * h || seen[n] || !m[n]) continue;
-      seen[n] = 1;
-      queue[tail++] = n;
-    }
-  }
-  return false;
 }
 
 const exits = new Map<string, Pt | null>();

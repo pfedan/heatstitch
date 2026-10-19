@@ -42,38 +42,6 @@ function lines(o: LinesOut): Pt[][] {
   return l;
 }
 
-/**
- * The loops in the order to sew them, starting near `from`: each starts at its point nearest the
- * needle, the next is the one nearest where the last ended (a closed loop ends where it starts).
- */
-export function orderLoops(loops: Pt[][], from: Pt): Pt[][] {
-  const todo = loops.slice();
-  const out: Pt[][] = [];
-  let at = from;
-  while (todo.length) {
-    let best = 0;
-    let bestK = 0;
-    let bestD = Infinity;
-    todo.forEach((l, j) => {
-      l.forEach((q, k) => {
-        const d = dist(q, at);
-        if (d < bestD) {
-          bestD = d;
-          best = j;
-          bestK = k;
-        }
-      });
-    });
-    const l = todo.splice(best, 1)[0];
-    const open = l.slice(0, -1);
-    const k = bestK % open.length;
-    const loop = [...open.slice(k), ...open.slice(0, k), open[k]];
-    out.push(loop);
-    at = loop[0];
-  }
-  return out;
-}
-
 /** Evenly spaced points along a line, `step` apart (both ends kept). */
 export function resample(pts: Pt[], step: number): Pt[] {
   const out: Pt[] = [pts[0]];

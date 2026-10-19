@@ -51,6 +51,10 @@ impl RegionData {
     pub fn h(&self) -> usize {
         self.r.h
     }
+    #[wasm_bindgen(getter, js_name = pxMm)]
+    pub fn px_mm(&self) -> f64 {
+        self.r.px_mm
+    }
     #[wasm_bindgen(getter, js_name = areaMm2)]
     pub fn area_mm2(&self) -> f64 {
         self.r.area_mm2

@@ -4,7 +4,13 @@
 
 pub mod along;
 pub mod applique;
+pub mod covers;
+pub mod fill;
 pub mod line;
 pub mod line_order;
+pub mod order;
 pub mod restitch;
 pub mod runs;
+pub mod sew;
+pub mod trace;
+pub mod travel;
