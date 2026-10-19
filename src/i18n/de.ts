@@ -57,6 +57,8 @@ export const deBase = {
   'controls.realistic.hint': 'Runde, gezwirnte Fäden mit Schatten',
   'controls.threadWidth': 'Fadenbreite',
   'controls.threadWidth.hint': 'Sichtbare Breite der realistischen Fäden.',
+  'controls.lineWidth': 'Linienbreite',
+  'controls.lineWidth.hint': 'Sichtbare Breite der Stichlinien.',
   'controls.background': 'Hintergrund',
   'controls.background.hint': 'Farbe hinter den Stichen, etwa die des Stoffs.',
   'bg.default': 'Automatisch',

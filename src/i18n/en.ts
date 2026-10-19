@@ -59,6 +59,8 @@ const enBase: Record<keyof typeof deBase, string> = {
   'controls.realistic.hint': 'Round, twisted threads with shadows',
   'controls.threadWidth': 'Thread width',
   'controls.threadWidth.hint': 'Visible width of the realistic threads.',
+  'controls.lineWidth': 'Line width',
+  'controls.lineWidth.hint': 'Visible width of the stitch lines.',
   'controls.background': 'Background',
   'controls.background.hint': 'Color behind the stitches, such as the fabric.',
   'bg.default': 'Automatic',

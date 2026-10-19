@@ -399,11 +399,12 @@ const densityShot = async () => {
   }
   await p.keyboard.up('Control');
   await p.evaluate(() => {
+    // Realistic first: the width slider sets the width of the view that is shown.
+    const r = document.getElementById('realistic');
+    if (!r.checked) r.click();
     const w = document.getElementById('thread-width');
     w.value = '0.12';
     w.dispatchEvent(new Event('input', { bubbles: true }));
-    const r = document.getElementById('realistic');
-    if (!r.checked) r.click();
   });
   await p.mouse.move(360, 60);
   await p.waitForTimeout(7000);

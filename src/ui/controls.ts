@@ -158,8 +158,11 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
     scaleBar.checked = s.scaleBar;
     hoverPreview.checked = s.hoverPreview;
     wheelZooms.checked = s.wheelZooms;
-    threadWidth.value = String(s.threadMm);
-    threadWidth.disabled = !s.realistic;
+    // One width for what is shown: the flat lines, or the realistic threads.
+    const widthMm = s.realistic ? s.threadMm : s.lineMm;
+    threadWidth.value = String(widthMm);
+    $('thread-width-name').textContent = t(s.realistic ? 'controls.threadWidth' : 'controls.lineWidth');
+    $('thread-width-field').title = t(s.realistic ? 'controls.threadWidth.hint' : 'controls.lineWidth.hint');
     liveLight.checked = s.liveLight;
     liveLight.disabled = !s.realistic;
     fabricLook.replaceChildren(
@@ -176,7 +179,7 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
     document.querySelectorAll<HTMLInputElement>('input[name="machine-needles"]').forEach((r) => (r.checked = r.value === needles));
     $('cell-out').textContent = `${formatNumber(s.cellMm, 2)} mm`;
     $('blur-out').textContent = s.blurMm > 0 ? `${formatNumber(s.blurMm, 1)} mm` : t('controls.off');
-    $('thread-width-out').textContent = `${formatNumber(s.threadMm, 2)} mm`;
+    $('thread-width-out').textContent = `${formatNumber(widthMm, 2)} mm`;
     stage.style.setProperty('--stage', s.background ?? '');
     if (!s.background) stage.style.removeProperty('--stage');
     let named: Key | null = null;
@@ -234,7 +237,11 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
   on(scaleBar, 'change', () => ((s.scaleBar = scaleBar.checked), 'render'));
   on(hoverPreview, 'change', () => ((s.hoverPreview = hoverPreview.checked), 'render'));
   on(wheelZooms, 'change', () => ((s.wheelZooms = wheelZooms.checked), 'render'));
-  on(threadWidth, 'input', () => ((s.threadMm = Number(threadWidth.value)), 'render'));
+  on(threadWidth, 'input', () => {
+    if (s.realistic) s.threadMm = Number(threadWidth.value);
+    else s.lineMm = Number(threadWidth.value);
+    return 'render';
+  });
   on(liveLight, 'change', () => ((s.liveLight = liveLight.checked), 'render'));
   fabricLook.addEventListener('change', () => {
     s.fabricLook = fabricLook.value !== 'flat';

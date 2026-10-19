@@ -127,12 +127,12 @@ export function stitchAlpha(p: Pattern, hidden: ReadonlySet<number>, focus: numb
   return out;
 }
 
-/** Flat stitch lines in per-stitch colors, drawn in sewing order up to the style's limit. */
-export function drawFlatStitches(ctx: CanvasRenderingContext2D, vp: Viewport, p: Pattern, st: StitchStyle, opacity: number): void {
+/** Flat stitch lines `lineMm` wide in per-stitch colors, drawn in sewing order up to the style's limit. */
+export function drawFlatStitches(ctx: CanvasRenderingContext2D, vp: Viewport, p: Pattern, st: StitchStyle, opacity: number, lineMm: number): void {
   ctx.save();
   ctx.lineJoin = 'round';
   ctx.lineCap = 'round';
-  ctx.lineWidth = Math.max(0.75, 0.3 * vp.scale);
+  ctx.lineWidth = Math.max(0.75, lineMm * vp.scale);
   const s = vp.scale / 10;
   const ox = vp.offsetX;
   const oy = vp.offsetY;
