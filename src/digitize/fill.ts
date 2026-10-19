@@ -190,6 +190,11 @@ class Frame {
   wave?: { height: number; k: number; tol: number };
   /** How rows turn at the edge (see FillParams.rowEnds); straight to the next row when not set. */
   rowEnds?: RowEnds;
+  /**
+   * Rows on lines of the 0.1 mm grid needle points are saved on (see onGrid): the rows' direction in
+   * grid steps (q, p), and the row number of the line row k lies on (v · 10 · |(q, p)| = k · m).
+   */
+  lattice?: { q: number; p: number; m: number };
   /** With rows turning along the edge: the u nearest `u` (within `reach`) where row v meets the outline. */
   edge?: (u: number, v: number, reach: number) => number;
   /** The area the rows fill: a tour plans its hidden ways inside it (not on the travel grid, which
@@ -198,7 +203,7 @@ class Frame {
   constructor(
     angleDeg: number,
     public spacing: number,
-    private end = spacing,
+    public end = spacing,
     private offset = 1 / STAGGERS,
   ) {
     const a = angleDeg * RAD;
@@ -478,7 +483,68 @@ function rowStitches(f: Frame, k: number, v: number, from: number, to: number, l
   }
   if (dir < 0) pts.reverse();
   if (f.wave) return waveStitches(f, f.wave.tol, v, [from, ...pts, to]);
-  return [f.at(from, v), ...pts.map((u) => f.at(u, v)), f.at(to, v)];
+  const out = [f.at(from, v), ...pts.map((u) => f.at(u, v)), f.at(to, v)];
+  return f.lattice ? out.map((q) => onLattice(f.lattice!, k, q)) : out;
+}
+
+/** Grid steps a row direction may take for rows on grid lines (see onGrid). */
+const LATTICE_STEPS = 3;
+/** How far (degrees) the rows may turn to lie on grid lines. */
+const LATTICE_TURN = 0.05;
+
+/**
+ * Lays the rows of `f` on lines of the 0.1 mm grid the needle points are saved on, where its angle
+ * runs along such lines (0°, 45°, 90°, and directions of up to LATTICE_STEPS grid steps): rows lie
+ * a whole number of grid lines apart, the nearest to the spacing asked for, and every needle point
+ * on a grid point of its row. Rounded to the grid one by one, rows at 45° and 0.2 mm lay 0.14 and
+ * 0.28 mm apart in turn and read as pairs.
+ */
+function onGrid(f: Frame): void {
+  const a = Math.atan2(f.e[1], f.e[0]);
+  for (let q = -LATTICE_STEPS; q <= LATTICE_STEPS; q++) {
+    for (let p = 0; p <= LATTICE_STEPS; p++) {
+      if ((!p && q !== 1) || (p && gcd(Math.abs(q), p) !== 1)) continue;
+      const b = Math.atan2(p, q);
+      const turn = Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b)));
+      const flip = Math.abs(turn - Math.PI) < turn;
+      if (Math.min(turn, Math.PI - turn) > LATTICE_TURN * RAD) continue;
+      const l = Math.hypot(q, p);
+      const sq = flip ? -q : q;
+      const sp = flip ? -p : p;
+      const line = 0.1 / l;
+      const m = Math.max(1, Math.round(f.spacing / line));
+      f.e = [sq / l, sp / l];
+      f.n = [-sp / l, sq / l];
+      f.spacing = f.end = m * line;
+      f.lattice = { q: sq, p: sp, m };
+      return;
+    }
+  }
+}
+
+const gcd = (a: number, b: number): number => (b ? gcd(b, a % b) : a);
+
+/** The grid point on row k's line nearest to `pt` (see onGrid). */
+function onLattice(g: { q: number; p: number; m: number }, k: number, pt: Pt): Pt {
+  const x0 = Math.round(pt[0] * 10);
+  const y0 = Math.round(pt[1] * 10);
+  const want = k * g.m;
+  const r = Math.abs(g.q) + Math.abs(g.p);
+  let best: Pt = pt;
+  let bd = Infinity;
+  for (let dy = -r; dy <= r; dy++) {
+    for (let dx = -r; dx <= r; dx++) {
+      const x = x0 + dx;
+      const y = y0 + dy;
+      if (-g.p * x + g.q * y !== want) continue;
+      const d = (x / 10 - pt[0]) ** 2 + (y / 10 - pt[1]) ** 2;
+      if (d < bd) {
+        bd = d;
+        best = [x / 10, y / 10];
+      }
+    }
+  }
+  return best;
 }
 
 /**
@@ -1750,6 +1816,7 @@ export function fillRegion(r: Region, p: FillParams, start: Pt, neighbours: numb
   else if (p.emboss) f.emboss = p.emboss;
   else if (p.texture) f.texture = p.texture;
   if (p.fade) f.fade = p.fade;
+  if (!p.wave && !f.gradient) onGrid(f);
   if (p.rowEnds && !p.wave) endRows(f, r, p.rowEnds);
   f.area = r;
   const top = rows(r, r.sdf, f, 0);
