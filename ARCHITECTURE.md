@@ -204,7 +204,7 @@ promises; requests carry plain data (typed arrays, stored objects) that `postMes
 |---|---|
 | `src/density/worker.ts` | density grid, validation measurement, automatic correction (two instances: density and validator) |
 | `src/digitize/worker.ts` | picture to stitches for the image assistant |
-| `src/resew/worker.ts` | live preview of a scaled design sewn anew while the frame is dragged |
+| `src/resew/worker.ts` | a design sewn anew off the main thread: scaled while the frame is dragged and when it is let go, stitch settings pointed at and taken over; for many fills, a share of them on each of a few helper cores (`pool.ts`), taken over stitch for stitch (`Fills` in `model/restitch.ts`) |
 | `src/correct/engine/worker.ts` | the traffic light report and fixes, several workers at once |
 
 A new design (an edit) drops work still running for an older version, so the newest design never

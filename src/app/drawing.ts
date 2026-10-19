@@ -336,9 +336,10 @@ export function bindDrawing(app: DrawingApp) {
         frameFrame = 0;
         ui.flowPreview = null;
         resewer.stop();
+        const last = live;
         live = null;
         asked = null;
-        return commitTransform(m);
+        return isRigid(m) || ui.lettering || resewer.failed ? commitTransform(m) : commitScaled(m, last);
       }
       pendingFrame = m;
       showFrame();
@@ -393,6 +394,50 @@ export function bindDrawing(app: DrawingApp) {
     return { xs: [...xs], ys: [...ys] };
   }
 
+  // Scalings let go are sewn in the worker, one after the other: a large design takes seconds and
+  // the page stays usable meanwhile, the scaled stitches shown as dragged until the new ones come.
+  let scaling: Promise<unknown> = Promise.resolve();
+  let scalings = 0;
+
+  /** The frame's scaling `m` let go, sewn anew in the worker; `last`, the newest stitches it sewed while dragging. */
+  function commitScaled(m: Mat, last: LiveResult | null): boolean {
+    const f = app.files.active;
+    const p = f?.pattern;
+    const sel = frameObjects();
+    if (!f || !p || !sel.length) {
+      app.redraw();
+      return false;
+    }
+    // Until the new stitches come: the ones sewn while dragging, stretched by what the frame did since.
+    const base = last?.from === p ? last.pattern : p;
+    const map = base === p ? m : compose(m, invert(last!.m));
+    const at = app.seq(base).objects;
+    let shown = base;
+    if (!nearIdentity(map)) for (const o of [...sel].reverse()) shown = transformObject(shown, at[o], map).pattern;
+    ui.flowPreview = shown;
+    scalings++;
+    document.body.classList.add('sew-busy');
+    app.redraw();
+    scaling = scaling.then(async () => {
+      // A scaling let go while one before was still sewn applies to the design that one made.
+      const from = app.files.active === f ? f.pattern : null;
+      const now = from === p ? sel : from ? frameObjects() : [];
+      const r = from && now.length ? await resewer.commit(from, now, m, app.settings.trimMm) : null;
+      if (--scalings === 0) document.body.classList.remove('sew-busy');
+      if (ui.flowPreview === shown) ui.flowPreview = null;
+      // Something else changed the design meanwhile (undo, another edit): that one stays.
+      if (!from || app.files.active !== f || f.pattern !== from) return app.redraw();
+      if (!r) {
+        // The worker stopped: sewn here, rather than not at all.
+        if (resewer.failed) return void commitTransform(m);
+        app.layers.say(t('frame.failed'), true);
+        return app.redraw();
+      }
+      applyTransformed(f, from, now, ui.selectedObjects, false, r);
+    });
+    return true;
+  }
+
   /**
    * The selected objects (or `objs`, the selection staying as it is) moved, turned or scaled by `m`
    * together (one undo step). `done` is that already worked out (see fitScaling). False when that did not work.
@@ -422,17 +467,24 @@ export function bindDrawing(app: DrawingApp) {
     // Borders in a thread of their own go along (sewn anew on the moved area).
     const keys = new Set(sel.map((o) => objectKey(cur, app.seq(cur).objects[o])));
     const synced = syncBorders(cur, app.settings.trimMm);
+    const moved = synced !== cur ? app.seq(synced).objects.flatMap((o, i) => (keys.has(objectKey(synced, o)) ? [i] : [])) : null;
+    applyTransformed(f, p, sel, kept, !!objs, { pattern: synced, hand, restitched, moved });
+    return true;
+  }
+
+  /** A transform of the objects `sel` of `p` worked out (`r`, borders along) taken over as one undo step. */
+  function applyTransformed(f: NonNullable<typeof app.files.active>, p: Pattern, sel: number[], kept: ReadonlySet<number>, keep: boolean, r: { pattern: Pattern; hand: number; restitched: boolean; moved: number[] | null }): void {
+    const synced = r.pattern;
     app.applyEdit(synced);
     const nq = app.seq(synced);
     app.files.setObjects(f, rememberedIn(synced, nq.objects));
     const same = nq.objects.length === app.seq(p).objects.length;
-    if (objs) ui.selectedObjects = same ? kept : new Set();
-    else ui.selectedObjects = synced !== cur ? new Set(nq.objects.flatMap((o, i) => (keys.has(objectKey(synced, o)) ? [i] : []))) : same ? new Set(sel) : new Set();
+    if (keep) ui.selectedObjects = same ? kept : new Set();
+    else ui.selectedObjects = r.moved ? new Set(r.moved) : same ? new Set(sel) : new Set();
     ui.selectionKey++;
-    if (restitched && hand) app.layers.say(t('shape.handReplaced', { n: formatNumber(hand) }));
+    if (r.restitched && r.hand) app.layers.say(t('shape.handReplaced', { n: formatNumber(r.hand) }));
     app.followKnockouts();
     app.redraw();
-    return true;
   }
 
   return { commitTransform, drawTool, frameObjects, frameTool, knockoutObjects, setDrawing, setGapMode, syncFrame, updateOverlapCard };

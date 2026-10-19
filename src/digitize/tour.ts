@@ -44,7 +44,7 @@ export interface Way<W> {
 
 export interface TourInput<W> {
   touches: Touch[][];
-  /** The length of the way between two points inside the area; the straight line by default. */
+  /** The length of the way between two points inside the area; the straight line by default, never shorter. */
   dist?: (p: Pt, q: Pt) => number;
   /** The ways to sew section i starting at side `from` (the ends of that row). */
   ways(i: number, from: 0 | 1): Way<W>[];
@@ -193,7 +193,7 @@ function postorder<W>(tree: Map<number, Touch[]>, ways: TourInput<W>['ways'], di
 }
 
 /** The cheapest tree tour of one part from `pos` (with `end`, the way on there counts too). */
-function tourPart<W>(part: number[], input: TourInput<W>, pos: Pt, end?: (p: Pt) => number): { steps: Step<W>[]; cost: number; pos: Pt } {
+export function tourPart<W>(part: number[], input: TourInput<W>, pos: Pt, end?: (p: Pt) => number): { steps: Step<W>[]; cost: number; pos: Pt } {
   let best: { steps: Step<W>[]; cost: number; pos: Pt } | null = null;
   for (const tree of spanningTrees(part, input.touches)) {
     for (const root of part) {
@@ -243,20 +243,34 @@ export function tour<W>(input: TourInput<W>, start: Pt, end?: (p: Pt) => number,
     perm(ps, []);
     return best!.steps;
   }
-  const left = ps.slice();
+  // The entries of each part, for a bound on what touring it from somewhere costs.
+  const entries = ps.map((part) => part.flatMap((i) => [...input.ways(i, 0), ...input.ways(i, 1)].map((w) => w.p)));
+  const left = ps.map((_, k) => k);
   const order: number[][] = [];
   let pos = start;
   while (left.length) {
+    // The part whose tour from here is cheapest. A tour costs at least the straight way to the
+    // part's nearest entry (ways inside are never shorter), so the parts are toured nearest bound
+    // first and the search stops once no bound can beat the best tour (branch and bound): the same
+    // choice as touring every part, at a fraction of the tours on areas cut into many parts.
+    const bounds = left.map((k, i) => {
+      let b = Infinity;
+      for (const p of entries[k]) b = Math.min(b, straight(pos, p));
+      return { i, b };
+    });
+    bounds.sort((x, y) => x.b - y.b || x.i - y.i);
     let bi = 0;
     let bt: ReturnType<typeof tourPart<W>> | null = null;
-    left.forEach((part, i) => {
-      const t = tourPart(part, input, pos);
-      if (!bt || t.cost < bt.cost) {
+    for (const { i, b } of bounds) {
+      if (bt && b > bt.cost) break;
+      const t = tourPart(ps[left[i]], input, pos);
+      // Ties go to the part listed first, as when every part was toured in turn.
+      if (!bt || t.cost < bt.cost || (t.cost === bt.cost && i < bi)) {
         bt = t;
         bi = i;
       }
-    });
-    order.push(left.splice(bi, 1)[0]);
+    }
+    order.push(ps[left.splice(bi, 1)[0]]);
     pos = bt!.pos;
   }
   return run(order).steps;
