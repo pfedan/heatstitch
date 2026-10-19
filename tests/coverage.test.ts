@@ -8,8 +8,8 @@ const reasons = (v: ValidationResult) => new Set(v.zones.flatMap((z) => z.reason
 
 describe('lower limits', () => {
   it('flags a fill so open that the fabric shows, not one in the recommended range', () => {
-    const open = measurePattern(new Shape().fill(10, 10, 20, 20, 'h', 0.35).build());
-    const good = measurePattern(new Shape().fill(10, 10, 20, 20, 'h', 0.21).build());
+    const open = measurePattern(new Shape().fill(10, 10, 20, 20, 'h', 0.7).build());
+    const good = measurePattern(new Shape().fill(10, 10, 20, 20, 'h', 0.42).build());
     expect(reasons(classify(open, on('woven')))).toContain('sparse');
     expect(reasons(classify(good, on('woven')))).not.toContain('sparse');
     // Fabric showing through is only ever Caution.
@@ -17,7 +17,7 @@ describe('lower limits', () => {
   });
 
   it('accepts an open fill on fabric that wants it open', () => {
-    const open = measurePattern(new Shape().fill(10, 10, 20, 20, 'h', 0.31).build());
+    const open = measurePattern(new Shape().fill(10, 10, 20, 20, 'h', 0.62).build());
     expect(reasons(classify(open, on('woven')))).toContain('sparse');
     expect(reasons(classify(open, on('light')))).not.toContain('sparse');
   });

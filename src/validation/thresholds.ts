@@ -99,7 +99,9 @@ export function thresholdsFor(p: Profile): Thresholds {
     satinCritical: BASE.satinCritical * k,
     fillDenser: FILL_DENSER,
     holes: fabric.perforation ? { caution: HOLES_CAUTION, critical: HOLES_CRITICAL } : null,
-    sparse: SPARSE_SHARE / recommendedSpacing(p)[1],
+    // Fabric shows through where the thread leaves room, which the denser default did not change:
+    // as open as rows at FILL_DENSER times the widest recommended (0.5 mm on woven, as before).
+    sparse: SPARSE_SHARE / (recommendedSpacing(p)[1] * FILL_DENSER),
     pull: fabric.pull,
     long: fabric.longMm * 10,
   };
@@ -135,8 +137,5 @@ export function classifyHoles(neighbours: number, th: Thresholds): Level {
   return SAFE;
 }
 
-/**
- * Lowest mean density for a cell whose thread is `satinShare` satin: the same for both, as a fill
- * whose spacing (across two rows) is a satin's lays as much thread (2 / spacing).
- */
-export const sparseLimit = (th: Thresholds, _satinShare: number): number => th.sparse;
+/** Lowest mean density for a cell whose thread is `satinShare` satin (a satin lays twice a fill's thread at the same spacing). */
+export const sparseLimit = (th: Thresholds, satinShare: number): number => th.sparse * (1 + Math.min(1, Math.max(0, satinShare)));
