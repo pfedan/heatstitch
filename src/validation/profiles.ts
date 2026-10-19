@@ -16,8 +16,9 @@ export interface Profile {
   thread: ThreadId;
   /**
    * Values measured on the user's own fabric with a test swatch (see model/swatch.ts), in place of
-   * the fabric's. They belong to this browser, not to a design: the app puts them on the active
-   * profile (see withOwn in settings.ts), normalizeProfile leaves them off.
+   * the fabric's. A design keeps a copy with its material (taken from this browser's measured values
+   * when it is made or its fabric changes, see withOwn in settings.ts), so it is digitized, checked
+   * and tuned the same everywhere. None: the fabric's values.
    */
   own?: OwnValues;
 }
@@ -66,9 +67,11 @@ export const threadOf = (p: Profile): Thread => THREAD[p.thread] ?? THREAD['40']
  * every older project keeps its fabric.
  */
 export function normalizeProfile(p: Partial<Profile> | undefined): Profile {
+  const own = normalizeOwn(p?.own);
   return {
     fabric: Object.hasOwn(FABRIC, p?.fabric ?? '') ? p!.fabric! : DEFAULT_PROFILE.fabric,
     thread: Object.hasOwn(THREAD, p?.thread ?? '') ? p!.thread! : DEFAULT_PROFILE.thread,
+    ...(own ? { own } : {}),
   };
 }
 

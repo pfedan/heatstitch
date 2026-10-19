@@ -22,7 +22,10 @@ export const de = {
   'swatch.name': 'Probestück {fabric} {kind}',
   'swatch.cells': 'Felder',
   'swatch.edge': 'Sollkante',
-  'swatch.applied': 'Neue Objekte auf {fabric} bekommen jetzt diese Werte. Bestehende Stickmuster passt „Auf Stoff abstimmen“ an.',
+  'swatch.applied': 'Sie gelten für dieses Stickmuster und für neue auf {fabric}. Bestehende Objekte passt „Auf Stoff abstimmen“ an.',
+  'swatch.browser': 'In diesem Browser steht inzwischen etwas anderes. {values} Dieses Stickmuster hat seine Werte behalten.',
+  'swatch.browser.take': 'Für dieses Stickmuster übernehmen',
+  'swatch.browser.take.hint': 'Gibt dem Stickmuster die Werte, die in diesem Browser eingemessen sind.',
   'swatch.loadFailed': 'Die Schrift für die Beschriftung lädt gerade nicht. Bitte noch einmal versuchen.',
 } as const;
 
@@ -49,6 +52,9 @@ export const en: Record<keyof typeof de, string> = {
   'swatch.name': 'Test swatch {fabric} {kind}',
   'swatch.cells': 'Cells',
   'swatch.edge': 'Nominal edge',
-  'swatch.applied': 'New objects on {fabric} now get these values. Tune to fabric adjusts existing designs.',
+  'swatch.applied': 'They apply to this design and to new ones on {fabric}. Tune to fabric adjusts existing objects.',
+  'swatch.browser': 'This browser has different values by now. {values} This design has kept its own.',
+  'swatch.browser.take': 'Use them for this design',
+  'swatch.browser.take.hint': 'Gives the design the values measured in this browser.',
   'swatch.loadFailed': 'The font for the labels does not load right now. Please try again.',
 };

@@ -204,7 +204,9 @@ export function loadSettings(): Settings {
     if (!raw) return structuredClone(DEFAULTS);
     const s = JSON.parse(raw) as Partial<Settings> & { showJumps?: boolean; findingsOpen?: boolean };
     const own = normalizeOwnStore(s.own);
-    const profile = withOwn(normalizeProfile(s.profile), own);
+    // The active design's measured values when it has some, else this browser's.
+    const stored = normalizeProfile(s.profile);
+    const profile = stored.own ? stored : withOwn(stored, own);
     const { showJumps, findingsOpen, ...rest } = s;
     return {
       ...structuredClone(DEFAULTS),
@@ -267,12 +269,12 @@ export function withOwn(p: Profile, own: Record<string, OwnValues>): Profile {
   return o ? { fabric, thread, own: structuredClone(o) } : { fabric, thread };
 }
 
-/** Sets the active profile, with the values measured for it. */
+/** Sets the active profile, with the values measured for it in this browser (a new fabric or thread, a new design). */
 export function setProfile(s: Settings, p: Profile): void {
   s.profile = withOwn(p, s.own);
 }
 
-/** Keeps `values` (or forgets them, undefined) for the active fabric and thread and puts them on the profile. */
+/** Keeps `values` (or forgets them, undefined) for the active fabric and thread and puts them on the profile (and so on the active design). */
 export function setOwn(s: Settings, values: OwnValues | undefined): void {
   const key = ownKey(s.profile);
   const own = { ...s.own };
@@ -344,14 +346,14 @@ export interface Material {
 }
 
 export function materialOf(s: Settings): Material {
-  // Measured values belong to the browser, not to the design.
-  return structuredClone({ profile: { fabric: s.profile.fabric, thread: s.profile.thread }, checks: s.checks, hoop: s.hoop, background: s.background, threadMm: s.threadMm });
+  // The measured values go with the design: it keeps them, whatever this browser measures later.
+  return structuredClone({ profile: s.profile, checks: s.checks, hoop: s.hoop, background: s.background, threadMm: s.threadMm });
 }
 
-/** Makes `m` the active material. */
+/** Makes `m` the active material, with the measured values the design keeps (not this browser's). */
 export function applyMaterial(s: Settings, m: Material): void {
   const c = structuredClone(m);
-  setProfile(s, c.profile);
+  s.profile = normalizeProfile(c.profile);
   s.checks = c.checks;
   s.hoop = c.hoop;
   s.background = c.background;

@@ -1,7 +1,7 @@
 import { formatNumber, onLangChange, t, type Key } from '../i18n';
 import { pullDigits, swatchGrid, type SwatchKind } from '../model/swatch';
-import { setOwn, type Settings } from '../settings';
-import { FABRIC, type Own } from '../validation/profiles';
+import { setOwn, setProfile, type Settings } from '../settings';
+import { FABRIC, ownKey, type Own, type OwnValues } from '../validation/profiles';
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const near = (a: number, b: number) => Math.abs(a - b) < 1e-6;
@@ -21,6 +21,8 @@ export function bindSwatch(s: Settings, deps: { make: (kind: SwatchKind) => void
   const grid = $<HTMLTableElement>('swatch-grid');
   const status = $<HTMLElement>('swatch-own');
   const reset = $<HTMLButtonElement>('swatch-reset');
+  const browser = $<HTMLElement>('swatch-browser');
+  const take = $<HTMLButtonElement>('swatch-take');
   const kinds = document.querySelectorAll<HTMLInputElement>('input[name="swatch-kind"]');
   let kind: SwatchKind = 'fill';
 
@@ -59,10 +61,17 @@ export function bindSwatch(s: Settings, deps: { make: (kind: SwatchKind) => void
       return tr;
     });
     grid.replaceChildren(head, ...rows);
-    const lines = (['fill', 'satin'] as const).flatMap((k) => {
-      const o = s.profile.own?.[k];
-      return o ? [t(`swatch.own.${k}`, { spacing: fmt(o.spacing), pull: formatNumber(o.pull, 2) })] : [];
-    });
+    const linesOf = (v: OwnValues | undefined) =>
+      (['fill', 'satin'] as const).flatMap((k) => {
+        const o = v?.[k];
+        return o ? [t(`swatch.own.${k}`, { spacing: fmt(o.spacing), pull: formatNumber(o.pull, 2) })] : [];
+      });
+    const lines = linesOf(s.profile.own);
+    // The design keeps the values it was made with: what this browser measured since is offered, not taken.
+    const stored = s.own[ownKey(s.profile)];
+    const differ = !!stored && JSON.stringify(stored) !== JSON.stringify(s.profile.own ?? {});
+    browser.textContent = differ ? t('swatch.browser', { values: linesOf(stored).join(' ') }) : '';
+    browser.hidden = take.hidden = !differ;
     // What a pick does stays beside the grid, not in a message that goes away.
     status.textContent = lines.length ? [...lines, t('swatch.applied', { fabric: t(`fabric.${s.profile.fabric}` as Key).split(',')[0] })].join(' ') : t('swatch.own.none');
     reset.hidden = !lines.length;
@@ -76,6 +85,11 @@ export function bindSwatch(s: Settings, deps: { make: (kind: SwatchKind) => void
     }),
   );
   $('swatch-make').addEventListener('click', () => deps.make(kind));
+  take.addEventListener('click', () => {
+    setProfile(s, s.profile);
+    deps.changed();
+    refresh();
+  });
   reset.addEventListener('click', () => {
     setOwn(s, undefined);
     deps.changed();
