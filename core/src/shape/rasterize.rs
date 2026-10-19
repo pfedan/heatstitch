@@ -213,6 +213,9 @@ pub fn rasterize_stroke(f: &Form, width: f64, px_mm: f64, cap: LineCap) -> Optio
     region_of(mask, x0 as i32, y0 as i32, w, h, px_mm, None)
 }
 
+// Knocking out, sharing and joining regions, for Rust callers: the TypeScript keeps its own pixel
+// loops, as copying masks and fields into the core costs more than the loops take.
+
 /// The window and fields of a region another takes pixels away from.
 pub struct Cover<'a> {
     pub x0: i32,

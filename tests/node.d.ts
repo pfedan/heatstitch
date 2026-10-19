@@ -21,6 +21,7 @@ declare module 'node:path' {
 }
 declare module 'node:zlib' {
   export function inflateSync(data: Uint8Array): Uint8Array;
+  export function gunzipSync(data: Uint8Array): Uint8Array;
 }
 declare module 'node:url' {
   export function pathToFileURL(path: string): URL;

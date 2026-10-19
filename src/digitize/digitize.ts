@@ -1325,7 +1325,7 @@ export interface ShapeInput {
 
 /**
  * The shapes with every line too wide for a satin (see lineClassOf) as an area in the shape the
- * line paints, its ends and corners as in the file. Needs loadOps().
+ * line paints, its ends and corners as in the file.
  */
 export function wideLinesAsAreas(shapes: ShapeInput[]): ShapeInput[] {
   return shapes.map((sh) => {

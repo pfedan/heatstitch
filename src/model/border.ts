@@ -26,7 +26,7 @@ function runEnd(p: Pattern, i: number): { end: number; block: number } {
 }
 import { hasPart, lineParts, linePartsOf, partInThread, partOf, type LinePart } from './shadow';
 import { storeForm, type Form, type Path } from '../shape/path';
-import { offsetForm, opsReady } from '../shape/ops';
+import { offsetForm } from '../shape/ops';
 import { borderLoops } from '../digitize/border';
 import { simplify } from '../digitize/run';
 import { echoCopyLines, lineStitches } from './line';
@@ -68,14 +68,14 @@ const sameBorder = (a: BorderSettings, b: BorderSettings) => {
  * The line a fill's border runs on, as a form: the edge of `region` (the fill's area, all its parts
  * when it is cut apart) or `st.offset` from it, and the open paths of the fill's form. Its echo and
  * shadow lie along it. With a form given, the edge is the form's own closed paths, offset on its
- * curves by the pull compensation and `st.offset` (src/shape/ops.ts, once loaded); else the edge
+ * curves by the pull compensation and `st.offset` (src/shape/ops.ts); else the edge
  * of the pixels.
  */
 export function borderForm(m: Remembered, region: Region, st: BorderSettings): Form {
   const by = (st.offset ?? 0) + (m.fill?.areaGrow ?? 0);
   const area = formArea(m);
   const closed = area && sameRegion(region, m.region) ? { ...area, paths: area.paths.filter((x) => x.closed) } : null;
-  const curves = closed && (!by ? closed : opsReady() ? offsetForm(closed, by) : null);
+  const curves = closed && (!by ? closed : offsetForm(closed, by));
   const edge: Path[] =
     curves?.paths ??
     borderLoops(region, st.offset ?? 0).map((l) => {

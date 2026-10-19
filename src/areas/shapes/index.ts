@@ -20,7 +20,6 @@ import { canRun, command, getCommand, keyLabel, runCommand } from '../../shell/c
 import { h, icon } from '../../shell/h';
 import { showMenu, toast } from '../../shell/ui';
 import { objectMenu, showOrderMenu } from '../../ui/objectMenu';
-import { loadOps, opsReady } from '../../shape/ops';
 import type { Joined } from '../../shape/join';
 
 /** What the area "shapes" needs from the rest of the app. */
@@ -362,9 +361,7 @@ export function initShapes(app: ShapesAreaApp): void {
     label: 'shape.crossings',
     group: SHAPE,
     when: () => shaping() && app.shapeTool.count >= 2,
-    run: async () => {
-      // Crossings are found on the curves: the library for that loads on first use.
-      if (!opsReady()) await loadOps();
+    run: () => {
       const n = app.shapeTool.crossingNodes();
       toast(n ? t('shape.crossings.done', { n: formatNumber(n) }) : t('shape.crossings.none'));
     },

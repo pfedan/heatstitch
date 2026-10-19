@@ -287,7 +287,7 @@ const NO_AREA = 0.05;
 
 /**
  * The one outline of several fill shapes together, joined on their curves (null when one of them
- * has no fill). Needs `loadOps()`.
+ * has no fill).
  */
 export function unionForm(forms: Form[]): Form | null {
   if (forms.some((f) => !f.paths.some((p) => p.closed && p.nodes.length > 1))) return null;
@@ -403,7 +403,7 @@ export interface Subtracted {
 
 /**
  * The last of the objects `which` (the one sewn on top) cut out of the others, and gone itself.
- * Only fills take part; they are cut on their curves (needs `loadOps()`). Null when it cut nothing.
+ * Only fills take part; they are cut on their curves. Null when it cut nothing.
  */
 export function subtractTop(p: Pattern, which: number[], trimMm: number): Subtracted | null {
   const sorted = [...which].sort((a, b) => a - b);

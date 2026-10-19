@@ -165,7 +165,7 @@ export function crossClaim(r: Region, g: CrossGrid): Region | null {
       }
     }
   }
-  const out = n ? regionOf(mask, x0, y0, w, h, px, n) : null;
+  const out = n ? regionOf(mask, x0, y0, w, h, px) : null;
   byGrid.set(key, out);
   return out;
 }

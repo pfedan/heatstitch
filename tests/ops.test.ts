@@ -1,13 +1,11 @@
-import { beforeAll, describe, expect, it } from 'vitest';
-import { areaOfForm, loadOps, offsetForm, subtractForm, unionForms } from '../src/shape/ops';
+import { describe, expect, it } from 'vitest';
+import { areaOfForm, offsetForm, subtractForm, unionForms } from '../src/shape/ops';
 import { bezier, segment, segments, type Form, type Mat } from '../src/shape/path';
 import { ellipsePath, parsePath, rectPath } from '../src/shape/svgPath';
 
 const ID: Mat = [1, 0, 0, 1, 0, 0];
 const rect = (x: number, y: number, w: number, h: number) => parsePath(rectPath(x, y, w, h, 0, 0), ID);
 const disc = (cx: number, cy: number, r: number) => parsePath(ellipsePath(cx, cy, r, r), ID);
-
-beforeAll(loadOps);
 
 /** Points along all curves of a form. */
 function along(f: Form, per = 40): [number, number][] {

@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { digitizeDefaults } from '../src/digitize/digitize';
 import type { Pt } from '../src/digitize/skeleton';
 import type { Region } from '../src/digitize/region';
@@ -14,7 +14,7 @@ import { overlapsIn, setKnockout, wholeArea } from '../src/model/knockout';
 import { stitchKinds } from '../src/model/sequence';
 import { duplicateObjects, mirrorMatrix } from '../src/model/shapeOps';
 import { canSplit, OVERLAP_MM, partAngles, splitFill } from '../src/model/splitFill';
-import { areaOfForm, loadOps, splitForm, subtractForm, unionForms } from '../src/shape/ops';
+import { areaOfForm, splitForm, subtractForm, unionForms } from '../src/shape/ops';
 import { sewDesign } from '../src/model/sew';
 import type { Form, Mat } from '../src/shape/path';
 import { ellipsePath, parsePath, rectPath } from '../src/shape/svgPath';
@@ -25,8 +25,6 @@ import { DEFAULT_PROFILE } from '../src/validation/profiles';
 import { guessArea } from '../src/model/geo';
 
 const ID: Mat = [1, 0, 0, 1, 0, 0];
-
-beforeAll(loadOps);
 const options = digitizeDefaults(DEFAULT_PROFILE);
 const T = options.trimMm;
 const green = { r: 60, g: 170, b: 70 };
