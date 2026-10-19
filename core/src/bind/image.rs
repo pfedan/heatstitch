@@ -334,3 +334,9 @@ pub fn prepare_finish(
         of_source: f.of_source,
     })
 }
+
+/// Regions of an SVG by color from its drawings (RGBA, one after the other), see image/svg.rs.
+#[wasm_bindgen(js_name = labelsFromPasses)]
+pub fn labels_from_passes(passes: &[u8], count: usize, size: usize) -> Vec<u8> {
+    crate::image::svg::labels_from_passes(passes, count, size)
+}

@@ -3,7 +3,8 @@ import type { Browser, Page } from 'playwright';
 
 /**
  * Chromium for the browser tests. Every page it opens is watched: an uncaught error or a
- * console.error in the app fails the test that caused it, whatever the test itself checks.
+ * console.error in the app fails the test that caused it, whatever the test itself checks, and
+ * goto returns once the app is set up.
  */
 export async function launchChromium(): Promise<Browser> {
   const { chromium } = await import('playwright');
@@ -21,6 +22,14 @@ export async function launchChromium(): Promise<Browser> {
 const errors: string[] = [];
 
 function watch(page: Page): void {
+  // The app sets itself up once the core has loaded, which can be after the load event that
+  // goto waits for; tests start acting on it only then.
+  const goto = page.goto.bind(page);
+  page.goto = async (url, options) => {
+    const response = await goto(url, options);
+    await page.waitForSelector('html[data-ready]', { state: 'attached' });
+    return response;
+  };
   page.on('pageerror', (e) => errors.push(`uncaught: ${e.message}`));
   page.on('console', (m) => {
     if (m.type() === 'error') errors.push(`console.error: ${m.text()}`);

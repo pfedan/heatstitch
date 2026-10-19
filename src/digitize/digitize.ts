@@ -1,17 +1,15 @@
-import { LOCK_MM } from '../material/rules';
-import { distanceToSeeds } from '../image/edt';
-import { components, type Components } from '../image/labels';
+import { core } from '../wasm/core';
 import { NONE, type Prepared } from '../image/prepare';
-import { COLOR_CHANGE, END, JUMP, PatternBuilder, STITCH, TRIM, type Pattern, type ThreadColor } from '../model/pattern';
+import { computeBounds, type Pattern, type ThreadColor } from '../model/pattern';
 import { fabricOf, fabricPull, recommendedSpacing, satinSpacing, type Profile } from '../validation/profiles';
-import { fillRegion } from './fill';
+import { fillRegion, linesOf } from './fill';
 import { flowFill } from './flow';
 import { coverage, peakDensity } from './measure';
-import { buildRegion, maskHash, sameMask, type Region } from './region';
-import { runStitch, TOLERANCE } from './run';
-import { column, pairs, satinStitches, underlay, type Column, type SatinParams } from './satin';
+import { fromCore, maskHash, regionIn, regionWindow, sameMask, type Region } from './region';
+import { TOLERANCE } from './run';
+import type { SatinParams } from './satin';
 import type { SatinCorner, SatinEnd } from './satinJoins';
-import { reverse, skeleton, type Branch, type Graph, type Pt } from './skeleton';
+import { skeleton, type Graph, type Pt } from './skeleton';
 import { bestChain, satinRuns, type BorderSettings, type FillSettings, type Rails, type SatinSettings } from '../model/restitch';
 import { cutPieces, stripsOfAreas } from './rungs';
 import { easePiles, SATIN_PEAK } from './satinEase';
@@ -37,6 +35,11 @@ import { acrossGraph, areaKey, boxOf, groupOf, letterOf, structure, STRUCTURE, S
  *
  * Between objects: up to 1 mm a plain stitch, up to the trim length a jump, beyond that a tie-off,
  * trim, jump and tie-in. Color changes trim and tie as well.
+ *
+ * The analysis and planning run in the Rust core (core/src/digitize/picture.rs): per image the
+ * sewing order and the bridged pieces, per area its region, skeleton and kind, the satin and line
+ * networks, and the records of the design. Choosing techniques, satin in sections and the memo
+ * stay here with the model they depend on.
  */
 
 export type Kind = 'fill' | 'satin' | 'run';
@@ -212,7 +215,7 @@ interface Obj {
   region: Region;
   graph: Graph | null;
   /** Points on the region for choosing the nearest next object. */
-  probe: Pt[];
+  probe: Float64Array;
   /** Cut lines and lines across for satin in sections, found when Smart looked at the area. */
   plan?: SatinSuggestion | null;
   /** Rows follow the image (else as the options say). */
@@ -223,142 +226,57 @@ interface Obj {
   sections?: boolean;
 }
 
-const dist = (p: Pt, q: Pt) => Math.hypot(p[0] - q[0], p[1] - q[1]);
+/** Distance from `p` to the object's nearest probe (probes as a flat x, y list). */
+function nearestProbe(o: Obj, p: Pt): number {
+  let best = Infinity;
+  for (let i = 0; i < o.probe.length; i += 2) best = Math.min(best, Math.hypot(p[0] - o.probe[i], p[1] - o.probe[i + 1]));
+  return best;
+}
 
-function percentile(v: number[], q: number): number {
-  const s = v.slice().sort((a, b) => a - b);
-  return s[Math.min(s.length - 1, Math.floor(q * s.length))] ?? 0;
+/** Runs the core returned (see fill.ts linesOf), its object freed. */
+function runsOf(o: { takePts(): Float64Array; takeLens(): Uint32Array; free(): void }): Pt[][] {
+  const runs = linesOf(o.takePts(), o.takeLens());
+  o.free();
+  return runs;
 }
 
 /**
- * Fill, satin or running stitch, from the widths along the skeleton. Satin needs a stroke: no
- * wider than the satin limit, of even width (the Goldman patent's test: the widest point within
- * three standard deviations of the mean), long against its width, and with few branchings (at
- * least four widths of centerline per junction). Blotches with several short arms are filled;
- * as satin they would become stars of columns stacked in their middle.
+ * The region of component `c` (see buildRegion), with its skeleton, what it is sewn as (fill, satin
+ * or running stitch, see classify in core/src/digitize/picture.rs) and points on its edge.
  */
-function classify(g: Graph, o: DigitizeOptions): Kind {
-  const widths = g.branches.flatMap((b) => b.r.map((r) => 2 * r));
-  if (!widths.length) return 'fill';
-  const max = Math.max(...widths);
-  if (max < o.satinMin) return 'run';
-  const mean = widths.reduce((a, b) => a + b, 0) / widths.length;
-  const sd = Math.sqrt(widths.reduce((a, w) => a + (w - mean) ** 2, 0) / widths.length);
-  let length = 0;
-  for (const b of g.branches) for (let i = 1; i < b.pts.length; i++) length += dist(b.pts[i - 1], b.pts[i]);
-  const degree = new Array(g.nodes.length).fill(0);
-  for (const b of g.branches) {
-    degree[b.a]++;
-    degree[b.b]++;
-  }
-  const junctions = degree.filter((d) => d >= 3).length;
-  const narrow = percentile(widths, 0.95) <= o.satinMax && max <= o.satinMax * 1.3;
-  const even = max <= mean + 3 * sd + 0.5;
-  const stroke = length >= 2.5 * mean && junctions * 4 * mean <= length;
-  return narrow && even && stroke ? 'satin' : 'fill';
-}
-
-/** Boundary pixels of the region (every few), to find the nearest object. */
-function probes(r: Region): Pt[] {
-  const out: Pt[] = [];
-  let k = 0;
-  for (let y = 1; y < r.h - 1; y++) {
-    for (let x = 1; x < r.w - 1; x++) {
-      const i = y * r.w + x;
-      if (!r.mask[i] || (r.mask[i - 1] && r.mask[i + 1] && r.mask[i - r.w] && r.mask[i + r.w])) continue;
-      if (k++ % 4 === 0) out.push([(x + r.x0 + 0.5) * r.pxMm, (y + r.y0 + 0.5) * r.pxMm]);
-    }
-  }
+function findArea(
+  compMap: Int32Array,
+  labels: Uint8Array,
+  imgW: number,
+  c: number,
+  label: number,
+  bbox: { minX: number; minY: number; maxX: number; maxY: number },
+  imgH: number,
+  pxMm: number,
+  o: DigitizeOptions,
+  growInto: (label: number) => boolean,
+): { region: Region; graph: Graph; kind: Kind; probe: Float64Array } {
+  const { map, near, cw, ch, cx0, cy0, into } = regionWindow(compMap, labels, imgW, bbox, imgH, pxMm, o.overlap, growInto);
+  const f = core().findArea(map, near, cw, ch, c, label, bbox.minX - cx0, bbox.minY - cy0, bbox.maxX - cx0, bbox.maxY - cy0, pxMm, o.overlap, into, cx0, cy0, o.satinMin, o.satinMax);
+  const out = { region: fromCore(f.takeRegion()!, label, pxMm), graph: f.graph as Graph, kind: f.kind as Kind, probe: f.takeProbe() };
+  f.free();
   return out;
 }
 
-const nearestProbe = (o: Obj, p: Pt) => Math.min(...o.probe.map((q) => dist(p, q)));
+/** The skeleton of a region and what it is sewn as, as findArea finds it. */
+function classifyArea(r: Region, o: Pick<DigitizeOptions, 'satinMin' | 'satinMax'>): { graph: Graph; kind: Kind } {
+  return core().classifyArea(regionIn(r), o.satinMin, o.satinMax) as { graph: Graph; kind: Kind };
+}
 
 /**
- * Walks a skeleton graph depth first from the node nearest to `start`: each branch out with `out`
- * and, after everything beyond it, back with `back`. Returns one continuous run.
+ * A satin network along its skeleton, sewn by the core without a jump: each branch out as underlay
+ * (or along its middle), back as satin. `ok` when it neither piles up beyond `limit` (thread per
+ * mm²) nor leaves its region bare.
  */
-function walk(g: Graph, start: Pt, out: (b: Branch, freeFrom: boolean, freeTo: boolean) => Pt[], back: (b: Branch, freeFrom: boolean, freeTo: boolean) => Pt[]): Pt[] {
-  const degree = new Array(g.nodes.length).fill(0);
-  for (const b of g.branches) {
-    degree[b.a]++;
-    degree[b.b]++;
-  }
-  const free = (n: number) => degree[n] === 1;
-  let root = 0;
-  let bd = Infinity;
-  g.nodes.forEach((n, i) => {
-    if (!degree[i]) return;
-    // Ends are better starting points than junctions.
-    const d = dist(n.p, start) - (free(i) ? 1 : 0);
-    if (d < bd) {
-      bd = d;
-      root = i;
-    }
-  });
-  const usedBranch = new Set<Branch>();
-  const seen = new Set<number>();
-  const pts: Pt[] = [];
-  const append = (q: Pt[]) => {
-    for (const p of q) if (!pts.length || dist(pts[pts.length - 1], p) > 0.05) pts.push(p);
-  };
-  const visit = (n: number) => {
-    seen.add(n);
-    for (const b of g.branches) {
-      if (usedBranch.has(b) || (b.a !== n && b.b !== n)) continue;
-      usedBranch.add(b);
-      const dir = b.a === n ? b : reverse(b);
-      const other = dir.b;
-      append(out(dir, free(n), free(other)));
-      if (!seen.has(other)) visit(other);
-      append(back(dir, free(n), free(other)));
-    }
-  };
-  visit(root);
-  return pts;
-}
-
-/** Column of a branch with free ends extended, cached per direction-independent branch. */
-function columns(r: Region): (b: Branch, freeFrom: boolean, freeTo: boolean) => Column {
-  const cache = new Map<string, Column>();
-  return (b, fa, fb) => {
-    const key = `${b.pts[0]}|${b.pts[b.pts.length - 1]}|${fa}|${fb}`;
-    let c = cache.get(key);
-    if (!c) {
-      c = column(r, b, fa, fb);
-      cache.set(key, c);
-    }
-    return c;
-  };
-}
-
-/** Satin columns overlap a junction they end at by this much once another column has covered it (mm). */
-const JOIN_OVERLAP = 0.3;
-
-function sewSatin(o: Obj, start: Pt, p: SatinParams, withUnderlay: boolean, tol: number, stretch = false): Pt[][] {
-  const col = columns(o.region);
-  const g = o.graph!;
-  // The first column to reach a junction covers it; the others stop at its edge.
-  const covered = new Set<number>();
-  const trim = (n: number) => (covered.has(n) ? Math.max(0, g.nodes[n].r - JOIN_OVERLAP) : 0);
-  const run = walk(
-    o.graph!,
-    start,
-    (b, fa, fb) => {
-      const c = col(b, fa, fb);
-      return withUnderlay ? underlay(c, tol, undefined, stretch) : runStitch(c.center, 2.5, tol);
-    },
-    (b, fa, fb) => {
-      // Back from the far end: the same column reversed.
-      const c = col(b, fa, fb);
-      const rev: Column = { center: c.center.slice().reverse(), left: c.right.slice().reverse(), right: c.left.slice().reverse(), width: c.width };
-      const ends = { from: g.nodes[b.b].p, fromTrim: fb ? 0 : trim(b.b), to: g.nodes[b.a].p, toTrim: fa ? 0 : trim(b.a) };
-      if (!fb) covered.add(b.b);
-      if (!fa) covered.add(b.a);
-      return satinStitches(pairs(rev, p, ends), p);
-    },
-  );
-  return run.length ? [run] : [];
+function sewSatin(r: Region, g: Graph, start: Pt, p: SatinParams, withUnderlay: boolean, tol: number, stretch = false, limit?: number): { runs: Pt[][]; ok: boolean } {
+  const s = core().sewSatinNetwork(regionIn(r), g, start[0], start[1], p, withUnderlay, tol, stretch, limit);
+  const ok = s.ok;
+  return { runs: runsOf(s), ok };
 }
 
 /** Satin that leaves more of its region bare than this share is filled instead. */
@@ -373,18 +291,13 @@ export const SATIN_MAX = 7;
  * its density somewhere) or leave it bare.
  */
 export function satinForArea(r: Region, start: Pt, p: SatinParams, underlay: boolean, tol: number, satinMax = SATIN_MAX, peak = SATIN_PEAK): Pt[][] | null {
-  const graph = isStroke(r, satinMax);
-  if (!graph) return null;
-  const obj: Obj = { info: { kind: 'satin', label: r.label, areaMm2: r.areaMm2 }, region: r, graph, probe: [] };
-  const out = sewSatin(obj, start, p, underlay, tol).filter((run) => run.length > 1);
-  if (!out.length || peakDensity(out) > (peak * 2) / p.spacing || coverage(r, out) < SATIN_COVER) return null;
-  return out;
+  const out = core().satinForArea(regionIn(r), start[0], start[1], p, underlay, tol, satinMax, peak);
+  return out ? runsOf(out) : null;
 }
 
 /** The skeleton of an area that can be sewn as satin, or null. */
 export function isStroke(r: Region, satinMax = SATIN_MAX): Graph | null {
-  const graph = skeleton(r);
-  return classify(graph, { satinMax, satinMin: 0 } as DigitizeOptions) === 'satin' ? graph : null;
+  return core().isStroke(regionIn(r), satinMax) as Graph | null;
 }
 
 /**
@@ -410,10 +323,9 @@ function wholeSatin(r: Region): boolean {
   return !!s && s.kind !== 'wide' && s.ok;
 }
 
+/** A line network in running stitch along its skeleton, each branch there and back (in the core). */
 function sewRun(o: Obj, start: Pt, tol: number): Pt[][] {
-  const line = (b: Branch, fa: boolean, fb: boolean) => runStitch(column(o.region, b, fa, fb).center, 2, tol);
-  const run = walk(o.graph!, start, line, (b, fa, fb) => line(b, fa, fb).reverse());
-  return run.length ? [run] : [];
+  return runsOf(core().sewRunNetwork(regionIn(o.region), o.graph!, start[0], start[1], tol));
 }
 
 /** Satin that neither piles up nor leaves its region bare. */
@@ -530,8 +442,9 @@ function sewOne(obj: Obj, pos: Pt, o: DigitizeOptions, satin: SatinParams, angle
   }
   if (obj.info.kind === 'satin' && !obj.sections) {
     used.pos = true;
-    out = sewSatin(obj, pos, satin, o.underlay, o.tolerance, !!o.underCross);
-    if (!satinOk(out, obj.region, o)) {
+    const sewn = sewSatin(obj.region, obj.graph!, pos, satin, o.underlay, o.tolerance, !!o.underCross, (SATIN_PEAK * 2) / o.satinSpacing);
+    out = sewn.runs;
+    if (!sewn.ok) {
       // A stroke too wide or too bent for one satin along its middle: in columns, else filled.
       const g = skeleton(obj.region);
       out = shapeClass(g) === 'strokes' ? sections(g) : [];
@@ -568,7 +481,7 @@ interface Found {
   region: Region;
   graph: Graph;
   kind: Kind;
-  probe: Pt[];
+  probe: Float64Array;
   /** Smart's look at it, once asked for (see choose). */
   look?: Look;
   /** Lines across it along its whole length, once set to satin by hand (see choose). */
@@ -598,13 +511,32 @@ interface Sewn {
  * sewn from scratch: an object is taken from here only when everything it was sewn from is the same.
  */
 interface Memo {
-  comps: Components;
+  comps: Comps;
   order: number[];
   rank: number[];
   bridged: Bridged;
   found: Map<string, Found>;
   sewn: Map<string, Sewn>;
   run: number;
+}
+
+/** The connected components of the labels: per pixel, and per component its label, pixel count and box. */
+interface Comps {
+  comp: Int32Array;
+  label: Uint16Array;
+  area: Uint32Array;
+  /** Min x, min y, max x, max y of each. */
+  box: Uint32Array;
+}
+
+/** Pieces of one color bridged into one area (see bridge in core/src/digitize/picture.rs). */
+interface Bridged {
+  /** Components per pixel, with merged pieces and the pixels between them under the first piece. */
+  comp: Int32Array;
+  /** Pieces merged into another one. */
+  into: Set<number>;
+  /** Bounding boxes of the merged areas, by their first piece. */
+  boxes: Map<number, { minX: number; minY: number; maxX: number; maxY: number }>;
 }
 
 const memos = new WeakMap<Prepared, Memo>();
@@ -615,11 +547,19 @@ function memoOf(prep: Prepared): Memo {
   let m = memos.get(prep);
   if (!m) {
     const { width: w, height: h, pxMm, labels, palette } = prep;
-    const comps = components(labels, w, h);
-    const order = sewingOrder(labels, w, h, pxMm, palette.length);
+    // Components, sewing order and bridged pieces in one call to the core.
+    const a = core().analyzeImage(labels, w, h, pxMm, palette.length);
+    const comps: Comps = { comp: a.takeComp(), label: a.takeLabel(), area: a.takeArea(), box: a.takeBoxes() };
+    const order = Array.from(a.takeOrder());
+    const merged = a.takeBridgedComp();
+    const into = new Set(a.takeInto());
+    const flat = a.takeMerged();
+    a.free();
+    const boxes = new Map<number, { minX: number; minY: number; maxX: number; maxY: number }>();
+    for (let k = 0; k < flat.length; k += 5) boxes.set(flat[k], { minX: flat[k + 1], minY: flat[k + 2], maxX: flat[k + 3], maxY: flat[k + 4] });
     const rank = new Array(palette.length).fill(-1);
     order.forEach((l, k) => (rank[l] = k));
-    m = { comps, order, rank, bridged: bridge(labels, comps, w, h, pxMm, rank), found: new Map(), sewn: new Map(), run: 0 };
+    m = { comps, order, rank, bridged: { comp: merged.length ? merged : comps.comp, into, boxes }, found: new Map(), sewn: new Map(), run: 0 };
     memos.set(prep, m);
   }
   return m;
@@ -644,13 +584,11 @@ export function digitize(prep: Prepared, o: DigitizeOptions, name = 'image'): Di
     const label = comps.label[c];
     if (label === NONE || comps.area[c] < 2 || bridged.into.has(c)) continue;
     const merged = bridged.boxes.get(c);
-    const bbox = merged ?? { minX: comps.minX[c], minY: comps.minY[c], maxX: comps.maxX[c], maxY: comps.maxY[c] };
+    const bbox = merged ?? { minX: comps.box[4 * c], minY: comps.box[4 * c + 1], maxX: comps.box[4 * c + 2], maxY: comps.box[4 * c + 3] };
     let found = memo.found.get(`${c}|${findKey}`);
     if (!found) {
       const map = merged ? bridged.comp : comps.comp;
-      const region = buildRegion(map, labels, w, c, label, bbox, h, pxMm, o.overlap, (l) => l !== NONE && rank[l] > rank[label]);
-      const graph = skeleton(region);
-      found = { region, graph, kind: classify(graph, o), probe: probes(region), run };
+      found = { ...findArea(map, labels, w, c, label, bbox, h, pxMm, o, (l) => l !== NONE && rank[l] > rank[label]), run };
       memo.found.set(`${c}|${findKey}`, found);
     }
     found.run = run;
@@ -931,249 +869,15 @@ function keep(obj: Obj, o: DigitizeOptions, imgW: number, imgH: number): KeptSha
   };
 }
 
-/** A color this thin on average (mm) is a line color: an outline, strokes, drawn details. */
-const LINE_MM = 1.6;
-
 /**
  * Colors in sewing order: what lies on top of something else is sewn after it, as digitizers do. Of
  * two regions that touch, the narrower lies on top (a vein on its leaf, an outline around its area, a
  * dot in a field): sewn later it covers the shared edge, and the wider one reaches under it instead
- * of over it. A region's mean width is 2 × area / perimeter (a strip of width t and length L has area
- * tL and perimeter about 2L).
- *
- * Each touching pair votes for its order by the length of the edge they share, the more the clearer
- * the difference in width. Colors are then ordered to agree with as much of that as they can (a
- * linear ordering problem: exactly by dynamic programming over subsets for up to ORDER_EXACT colors,
- * else by moving one color at a time to its best place, Schiavinotto and Stützle 2004). Where the
- * votes leave a choice, the order is the one used before: areas first, largest first, then the line
- * colors.
+ * of over it. Colors are then ordered to agree with as much of that as they can (a linear ordering
+ * problem, Schiavinotto and Stützle 2004); see sewing_order in core/src/digitize/picture.rs.
  */
-export function sewingOrder(labels: Uint8Array, w: number, h: number, pxMm: number, colors: number): number[] {
-  const c = components(labels, w, h);
-  const n = c.label.length;
-  const perim = new Float64Array(n);
-  const shared = new Map<number, number>();
-  const area = new Array(colors).fill(0);
-  const edges = new Array(colors).fill(0);
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const i = y * w + x;
-      const l = labels[i];
-      if (l === NONE) continue;
-      const k = c.comp[i];
-      area[l]++;
-      const side = (j: number, out: boolean) => {
-        if (!out && labels[j] === l) return;
-        edges[l]++;
-        perim[k]++;
-        // Each shared edge once, from the pixel with the lower index.
-        if (!out && labels[j] !== NONE && j > i) {
-          const key = k * n + c.comp[j];
-          shared.set(key, (shared.get(key) ?? 0) + 1);
-        }
-      };
-      side(i - 1, x === 0);
-      side(i + 1, x === w - 1);
-      side(i - w, y === 0);
-      side(i + w, y === h - 1);
-    }
-  }
-  const used = area.map((_, i) => i).filter((i) => area[i] > 0);
-  // Pixel edges run in steps along slanted and curved edges: about 4/π times the true length.
-  const width = (l: number) => ((2 * area[l]) / (edges[l] * (Math.PI / 4))) * pxMm;
-  // With areas of other colors only: a design of lines alone keeps the order by area.
-  const line = (l: number) => width(l) < LINE_MM && used.some((k) => width(k) >= LINE_MM);
-  const base = used.slice().sort((a, b) => Number(line(a)) - Number(line(b)) || area[b] - area[a]);
-  if (base.length < 2) return base;
-
-  // before[a][b]: how much asks for color a before color b.
-  const before = used.map(() => new Float64Array(used.length));
-  const at = new Map(used.map((l, k) => [l, k]));
-  const compWidth = (k: number) => (2 * c.area[k]) / perim[k];
-  for (const [key, len] of shared) {
-    const a = Math.floor(key / n);
-    const b = key % n;
-    const [wa, wb] = [compWidth(a), compWidth(b)];
-    if (wa === wb) continue;
-    // The narrower one on top: sewn after the wider one.
-    const [under, top] = wa > wb ? [a, b] : [b, a];
-    before[at.get(c.label[under])!][at.get(c.label[top])!] += len * (1 - Math.min(wa, wb) / Math.max(wa, wb));
-  }
-  // The order used before decides where the votes leave a choice: a weight too small to outweigh any of them.
-  const pos = new Map(base.map((l, k) => [l, k]));
-  let least = Infinity;
-  for (const row of before) for (const v of row) if (v > 0) least = Math.min(least, v);
-  const eps = (Number.isFinite(least) ? least : 1) / (used.length * used.length + 1);
-  for (let a = 0; a < used.length; a++) for (let b = 0; b < used.length; b++) if (pos.get(used[a])! < pos.get(used[b])!) before[a][b] += eps;
-  const order = used.length <= ORDER_EXACT ? orderExact(before) : orderByMoves(before, base.map((l) => at.get(l)!));
-  return order.map((k) => used[k]);
-}
-
-/** Colors up to this many are ordered exactly (2^n subsets). */
-const ORDER_EXACT = 16;
-
-/** The order of 0..n-1 with the largest sum of before[a][b] over a placed before b: dynamic programming over the set placed first. */
-function orderExact(before: Float64Array[]): number[] {
-  const n = before.length;
-  const size = 1 << n;
-  const best = new Float64Array(size).fill(-Infinity);
-  const last = new Int8Array(size).fill(-1);
-  best[0] = 0;
-  for (let set = 0; set < size; set++) {
-    if (best[set] === -Infinity) continue;
-    for (let v = 0; v < n; v++) {
-      if (set & (1 << v)) continue;
-      // v after everything in the set.
-      let gain = 0;
-      for (let u = 0; u < n; u++) if (set & (1 << u)) gain += before[u][v];
-      const next = set | (1 << v);
-      if (best[set] + gain > best[next]) {
-        best[next] = best[set] + gain;
-        last[next] = v;
-      }
-    }
-  }
-  const out: number[] = [];
-  for (let set = size - 1; set; set &= ~(1 << last[set])) out.unshift(last[set]);
-  return out;
-}
-
-/** Local search for many colors: each color moved to the place that gains most, until no move gains. */
-function orderByMoves(before: Float64Array[], start: number[]): number[] {
-  const order = start.slice();
-  for (let improved = true, guard = 0; improved && guard < 100; guard++) {
-    improved = false;
-    for (let i = 0; i < order.length; i++) {
-      const v = order[i];
-      const rest = order.filter((_, k) => k !== i);
-      // Gain of placing v at slot s (before rest[s]) against placing it first.
-      let gain = 0;
-      let bestGain = 0;
-      let bestSlot = 0;
-      let here = 0;
-      for (let s = 1; s <= rest.length; s++) {
-        const u = rest[s - 1];
-        gain += before[u][v] - before[v][u];
-        if (s === i) here = gain;
-        if (gain > bestGain + 1e-12) {
-          bestGain = gain;
-          bestSlot = s;
-        }
-      }
-      if (bestGain > here + 1e-12) {
-        rest.splice(bestSlot, 0, v);
-        order.splice(0, order.length, ...rest);
-        improved = true;
-      }
-    }
-  }
-  return order;
-}
-
-/** Pieces of one color apart by no more than this, with only later colors between them, are one area (mm). */
-const BRIDGE = 2.5;
-/** Pieces that reach no deeper than this (mm) into nine tenths of themselves are lines, not bridged. */
-const LINE_DEPTH = 1.5;
-
-interface Bridged {
-  /** Components per pixel, with merged pieces and the pixels between them under the first piece. */
-  comp: Int32Array;
-  /** Pieces merged into another one. */
-  into: Set<number>;
-  /** Bounding boxes of the merged areas, by their first piece. */
-  boxes: Map<number, { minX: number; minY: number; maxX: number; maxY: number }>;
-}
-
-/**
- * Pieces of one color that a narrow detail sewn later (a line, a stripe) cuts apart are filled as
- * one area, under the detail: the rows go on underneath it, and the detail is sewn on top, as
- * digitizers do. Only gaps up to BRIDGE wide that are all later colors are bridged (a closing of
- * the color's pixels), never background or colors sewn before, and never between lines.
- */
-function bridge(labels: Uint8Array, comps: Components, w: number, h: number, pxMm: number, rank: number[]): Bridged {
-  const out: Bridged = { comp: comps.comp, into: new Set(), boxes: new Map() };
-  const byLabel = new Map<number, number[]>();
-  comps.label.forEach((l, c) => {
-    if (l === NONE || comps.area[c] < 2) return;
-    if (!byLabel.has(l)) byLabel.set(l, []);
-    byLabel.get(l)!.push(c);
-  });
-  const r = BRIDGE / 2 / pxMm;
-  const pad = Math.ceil(r) + 2;
-  for (const [label, cs] of byLabel) {
-    if (cs.length < 2) continue;
-    const x0 = Math.max(0, Math.min(...cs.map((c) => comps.minX[c])) - pad);
-    const y0 = Math.max(0, Math.min(...cs.map((c) => comps.minY[c])) - pad);
-    const x1 = Math.min(w - 1, Math.max(...cs.map((c) => comps.maxX[c])) + pad);
-    const y1 = Math.min(h - 1, Math.max(...cs.map((c) => comps.maxY[c])) + pad);
-    const W = x1 - x0 + 1;
-    const H = y1 - y0 + 1;
-    const own = new Uint8Array(W * H);
-    const member = new Set(cs);
-    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (member.has(comps.comp[(y + y0) * w + x + x0])) own[y * W + x] = 1;
-    const near = distanceToSeeds(own, W, H);
-    const notNear = Uint8Array.from(near, (d) => (d > r ? 1 : 0));
-    const far = distanceToSeeds(notNear, W, H, true);
-    // In the closing of the color, between its pieces, and a color sewn later.
-    const between = new Uint8Array(W * H);
-    for (let y = 0; y < H; y++) {
-      for (let x = 0; x < W; x++) {
-        const i = y * W + x;
-        const l = labels[(y + y0) * w + x + x0];
-        if (!own[i] && near[i] <= r && far[i] > r && l !== NONE && rank[l] > rank[label]) between[i] = 1;
-      }
-    }
-    // Which pieces the pixels between connect.
-    const parent = new Int32Array(W * H).map((_, i) => i);
-    const find = (i: number): number => {
-      while (parent[i] !== i) i = parent[i] = parent[parent[i]];
-      return i;
-    };
-    const inSet = (i: number) => own[i] || between[i];
-    for (let y = 0; y < H; y++) {
-      for (let x = 0; x < W; x++) {
-        const i = y * W + x;
-        if (!inSet(i)) continue;
-        if (x > 0 && inSet(i - 1)) parent[find(i)] = find(i - 1);
-        if (y > 0 && inSet(i - W)) parent[find(i)] = find(i - W);
-      }
-    }
-    const pieces = new Map<number, Set<number>>();
-    for (let i = 0; i < W * H; i++) {
-      if (!own[i]) continue;
-      const root = find(i);
-      if (!pieces.has(root)) pieces.set(root, new Set());
-      pieces.get(root)!.add(comps.comp[(Math.floor(i / W) + y0) * w + (i % W) + x0]);
-    }
-    // How thick the color is where it is its own: lines are not bridged into one area (see LINE_DEPTH).
-    const inner = distanceToSeeds(Uint8Array.from(own, (v) => 1 - v), W, H, true);
-    for (const [root, set] of pieces) {
-      if (set.size < 2) continue;
-      const depth: number[] = [];
-      for (let i = 0; i < W * H; i++) if (own[i] && find(i) === root) depth.push(inner[i]);
-      depth.sort((a, b) => a - b);
-      // Lines (an outline cut by the areas it frames): closing the gaps between them would fill those
-      // areas, small ones beside a junction, into the line as thick places.
-      if (depth[Math.floor(depth.length * 0.9)] * pxMm < LINE_DEPTH) continue;
-      if (out.comp === comps.comp) out.comp = comps.comp.slice();
-      const first = Math.min(...set);
-      const box = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
-      for (let i = 0; i < W * H; i++) {
-        if (!inSet(i) || find(i) !== root) continue;
-        const x = (i % W) + x0;
-        const y = Math.floor(i / W) + y0;
-        out.comp[y * w + x] = first;
-        box.minX = Math.min(box.minX, x);
-        box.minY = Math.min(box.minY, y);
-        box.maxX = Math.max(box.maxX, x);
-        box.maxY = Math.max(box.maxY, y);
-      }
-      for (const c of set) if (c !== first) out.into.add(c);
-      out.boxes.set(first, box);
-    }
-  }
-  return out;
-}
+export const sewingOrder = (labels: Uint8Array, w: number, h: number, pxMm: number, colors: number): number[] =>
+  Array.from(core().sewingOrder(labels, w, h, pxMm, colors));
 
 /** Whether the windows of two regions overlap and their pixels touch. */
 function touches(a: Region, b: Region): boolean {
@@ -1194,24 +898,6 @@ function touches(a: Region, b: Region): boolean {
   return false;
 }
 
-/** Lock stitch length (mm): half-stitch lock 0, 0.5, 1, 0.5, 0 along the path, as Ink/Stitch's default. */
-const LOCK = LOCK_MM;
-
-/** Point `d` mm along the run from its start (or end, with `fromEnd`). */
-function along(run: Pt[], d: number, fromEnd: boolean): Pt {
-  const pts = fromEnd ? run.slice().reverse() : run;
-  let left = d;
-  for (let i = 1; i < pts.length; i++) {
-    const l = dist(pts[i - 1], pts[i]);
-    if (l >= left) {
-      const t = left / l;
-      return [pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * t, pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * t];
-    }
-    left -= l;
-  }
-  return pts[pts.length - 1];
-}
-
 /** The runs of one thread, and the object each of them belongs to. */
 interface Block {
   color: ThreadColor;
@@ -1220,87 +906,22 @@ interface Block {
 }
 
 /**
- * Builds the records with (cx, cy) mm of the image as their origin; coordinates in 0.1 mm.
+ * Builds the records with (cx, cy) mm of the image as their origin; coordinates in 0.1 mm (in the
+ * core: ties, jumps and trims between the runs, see assemble in core/src/digitize/picture.rs).
  * `starts` gets the number of the first stitch of each object.
  */
 function assemble(blocks: Block[], cx: number, cy: number, trimMm: number, name: string, starts: number[]): Pattern {
-  const b = new PatternBuilder();
-  let X = 0;
-  let Y = 0;
-  let last: Pt | null = null;
-  let sewn = 0;
-  const emit = (p: Pt, cmd: typeof STITCH | typeof JUMP) => {
-    const nx = Math.round((p[0] - cx) * 10);
-    const ny = Math.round((p[1] - cy) * 10);
-    b.add(nx - X, ny - Y, cmd);
-    if (cmd === STITCH) sewn++;
-    X = nx;
-    Y = ny;
-    last = p;
-  };
-  const stitch = (p: Pt) => {
-    if (last && dist(last, p) < 0.1) return;
-    emit(p, STITCH);
-  };
-  const tieIn = (run: Pt[]) => {
-    const p = run[0];
-    for (const t of [0.5, 1, 0.5]) emit(along(run, LOCK * t, false), STITCH);
-    emit(p, STITCH);
-  };
-  const tieOff = (run: Pt[]) => {
-    const p = run[run.length - 1];
-    for (const t of [0.5, 1, 0.5]) emit(along(run, LOCK * t, true), STITCH);
-    emit(p, STITCH);
-  };
-  const colors: ThreadColor[] = [];
-  let prev = null as Pt[] | null;
-  let owner = -1;
-  blocks.forEach((block, bi) => {
-    colors.push(block.color);
-    block.runs.forEach((run, ri) => {
-      const start = run[0];
-      // Where a new object begins: right before its first stitch.
-      const mark = () => {
-        if (block.owners[ri] === owner) return;
-        owner = block.owners[ri];
-        starts.push(sewn);
-      };
-      const gap = prev ? dist(prev[prev.length - 1], start) : Infinity;
-      if (!prev || ri === 0) {
-        if (prev) {
-          tieOff(prev);
-          b.mark(TRIM);
-          if (bi > 0) b.mark(COLOR_CHANGE);
-        }
-        emit(start, JUMP);
-        mark();
-        emit(start, STITCH);
-        tieIn(run);
-      } else if (gap <= 1) {
-        mark();
-        stitch(start);
-      } else if (gap <= trimMm) {
-        emit(start, JUMP);
-        mark();
-        emit(start, STITCH);
-      } else {
-        tieOff(prev);
-        b.mark(TRIM);
-        emit(start, JUMP);
-        mark();
-        emit(start, STITCH);
-        tieIn(run);
-      }
-      for (let i = 1; i < run.length; i++) stitch(run[i]);
-      prev = run;
-    });
-  });
-  if (prev) {
-    tieOff(prev);
-    b.mark(TRIM);
-  }
-  b.mark(END);
-  return b.build(name, 'pes', colors.length ? colors : [{ r: 0, g: 0, b: 0 }]);
+  const runs = blocks.flatMap((b) => b.runs);
+  const lens = Uint32Array.from(runs, (r) => r.length);
+  const flat = new Float64Array(2 * lens.reduce((a, n) => a + n, 0));
+  let i = 0;
+  for (const r of runs) for (const p of r) (flat[i++] = p[0]), (flat[i++] = p[1]);
+  const a = core().assembleDesign(flat, lens, Uint32Array.from(blocks, (b) => b.runs.length), Uint32Array.from(blocks.flatMap((b) => b.owners)), cx, cy, trimMm);
+  const [x, y, cmd] = [a.takeX(), a.takeY(), a.takeCmd()];
+  for (const s of a.takeStarts()) starts.push(s);
+  a.free();
+  const colors = blocks.map((b) => b.color);
+  return { name, format: 'pes', x, y, cmd, colors: colors.length ? colors : [{ r: 0, g: 0, b: 0 }], bounds: computeBounds(x, y, cmd) };
 }
 
 /** A satin line's ends and corners as the file paints its stroke: butt flat, bevel cut off, miter (and none) a miter, capped at the sharpest corners as SVG's miter limit does. */
@@ -1475,8 +1096,8 @@ export function digitizeShapes(
         if (!left || left.areaMm2 < SPECK_MM2) continue;
         region = left;
       }
-      const graph = skeleton(region);
-      const obj: Obj = { info: { kind: classify(graph, o), label: it.sh.color, areaMm2: region.areaMm2 }, region, graph, probe: [] };
+      const { graph, kind } = classifyArea(region, o);
+      const obj: Obj = { info: { kind, label: it.sh.color, areaMm2: region.areaMm2 }, region, graph, probe: new Float64Array(0) };
       const sewn = sewOne(obj, pos, o, satin, angles);
       if (!sewn.length) continue;
       if (obj.info.kind === 'fill') {

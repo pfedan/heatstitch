@@ -7,4 +7,5 @@ pub mod orientation;
 pub mod prepare;
 pub mod quantize;
 pub mod raster;
+pub mod svg;
 pub mod thread_match;

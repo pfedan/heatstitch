@@ -21,6 +21,9 @@ linesweeper = "0.5.0"
 opt-level = 3
 lto = true
 codegen-units = 1
+# Smaller at no cost in speed: no names section, and no unwinding (wasm32 cannot unwind anyway).
+panic = "abort"
+strip = true
 
 # wasm-opt (binaryen) is not needed: LTO already gives a small module, and leaving it out keeps
 # the build free of a second downloaded tool.
