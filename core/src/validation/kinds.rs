@@ -92,10 +92,6 @@ const ROW_TURN_COS: f64 = 0.9;
 /// A row is at most this much longer along its stitches than from end to end.
 const ROW_ARC: f64 = 1.2;
 
-fn dist(p: &Records, a: usize, b: usize) -> f64 {
-    hypot((p.x[b] - p.x[a]) as f64, (p.y[b] - p.y[a]) as f64)
-}
-
 /// Distance (0.1 mm) of record q from the line through records a and b.
 fn line_dist(p: &Records, a: usize, b: usize, q: usize) -> f64 {
     let dx = (p.x[b] - p.x[a]) as f64;
@@ -121,14 +117,14 @@ pub fn fill_row_ends(p: &Records, runs: &[Run], mask: &[u8]) -> Vec<RowEnd> {
                     return false;
                 }
                 let (a, b) = (t[k], t[k + 1]);
-                let chord = dist(p, a, b);
+                let chord = p.dist(a, b);
                 if chord < ROW_MIN {
                     return false;
                 }
                 // A long arc between two turns is a stretch of a ring, not a row.
                 let mut along = 0.0;
                 for i in a + 1..=b {
-                    along += dist(p, i - 1, i);
+                    along += p.dist(i - 1, i);
                 }
                 if along > ROW_ARC * chord {
                     return false;
@@ -137,7 +133,7 @@ pub fn fill_row_ends(p: &Records, runs: &[Run], mask: &[u8]) -> Vec<RowEnd> {
             })
             .collect();
         let dir = |k: usize| {
-            let l = dist(p, t[k], t[k + 1]);
+            let l = p.dist(t[k], t[k + 1]);
             let l = if l == 0.0 { 1.0 } else { l };
             [
                 (p.x[t[k + 1]] - p.x[t[k]]) as f64 / l,

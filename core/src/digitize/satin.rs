@@ -16,9 +16,8 @@ use serde::{Deserialize, Serialize};
 
 use super::region::{Region, sample};
 use super::run::run_stitch;
-use super::rungs::{lerp, median_width, norm, sub};
-use crate::geom::Pt;
-use crate::js::{IdMap, dist};
+use crate::geom::{Pt, lerp, norm, sub};
+use crate::js::{IdMap, dist, median, to_int32, yes};
 use crate::material::rules::{
     SATIN_CENTER_MAX, SATIN_CONTOUR_MAX, SATIN_CROSS_STRETCH, SATIN_UNDER_MIN, SATIN_ZIGZAG_MAX,
 };
@@ -54,12 +53,6 @@ pub struct SatinParams {
     pub rough: Option<f64>,
     /// Which irregular satin: the same seed gives the same stitches every time.
     pub seed: Option<f64>,
-}
-
-/// A number as JavaScript tests it in a condition (`if (x)`): not 0 and not NaN.
-#[inline]
-fn truthy(x: Option<f64>) -> bool {
-    x.is_some_and(|v| v != 0.0 && !v.is_nan())
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -200,7 +193,7 @@ pub fn column(r: &Region, pts: &[Pt], rad: &[f64], free_a: bool, free_b: bool) -
         center,
         left,
         right,
-        width: median_width(widths),
+        width: median(&widths),
     }
 }
 
@@ -246,13 +239,13 @@ pub fn pairs(c: &Column, p: &SatinParams, ends: Option<&ColumnEnds>) -> Vec<Pair
             let d = norm(sub(c.right[last], c.left[last]));
             let perp = |a: Pt, b: Pt| ((b[0] - a[0]) * d[1] - (b[1] - a[1]) * d[0]).abs();
             let adv = perp(c.left[last], c.left[i]).max(perp(c.right[last], c.right[i]));
-            let base = if out.len() == 1 && truthy(p.lead) {
+            let base = if out.len() == 1 && yes(p.lead) {
                 p.lead.unwrap()
             } else {
                 spacing_at(last)
             };
             // Irregular: each pair a different way nearer or further than the spacing.
-            let sp = if truthy(p.rough) {
+            let sp = if yes(p.rough) {
                 base * (1.0
                     + ROUGH_SPACING
                         * p.rough.unwrap()
@@ -292,7 +285,7 @@ pub fn pairs(c: &Column, p: &SatinParams, ends: Option<&ColumnEnds>) -> Vec<Pair
             ]
         })
         .collect();
-    if truthy(p.rough) {
+    if yes(p.rough) {
         roughen(&mut comp, p.rough.unwrap(), p.seed.unwrap_or(0.0));
     }
     // Short stitches on the inside of curves (see SHORT_DIST).
@@ -321,7 +314,7 @@ pub fn pairs(c: &Column, p: &SatinParams, ends: Option<&ColumnEnds>) -> Vec<Pair
             }
         }
     }
-    if truthy(p.fringe) || truthy(p.fringe_b) {
+    if yes(p.fringe) || yes(p.fringe_b) {
         fringe(
             &mut comp,
             p.fringe.unwrap_or(0.0),
@@ -335,21 +328,13 @@ pub fn pairs(c: &Column, p: &SatinParams, ends: Option<&ColumnEnds>) -> Vec<Pair
 const FRINGE_KEEP: f64 = 1.0;
 const FRINGE_KEEP_SHARE: f64 = 0.35;
 
-/// `x | 0` in JavaScript.
-fn to_int32(x: f64) -> u32 {
-    if !x.is_finite() {
-        return 0;
-    }
-    x.trunc().rem_euclid(4294967296.0) as u64 as u32
-}
-
 /// A number in [0, 1) for stitch i on a side, the same every time (no state, so restitching repeats
 /// it); another `seed` gives other numbers (seed 0: the fringe's, as before seeds).
 fn hash(i: f64, side: f64, seed: f64) -> f64 {
-    let mut h = to_int32(i + 1.0).wrapping_mul(0x9e37_79b1)
-        ^ to_int32(side + 7.0).wrapping_mul(0x85eb_ca6b)
+    let mut h = (to_int32(i + 1.0) as u32).wrapping_mul(0x9e37_79b1)
+        ^ (to_int32(side + 7.0) as u32).wrapping_mul(0x85eb_ca6b)
         ^ if seed != 0.0 && !seed.is_nan() {
-            to_int32(seed).wrapping_mul(0x27d4_eb2f)
+            (to_int32(seed) as u32).wrapping_mul(0x27d4_eb2f)
         } else {
             0
         };

@@ -8,8 +8,8 @@
 //! (cos 2θ, sin 2θ) of the direction along the structure, scaled by its coherence (0 to 1).
 //! Doubled angles can be averaged and smoothed directly.
 
-use super::color::js_round;
 use super::raster::LabImage;
+use crate::js::round;
 
 pub struct Orientation {
     pub width: usize,
@@ -93,7 +93,7 @@ pub fn orientation(img: &LabImage, sigma: f64) -> Orientation {
             jyy[i] = yy as f32;
         }
     }
-    let r = js_round(sigma / 1.7).max(1.0) as i64;
+    let r = round(sigma / 1.7).max(1.0) as i64;
     let bxx = blur(&jxx, w, h, r);
     let bxy = blur(&jxy, w, h, r);
     let byy = blur(&jyy, w, h, r);

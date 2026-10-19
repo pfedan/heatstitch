@@ -10,7 +10,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::region::{Region, pixel_mm};
-use crate::geom::Pt;
+use crate::geom::{Pt, polyline_length};
 use crate::image::edt::distance_inside;
 use crate::js::{dist, max_of, round};
 
@@ -276,15 +276,6 @@ fn trace(s: &[u8], w: usize) -> (Vec<Vec<usize>>, Vec<Edge>) {
         edges.push(Edge { a: id, b: id, px });
     }
     (nodes, edges)
-}
-
-/// Length of a polyline.
-pub fn polyline_length(pts: &[Pt]) -> f64 {
-    let mut l = 0.0;
-    for i in 1..pts.len() {
-        l += dist(pts[i - 1], pts[i]);
-    }
-    l
 }
 
 /// Gaussian smoothing over `sigma` points (the points are about evenly spaced). Open polylines keep

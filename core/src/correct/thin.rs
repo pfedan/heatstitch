@@ -49,10 +49,6 @@ pub struct ThinResult {
     pub cycles: usize,
 }
 
-fn dist(p: &Records, a: usize, b: usize) -> f64 {
-    hypot((p.x[b] - p.x[a]) as f64, (p.y[b] - p.y[a]) as f64)
-}
-
 struct Candidate {
     /// Index in the turning point list of the kept end of the new stitch.
     end: usize,
@@ -74,7 +70,7 @@ fn candidate(
         // Periodic neighbourhood: this turning point and at least one of its counterparts one
         // period before or after lie close to the point one period further on. Real fills mix
         // connector rows and direct turns, so not every neighbour has to match.
-        if k + period >= t.len() || dist(p, a, t[k + period]) > GAP_MAX {
+        if k + period >= t.len() || p.dist(a, t[k + period]) > GAP_MAX {
             continue;
         }
         let mut others = 0;
@@ -85,18 +81,18 @@ fn candidate(
             }
             let j = j as usize;
             others += 1;
-            if dist(p, t[j], t[j + period]) <= GAP_MAX {
+            if p.dist(t[j], t[j + period]) <= GAP_MAX {
                 matching += 1;
             }
         }
         if others > 0 && matching == 0 {
             continue;
         }
-        let gap = dist(p, a, t[k + period]);
+        let gap = p.dist(a, t[k + period]);
         let mut passes = 0.0;
         let mut j = k;
         while j < k + period && j + 1 < t.len() {
-            passes += dist(p, t[j], t[j + 1]);
+            passes += p.dist(t[j], t[j + 1]);
             j += 1;
         }
         passes /= period as f64;
@@ -110,7 +106,7 @@ fn candidate(
                 continue;
             }
             let b = t[end_k];
-            let new_len = dist(p, a, b);
+            let new_len = p.dist(a, b);
             let mut thread = 0.0;
             let mut wanted = 0.0;
             let mut need_sum = 0.0;
@@ -121,7 +117,7 @@ fn candidate(
                     ok = false;
                     break;
                 }
-                let len = dist(p, r - 1, r);
+                let len = p.dist(r - 1, r);
                 let n0 = o.need[r - 1];
                 let n1 = o.need[r];
                 let need = (n0 + n1) / 2.0;

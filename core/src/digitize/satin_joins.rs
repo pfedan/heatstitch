@@ -29,8 +29,7 @@ use serde::Deserialize;
 
 pub use super::border::Rails;
 use super::border::{line_rails, resample};
-use super::rungs::{norm, sub};
-use crate::geom::Pt;
+use crate::geom::{Pt, add, cross, cumulative, dedupe, dot, mid, mul, norm, polyline_length, sub};
 use crate::js::{dist, round};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
@@ -60,27 +59,9 @@ const STEP: f64 = 0.1;
 /// Pairs of points this far apart on the rails made here (mm).
 const PAIR: f64 = 0.1;
 
-fn add(a: Pt, b: Pt) -> Pt {
-    [a[0] + b[0], a[1] + b[1]]
-}
-fn mul(a: Pt, k: f64) -> Pt {
-    [a[0] * k, a[1] * k]
-}
-fn dot(a: Pt, b: Pt) -> f64 {
-    a[0] * b[0] + a[1] * b[1]
-}
-fn cross(a: Pt, b: Pt) -> f64 {
-    a[0] * b[1] - a[1] * b[0]
-}
-fn mid(a: Pt, b: Pt) -> Pt {
-    [(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0]
-}
 /// The left normal of a direction, as line_rails takes it.
 fn left_of(d: Pt) -> Pt {
     [-d[1], d[0]]
-}
-fn length_of(l: &[Pt]) -> f64 {
-    l.windows(2).map(|w| dist(w[0], w[1])).sum()
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -186,14 +167,6 @@ fn lp(u: Pt, v: Pt, t: f64) -> Pt {
     [u[0] + (v[0] - u[0]) * t, u[1] + (v[1] - u[1]) * t]
 }
 
-fn cumulative(l: &[Pt]) -> Vec<f64> {
-    let mut cum = vec![0.0];
-    for i in 1..l.len() {
-        cum.push(cum[i - 1] + dist(l[i - 1], l[i]));
-    }
-    cum
-}
-
 /// The pairs of `r` whose middle lies from `from` to `len - to` along the middle (mm), cut exactly there.
 fn trimmed(r: &Rails, from: f64, to: f64) -> Rails {
     let c: Vec<Pt> = r
@@ -245,7 +218,7 @@ fn along(line: &[Pt], shares: &[f64]) -> Vec<Pt> {
 
 /// Pairs between two rungs, walking the inner and outer line at the same share (without the first pair).
 fn between(inner: &[Pt], outer: &[Pt]) -> Vec<(Pt, Pt)> {
-    let n = (length_of(inner).max(length_of(outer)) / PAIR)
+    let n = (polyline_length(inner).max(polyline_length(outer)) / PAIR)
         .ceil()
         .max(1.0) as usize;
     let f: Vec<f64> = (0..n).map(|j| (j + 1) as f64 / n as f64).collect();
@@ -270,16 +243,6 @@ fn arc(c: Pt, r: f64, u: Pt, v: Pt) -> Vec<Pt> {
             [c[0] + r * a.cos(), c[1] + r * a.sin()]
         })
         .collect()
-}
-
-fn dedupe(l: Vec<Pt>) -> Vec<Pt> {
-    let mut out: Vec<Pt> = Vec::with_capacity(l.len());
-    for (i, &q) in l.iter().enumerate() {
-        if i == 0 || dist(q, l[i - 1]) > 1e-6 {
-            out.push(q);
-        }
-    }
-    out
 }
 
 /// The style a corner is sewn in.
@@ -547,7 +510,7 @@ pub fn stroke_rails(
         .iter()
         .enumerate()
         .map(|(k, a)| {
-            let len = length_of(a);
+            let len = polyline_length(a);
             let both = k > 0 && k < na - 1;
             (if both { len / 2.0 - 0.1 } else { len - 0.2 }).max(0.0)
         })

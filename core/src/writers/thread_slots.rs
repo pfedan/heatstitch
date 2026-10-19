@@ -1,102 +1,10 @@
 //! Palette slots for the formats that store threads as palette indices (src/writers/threadSlots.ts),
-//! with the sRGB to CIELAB conversion and CIEDE2000 difference it needs (from src/image/color.ts;
-//! the image area has its own copy until the two are merged).
+//! matched by CIEDE2000 (image::color).
 
 use std::collections::HashMap;
 
-use crate::js::hypot;
+use crate::image::color::{Lab, delta_e2000, rgb_to_lab};
 use crate::pattern::ThreadColor;
-
-type Lab = [f64; 3];
-
-fn to_linear(c: u8) -> f64 {
-    let v = c as f64 / 255.0;
-    if v <= 0.04045 {
-        v / 12.92
-    } else {
-        ((v + 0.055) / 1.055).powf(2.4)
-    }
-}
-
-pub fn rgb_to_lab(r: u8, g: u8, b: u8) -> Lab {
-    // D65 reference white.
-    const XN: f64 = 0.95047;
-    const ZN: f64 = 1.08883;
-    let eps = 216.0 / 24389.0;
-    let kappa = 24389.0 / 27.0;
-    let f = |t: f64| {
-        if t > eps {
-            t.cbrt()
-        } else {
-            (kappa * t + 16.0) / 116.0
-        }
-    };
-    let (rr, gg, bb) = (to_linear(r), to_linear(g), to_linear(b));
-    let x = (0.4124564 * rr + 0.3575761 * gg + 0.1804375 * bb) / XN;
-    let y = 0.2126729 * rr + 0.7151522 * gg + 0.072175 * bb;
-    let z = (0.0193339 * rr + 0.119192 * gg + 0.9503041 * bb) / ZN;
-    let (fx, fy, fz) = (f(x), f(y), f(z));
-    [116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz)]
-}
-
-/// CIEDE2000 color difference with kL = kC = kH = 1 (Sharma, Wu & Dalal 2005).
-pub fn delta_e2000(l1: Lab, l2: Lab) -> f64 {
-    let rad = std::f64::consts::PI / 180.0;
-    let [ll1, a1, b1] = l1;
-    let [ll2, a2, b2] = l2;
-    let pow7 = |v: f64| v.powf(7.0);
-    let c25 = 25f64.powf(7.0);
-    let cm = (hypot(a1, b1) + hypot(a2, b2)) / 2.0;
-    let g = 0.5 * (1.0 - (pow7(cm) / (pow7(cm) + c25)).sqrt());
-    let (a1p, a2p) = ((1.0 + g) * a1, (1.0 + g) * a2);
-    let (c1p, c2p) = (hypot(a1p, b1), hypot(a2p, b2));
-    let hue = |b: f64, a: f64| {
-        if a == 0.0 && b == 0.0 {
-            return 0.0;
-        }
-        let h = b.atan2(a) / rad;
-        if h < 0.0 { h + 360.0 } else { h }
-    };
-    let (h1p, h2p) = (hue(b1, a1p), hue(b2, a2p));
-    let dlp = ll2 - ll1;
-    let dcp = c2p - c1p;
-    let mut dhp = 0.0;
-    if c1p * c2p != 0.0 {
-        dhp = h2p - h1p;
-        if dhp > 180.0 {
-            dhp -= 360.0;
-        } else if dhp < -180.0 {
-            dhp += 360.0;
-        }
-    }
-    let dhh = 2.0 * (c1p * c2p).sqrt() * ((dhp / 2.0) * rad).sin();
-    let lpm = (ll1 + ll2) / 2.0;
-    let cpm = (c1p + c2p) / 2.0;
-    let mut hpm = h1p + h2p;
-    if c1p * c2p != 0.0 {
-        hpm = if (h1p - h2p).abs() <= 180.0 {
-            (h1p + h2p) / 2.0
-        } else if h1p + h2p < 360.0 {
-            (h1p + h2p + 360.0) / 2.0
-        } else {
-            (h1p + h2p - 360.0) / 2.0
-        };
-    }
-    let t = 1.0 - 0.17 * ((hpm - 30.0) * rad).cos()
-        + 0.24 * (2.0 * hpm * rad).cos()
-        + 0.32 * ((3.0 * hpm + 6.0) * rad).cos()
-        - 0.2 * ((4.0 * hpm - 63.0) * rad).cos();
-    let q = (hpm - 275.0) / 25.0;
-    let d_theta = 30.0 * (-(q * q)).exp();
-    let rc = 2.0 * (pow7(cpm) / (pow7(cpm) + c25)).sqrt();
-    let l50 = (lpm - 50.0) * (lpm - 50.0);
-    let sl = 1.0 + (0.015 * l50) / (20.0 + l50).sqrt();
-    let sc = 1.0 + 0.045 * cpm;
-    let sh = 1.0 + 0.015 * cpm * t;
-    let rt = -(2.0 * d_theta * rad).sin() * rc;
-    let (tl, tc, th) = (dlp / sl, dcp / sc, dhh / sh);
-    (tl * tl + tc * tc + th * th + rt * tc * th).sqrt()
-}
 
 /// Palette slot per color block for formats that store threads as palette indices (PEC, JEF). Every
 /// distinct color gets a slot of its own, so two different threads never show up on the machine as
@@ -132,7 +40,7 @@ pub fn unique_slots(
                     if o == Some(s) {
                         -1.0
                     } else {
-                        let d = delta_e2000(l, *sl);
+                        let d = delta_e2000(&l, sl);
                         d * d
                     }
                 })
@@ -227,16 +135,6 @@ pub fn assign(cost: &[Vec<f64>], m: usize) -> Vec<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn lab_and_difference() {
-        let white = rgb_to_lab(255, 255, 255);
-        assert!((white[0] - 100.0).abs() < 1e-3);
-        // Sharma et al., test pair 1.
-        let d = delta_e2000([50.0, 2.6772, -79.7751], [50.0, 0.0, -82.7485]);
-        assert!((d - 2.0425).abs() < 1e-4);
-        assert_eq!(hypot(3.0, 4.0), 5.0);
-    }
 
     #[test]
     fn assigns_at_least_cost() {

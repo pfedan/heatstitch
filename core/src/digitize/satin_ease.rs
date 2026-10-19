@@ -5,11 +5,12 @@ use std::f64::consts::PI;
 
 use super::measure::peak_cell;
 use super::region::{Region, sample};
-use super::rungs::{Cut, Parts, cut_parts, cut_pieces, inside, parts_of, strips_of_parts};
+use super::rungs::{Cut, Parts, cut_parts, cut_pieces, parts_of, strips_of_parts};
 use super::satin_suggest::area_loops;
-use crate::geom::Pt;
+use crate::geom::{Pt, to_segment};
 use crate::js::hypot;
 use crate::model::restitch::{Rails, SatinSettings, chained, satin_runs};
+use crate::shape::path::inside_poly;
 use crate::trig::JsMath;
 
 /// Satin denser than this many times its nominal density somewhere piles up (2 / spacing is a column's own).
@@ -22,18 +23,6 @@ const EASE_DIRECTIONS: usize = 12;
 const SEAM_MM: f64 = 0.9;
 /// Columns this near the pile (mm) are sewn again to measure a cut through it.
 const EASE_NEAR: f64 = 5.0;
-
-/// Distance from q to the segment from a to b.
-fn to_segment(q: Pt, a: Pt, b: Pt) -> f64 {
-    let v = [b[0] - a[0], b[1] - a[1]];
-    let l2 = v[0] * v[0] + v[1] * v[1];
-    let t = if l2 != 0.0 {
-        (((q[0] - a[0]) * v[0] + (q[1] - a[1]) * v[1]) / l2).clamp(0.0, 1.0)
-    } else {
-        0.0
-    };
-    hypot(q[0] - a[0] - v[0] * t, q[1] - a[1] - v[1] * t)
-}
 
 /// Where columns meet at cut lines they overlap on purpose: those cells are not counted.
 fn seam(cuts: &[Cut]) -> impl Fn(f64, f64) -> bool {
@@ -69,8 +58,11 @@ pub fn ease_piles(
         outsides
             .iter()
             .map(|o| {
-                let mine: Vec<Vec<Pt>> =
-                    holes.iter().filter(|h| inside(o, h[0])).cloned().collect();
+                let mine: Vec<Vec<Pt>> = holes
+                    .iter()
+                    .filter(|h| inside_poly(o, h[0]))
+                    .cloned()
+                    .collect();
                 parts_of(o, cuts, &mine)
             })
             .collect()
@@ -268,7 +260,7 @@ mod tests {
 
     #[test]
     fn eases_a_pile_with_a_cut_through_it() {
-        let poly = |p: Vec<Pt>| move |x: f64, y: f64| inside(&p, [x, y]);
+        let poly = |p: Vec<Pt>| move |x: f64, y: f64| inside_poly(&p, [x, y]);
         let w1 = poly(vec![[16.0, 28.0], [30.0, 26.0], [34.0, 32.0], [16.0, 29.4]]);
         let w2 = poly(vec![[32.0, 30.0], [45.0, 34.0], [45.0, 35.2], [32.0, 31.4]]);
         let r = region(|x, y| {

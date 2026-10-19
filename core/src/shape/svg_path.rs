@@ -384,7 +384,8 @@ pub fn parse_path(d: &str, m: &Mat) -> Form {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::shape::path::{IDENTITY, form_area};
+    use crate::shape::ops::area_of_form;
+    use crate::shape::path::IDENTITY;
 
     #[test]
     fn closed_square_folds_its_last_node() {
@@ -392,7 +393,7 @@ mod tests {
         assert_eq!(f.paths.len(), 1);
         assert!(f.paths[0].closed);
         assert_eq!(f.paths[0].nodes.len(), 4);
-        assert!((form_area(&f) - 100.0).abs() < 1e-9);
+        assert!((area_of_form(&f) - 100.0).abs() < 1e-9);
     }
 
     #[test]
@@ -401,7 +402,7 @@ mod tests {
         let f = parse_path("M0 5a5 5 0 1010 0 5 5 0 10-10 0z", &IDENTITY);
         assert_eq!(f.paths.len(), 1);
         assert!(f.paths[0].nodes.iter().all(|n| n.smooth));
-        assert!((form_area(&f) - std::f64::consts::PI * 25.0).abs() < 0.2);
+        assert!((area_of_form(&f) - std::f64::consts::PI * 25.0).abs() < 0.2);
     }
 
     #[test]

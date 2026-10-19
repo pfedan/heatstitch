@@ -3,8 +3,8 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::geom::Pt;
-use crate::js::{dist, hypot};
+use crate::geom::{Pt, cumulative, point_at};
+use crate::js::hypot;
 use crate::shape::path::{Form, Path, flatten};
 
 /// The path as points about `step` mm apart (straight pieces too, so that corners keep their
@@ -78,44 +78,6 @@ pub fn band_edges(f: &Form, w: f64, offset: f64) -> Vec<Vec<Pt>> {
         }
     }
     out
-}
-
-fn cumulative(rail: &[Pt]) -> Vec<f64> {
-    let mut out = vec![0.0];
-    for i in 1..rail.len() {
-        out.push(out[i - 1] + dist(rail[i - 1], rail[i]));
-    }
-    out
-}
-
-/// The point at distance `s` along the rail (as pointAt in src/digitize/rungs.ts).
-fn point_at(rail: &[Pt], cum: &[f64], s: f64) -> Pt {
-    if s <= 0.0 {
-        return rail[0];
-    }
-    let n = rail.len() - 1;
-    if s >= cum[n] {
-        return rail[n];
-    }
-    let (mut lo, mut hi) = (0, n);
-    while hi - lo > 1 {
-        let m = (lo + hi) >> 1;
-        if cum[m] <= s {
-            lo = m;
-        } else {
-            hi = m;
-        }
-    }
-    let l = cum[hi] - cum[lo];
-    if l > 0.0 {
-        let t = (s - cum[lo]) / l;
-        [
-            rail[lo][0] + (rail[hi][0] - rail[lo][0]) * t,
-            rail[lo][1] + (rail[hi][1] - rail[lo][1]) * t,
-        ]
-    } else {
-        rail[lo]
-    }
 }
 
 /// Where the width grip sits (`at`), the band's middle there (`mid`) and the direction across it

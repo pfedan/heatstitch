@@ -11,9 +11,9 @@ use super::along::{
 use super::line_order::turned_order;
 use super::runs::Run;
 use crate::digitize::border::{BORDER_STITCH, border_run};
-use crate::digitize::echo::{self, EchoLine, EchoSpec, echo_lines};
+use crate::digitize::echo::{EchoLine, EchoSpec, echo_lines};
 use crate::digitize::redwork::{RedworkLine, redwork_graph, redwork_walks};
-use crate::geom::Pt;
+use crate::geom::{Pt, polyline_length};
 use crate::js::{dist, hypot, round};
 use crate::shape::path::{Form, flatten};
 
@@ -22,14 +22,6 @@ const REDWORK_GAP: f64 = 0.5;
 
 fn same_pt(a: Pt, b: Pt) -> bool {
     hypot(a[0] - b[0], a[1] - b[1]) < 1e-6
-}
-
-fn length_of(l: &[Pt]) -> f64 {
-    let mut s = 0.0;
-    for i in 1..l.len() {
-        s += hypot(l[i][0] - l[i - 1][0], l[i][1] - l[i - 1][1]);
-    }
-    s
 }
 
 /// The stitches along the paths of `form`, one after the other, each from the end nearest the
@@ -186,11 +178,7 @@ fn own_copies(e: &LineEcho) -> Vec<i64> {
 
 fn spec_of(e: &LineEcho) -> EchoSpec {
     EchoSpec {
-        side: match e.side {
-            EchoSide::Out => echo::EchoSide::Out,
-            EchoSide::In => echo::EchoSide::In,
-            EchoSide::Both => echo::EchoSide::Both,
-        },
+        side: e.side,
         count: e.count,
         gap: e.gap,
         reverse: e.reverse,
@@ -250,14 +238,14 @@ fn echo_stitches(
     plain.echo = None;
     let motif = st.kind == BorderType::Motif;
     let spacing = spacing_of(st);
-    let line_len = length_of(line);
+    let line_len = polyline_length(line);
     let figures = 1f64.max(round(line_len / 0.5f64.max(spacing)));
     let period_of = |l: &EchoLine| -> f64 {
         if !motif {
             return spacing;
         }
         let d = line_len / figures;
-        let len = length_of(&l.line);
+        let len = polyline_length(&l.line);
         if l.closed {
             len / 1f64.max(round(len / d))
         } else {
@@ -280,7 +268,7 @@ fn echo_stitches(
             return frac(turns);
         }
         // Sewn against the way it was drawn: the figures counted from its far end.
-        frac(length_of(&l.line) / period_of(l) - turns)
+        frac(polyline_length(&l.line) / period_of(l) - turns)
     };
     if !is_run_type(st.kind) || e.cut {
         let mut runs: Vec<Run> = vec![];

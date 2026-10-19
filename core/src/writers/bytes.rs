@@ -1,7 +1,7 @@
 //! What the writers share (src/writers/bytes.ts): a byte buffer, splitting long moves, the header
 //! label and the extents the headers describe.
 
-use crate::parsers::read::js_round;
+use crate::js::round;
 use crate::pattern::{Bounds, Records, STITCH};
 
 /// Growable byte buffer, little endian unless a method says otherwise. Values are cut to their
@@ -86,8 +86,8 @@ pub fn split_move(dx: i64, dy: i64, max: i64) -> Vec<(i64, i64)> {
     let (mut px, mut py) = (0, 0);
     (1..=n)
         .map(|k| {
-            let x = js_round((dx * k) as f64 / n as f64) as i64;
-            let y = js_round((dy * k) as f64 / n as f64) as i64;
+            let x = round((dx * k) as f64 / n as f64) as i64;
+            let y = round((dy * k) as f64 / n as f64) as i64;
             let piece = (x - px, y - py);
             (px, py) = (x, y);
             piece

@@ -40,9 +40,10 @@ src/wasm/pkg/         Built by `npm run wasm` (wasm-pack), not in git
   sets `CORE_PREBUILT` so it is not built again), and runs `cargo fmt`, `cargo clippy` and
   `cargo test` on the crate in the `core` job.
 
-Shared pieces of the crate: `geom` (points), `pattern` (records and colors), `shape::path` (forms,
-curves, flattening), and `js`: arithmetic as JavaScript does it (`Math.hypot` as V8 computes it,
-`Math.round`) and `trig` (`Math.sin`, `Math.cos`, `Math.pow` bit for bit as Node has them, through
+Shared pieces of the crate: `geom` (points, vector and polyline helpers), `pattern` (records and
+colors), `shape::path` (forms, curves, flattening, `inside_poly`), `image::color` (Lab, CIEDE2000),
+and `js`: arithmetic as JavaScript does it (`Math.hypot` as V8 computes it, `Math.round`,
+`Math.max`, ToInt32, the sort comparator and median the TypeScript uses, mulberry32) and `trig` (`Math.sin`, `Math.cos`, `Math.pow` bit for bit as Node has them, through
 `JsMath`: `a.js_sin()`). While a TypeScript twin exists, a ported module uses `js` wherever the last bit can
 tip a threshold, so the comparison tests can demand equality.
 
