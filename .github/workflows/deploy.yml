@@ -39,7 +39,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: src/wasm/pkg
-          key: wasm-pkg-${{ hashFiles('core/**', 'package.json') }}
+          key: wasm-pkg-${{ hashFiles('core/**', 'package.json', 'rust-toolchain.toml', '.github/actions/core/action.yml') }}
       - if: steps.pkg.outputs.cache-hit != 'true'
         uses: ./.github/actions/core
       - uses: actions/upload-artifact@v4

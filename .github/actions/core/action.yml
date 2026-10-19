@@ -13,6 +13,7 @@ runs:
         workspaces: core
     - uses: taiki-e/install-action@v2
       with:
-        tool: wasm-pack
+        # Pinned, so the cached module in deploy.yml (keyed on this file) is rebuilt when it changes.
+        tool: wasm-pack@0.15.0
     - run: npm run wasm
       shell: bash
