@@ -4,31 +4,10 @@
 
 use std::collections::HashMap;
 
+use crate::js::hypot;
 use crate::pattern::ThreadColor;
 
 type Lab = [f64; 3];
-
-/// Math.hypot as V8 computes it (scaled, Kahan-summed), so slot choices match the TypeScript ones
-/// to the last bit.
-fn hypot(a: f64, b: f64) -> f64 {
-    let (a, b) = (a.abs(), b.abs());
-    let max = a.max(b);
-    if max == f64::INFINITY {
-        return f64::INFINITY;
-    }
-    if max == 0.0 {
-        return 0.0;
-    }
-    let (mut sum, mut compensation) = (0.0f64, 0.0f64);
-    for v in [a, b] {
-        let n = v / max;
-        let summand = n * n - compensation;
-        let preliminary = sum + summand;
-        compensation = (preliminary - sum) - summand;
-        sum = preliminary;
-    }
-    sum.sqrt() * max
-}
 
 fn to_linear(c: u8) -> f64 {
     let v = c as f64 / 255.0;

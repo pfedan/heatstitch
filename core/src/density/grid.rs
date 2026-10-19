@@ -3,7 +3,7 @@
 //! crosses, so the grid sums to the thread length (or the stitch count) before smoothing.
 
 use super::blur::gaussian_blur;
-use super::jsmath::hypot;
+use crate::js::hypot;
 use crate::pattern::{COLOR_CHANGE, Records, STITCH, TRIM};
 use serde::Deserialize;
 

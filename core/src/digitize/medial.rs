@@ -18,8 +18,8 @@
 
 use serde::Serialize;
 
-use super::js::{dist, hypot, max_of};
 use crate::geom::Pt;
+use crate::js::{dist, hypot, max_of};
 use crate::shape::cdt::triangulate;
 
 /// Spacing of the outline samples (mm).

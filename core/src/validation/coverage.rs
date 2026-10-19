@@ -2,7 +2,7 @@
 //! gaps that open where the thread pulls the fabric in, and stitches long enough to snag.
 
 use super::kinds::{FILL, SATIN};
-use crate::density::jsmath::{hypot, round};
+use crate::js::{hypot, round};
 use crate::pattern::{Records, STITCH};
 use std::f64::consts::PI;
 

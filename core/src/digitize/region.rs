@@ -8,9 +8,9 @@
 
 use std::cell::RefCell;
 
-use super::js::IdMap;
 use crate::geom::Pt;
 use crate::image::edt::{distance_inside, distance_to_seeds};
+use crate::js::IdMap;
 
 #[derive(Clone, Debug)]
 pub struct Region {

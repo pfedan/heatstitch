@@ -35,6 +35,11 @@ src/wasm/pkg/         Built by `npm run wasm` (wasm-pack), not in git
   the same in `.github/actions/setup`, and runs `cargo fmt`, `cargo clippy` and `cargo test` on the
   crate in the `core` job.
 
+Shared pieces of the crate: `geom` (points), `pattern` (records and colors), `shape::path` (forms,
+curves, flattening), and `js`: arithmetic as JavaScript does it (`Math.hypot` as V8 computes it,
+`Math.round`). While a TypeScript twin exists, a ported module uses `js` wherever the last bit can
+tip a threshold, so the comparison tests can demand equality.
+
 ## Testing
 
 1. Each Rust module has unit tests of its own (`cargo test`), natively.
@@ -62,9 +67,9 @@ table can run in parallel.
 | 1e | Checks: `validation`, `density` | 1 600 |
 | 2 | Shapes: `shape/path`, `svgPath`, `join`, `simplify`, `vectorize`, `rasterize`, `parts`, `nodeOps`, `band`, and `ops` on Rust polygon booleans and offsets instead of paper.js and Clipper | 3 300 |
 | 3a | Fills: `fill`, `tour`, `border`, `deco`, `flow`, `rings`, `spiral`, `echo`, `motif`, `redwork` | 6 400 |
-| 3b | Satin: `satin`, `rungs`, `satinForms`, `satinShapes`, `satinJoins`, `satinEase`, `satinSuggest` | 4 100 |
+| 3b | Satin: `satin`, `rungs`, `satinForms`, `satinShapes`, `satinJoins` | 2 950 |
 | 3c | The image assistant: `digitize/digitize`, `smart`, `image/svg` (with `usvg` for SVG) | 2 300 |
-| 4 | Sewing in the model: `sewOne` and what it calls (`along`, `line`, `travel`, `knockout`, `covers`, `jumps`, `order`, `bestOrder`) behind one call per object | 7 000 |
+| 4 | Sewing in the model: `sewOne` and what it calls (`along`, `line`, `travel`, `knockout`, `covers`, `jumps`, `order`, `bestOrder`, and `satinEase`, `satinSuggest`, which build on `restitch`) behind one call per object | 8 100 |
 | 5 | Correction engine, lettering, live preview (`correct`, `lettering`, `resew`) | 7 300 |
 | 6 | The TypeScript twins and the fine-grained exports go; ARCHITECTURE.md describes the new layout | |
 

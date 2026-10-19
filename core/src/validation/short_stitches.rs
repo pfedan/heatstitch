@@ -1,6 +1,6 @@
 //! Short stitches and the ties that are exempt from the checks (src/validation/shortStitches.ts).
 
-use crate::density::jsmath::hypot;
+use crate::js::hypot;
 use crate::pattern::{Records, STITCH};
 
 /// Record ends a short stitch that counts towards the cluster rule.
