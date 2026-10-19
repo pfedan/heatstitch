@@ -251,7 +251,8 @@ pub fn line_rails(line: &[Pt], closed: bool, w: f64) -> Rails {
     for i in 0..n {
         let (a, b) = (at(i - 3), at(i + 3));
         let l = dist(a, b);
-        let l = if l == 0.0 { 1.0 } else { l };
+        // As `|| 1` in JavaScript: NaN too.
+        let l = if l == 0.0 || l.is_nan() { 1.0 } else { l };
         let nn = [-(b[1] - a[1]) / l, (b[0] - a[0]) / l];
         let c = center[i as usize];
         left.push([c[0] + nn[0] * half, c[1] + nn[1] * half]);
@@ -277,6 +278,121 @@ pub fn border_run(lp: &[Pt], times: u32, tol: f64, len: f64) -> Vec<Pt> {
         out.push(pts[i]);
     }
     out
+}
+
+/// Index ranges of a closed line's n points where `keep` holds, in order along it: (0, n) (the
+/// whole line) when it holds everywhere; ranges may run past n (wrap around).
+fn kept_ranges(n: usize, keep: impl Fn(usize) -> bool, closed_len: usize) -> Vec<(usize, usize)> {
+    let flags: Vec<bool> = (0..n).map(keep).collect();
+    if flags.iter().all(|&f| f) {
+        return vec![(0, closed_len)];
+    }
+    if !flags.iter().any(|&f| f) {
+        return vec![];
+    }
+    // From the first point dropped, so no piece runs over the line's start.
+    let s0 = flags.iter().position(|&f| !f).unwrap();
+    let mut out = vec![];
+    let mut from: Option<usize> = None;
+    for k in 1..=n {
+        let on = flags[(s0 + k) % n];
+        if on && from.is_none() {
+            from = Some(s0 + k);
+        }
+        if let Some(a) = from
+            && (!on || k == n)
+        {
+            out.push((a, s0 + k - usize::from(!on)));
+            from = None;
+        }
+    }
+    out
+}
+
+/// Points a..=b, wrapping around the closed line's n distinct points.
+fn span(pts: &[Pt], n: usize, a: usize, b: usize) -> Vec<Pt> {
+    (0..=b - a).map(|k| pts[(a + k) % n]).collect()
+}
+
+/// A piece of a border line: closed (the whole loop) or open.
+#[derive(Clone, Debug, PartialEq)]
+pub struct KeptLine {
+    pub line: Vec<Pt>,
+    pub closed: bool,
+}
+
+/// The parts of a closed edge line to sew where `keep` holds (checked every 0.2 mm): the whole
+/// loop, closed, when it holds everywhere, else open lines.
+pub fn kept_lines(lp: &[Pt], keep: impl Fn(Pt) -> bool) -> Vec<KeptLine> {
+    let pts = resample(lp, 0.2);
+    let n = pts.len() - 1;
+    kept_ranges(n, |i| keep(pts[i]), n)
+        .into_iter()
+        .map(|(a, b)| {
+            if b - a == n {
+                KeptLine {
+                    line: lp.to_vec(),
+                    closed: true,
+                }
+            } else {
+                KeptLine {
+                    line: span(&pts, n, a, b),
+                    closed: false,
+                }
+            }
+        })
+        .filter(|l| l.closed || length_of(&l.line) >= MIN_LOOP)
+        .collect()
+}
+
+/// The pieces of an open line where `keep` holds (checked every 0.2 mm): the whole line when it
+/// holds everywhere.
+pub fn kept_open(line: &[Pt], keep: impl Fn(Pt) -> bool) -> Vec<Vec<Pt>> {
+    let pts = resample(line, 0.2);
+    if pts.iter().all(|&q| keep(q)) {
+        return vec![line.to_vec()];
+    }
+    let mut out = vec![];
+    let mut piece: Vec<Pt> = vec![];
+    for &q in &pts {
+        if keep(q) {
+            piece.push(q);
+        } else {
+            if piece.len() > 1 && length_of(&piece) >= MIN_LOOP {
+                out.push(std::mem::take(&mut piece));
+            }
+            piece.clear();
+        }
+    }
+    if piece.len() > 1 && length_of(&piece) >= MIN_LOOP {
+        out.push(piece);
+    }
+    out
+}
+
+/// border_rails cut where `keep` does not hold at the line they are centered on: one pair of rails
+/// per piece.
+pub fn kept_rails(
+    r: &Region,
+    lp: &[Pt],
+    w: f64,
+    level: f64,
+    keep: impl Fn(Pt) -> bool,
+) -> Vec<Rails> {
+    let (rails, center) = rails_along(r, lp, w, level);
+    let n = center.len() - 1;
+    kept_ranges(n, |i| keep(center[i]), n)
+        .into_iter()
+        .filter_map(|(a, b)| {
+            if b - a == n {
+                return Some(rails.clone());
+            }
+            (length_of(&span(&center, n, a, b)) >= MIN_LOOP).then(|| Rails {
+                left: span(&rails.left, n, a, b),
+                right: span(&rails.right, n, a, b),
+            })
+        })
+        .collect()
 }
 
 #[cfg(test)]

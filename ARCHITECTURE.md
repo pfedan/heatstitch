@@ -144,6 +144,11 @@ Other model modules: `transform.ts` and `reshape.ts` (move, rotate, scale), `ord
 blocks derived from the records alone), `hoop.ts`, `recolor.ts`, `handEdit.ts` (single needle
 points), `addShape.ts`, `appendDesign.ts`.
 
+Sewing along lines and borders (`along.ts`, `line.ts`), satin from its rails (`satinRuns`,
+`bestChain` and their helpers in `restitch.ts`) and appliqués (`appliqueRuns`) run in the Rust
+core (`core/src/model/`). The TypeScript functions keep their names, pass plain specs and mark
+the runs they get back for a trim (`trimBefore`) or a stop (`stopBefore`).
+
 ## Shapes and digitizing
 
 - **`src/shape/`**: vector forms. Paths of nodes with cubic curves (`path.ts`), SVG path data

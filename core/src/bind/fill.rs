@@ -29,7 +29,7 @@ fn from_js<T: serde::de::DeserializeOwned>(v: JsValue) -> Result<T, JsError> {
 /// A region from TypeScript. `sdf` is left out when it is `sdfBase` (not grown).
 #[wasm_bindgen]
 pub struct RegionIn {
-    r: Region,
+    pub(crate) r: Region,
 }
 
 #[wasm_bindgen]
