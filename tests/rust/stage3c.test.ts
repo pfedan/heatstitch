@@ -15,6 +15,7 @@ import type { ThreadColor } from '../../src/model/pattern';
 import { DEFAULT_PROFILE } from '../../src/validation/profiles';
 import { raster } from '../helpers/images';
 import { readPng } from './png';
+import { v8Math } from './v8math';
 
 /**
  * Stage 3c of the Rust core (docs/rust-core.md): the image assistant. Its analysis and planning
@@ -108,7 +109,8 @@ function regionsOf(p: Prepared): Region[] {
   return out;
 }
 
-describe('stage 3c: the image assistant against its TypeScript twin', () => {
+// Exact only where Math.sin, cos, pow and atan2 are V8's own (tests/rust/v8math.ts).
+describe.runIf(v8Math)('stage 3c: the image assistant against its TypeScript twin', () => {
   // Pictures as the assistant sews them, Smart and plain where they are quick; the larger SVGs
   // (their fills are most of the time, and moved in stage 3a) only as shapes, below.
   const SMART_ONLY = ['image-example.svg', 'shapes-benchmark.svg', 'kirschen.svg', 'blumenzweig.svg', 'fur'];
@@ -188,6 +190,13 @@ describe('stage 3c: the image assistant against its TypeScript twin', () => {
     }
   });
 
+  it('prints the timings', () => {
+    console.log(timings.join('\n'));
+  });
+});
+
+// No trigonometry here: exact everywhere.
+describe('stage 3c: SVG regions against their TypeScript twin', () => {
   it('reads the regions of an SVG from its drawings the same', () => {
     let seed = 7;
     const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647) * 256;
@@ -198,9 +207,5 @@ describe('stage 3c: the image assistant against its TypeScript twin', () => {
     }
     // The byte comparison sees a difference in a typed array.
     expect(() => same({ m: new Uint8Array([1, 2]) }, { m: new Uint8Array([1, 3]) }, 'self test')).toThrow();
-  });
-
-  it('prints the timings', () => {
-    console.log(timings.join('\n'));
   });
 });
