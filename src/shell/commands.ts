@@ -117,8 +117,10 @@ export function matches(e: KeyboardEvent, spec: string): boolean {
   return e.key.toLowerCase() === key.toLowerCase();
 }
 
+// A clicked switch (checkbox, radio) takes no text, so the keys still work after it.
 const typing = (el: EventTarget | null): boolean =>
-  el instanceof HTMLElement && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
+  el instanceof HTMLElement &&
+  (el.isContentEditable || /^(TEXTAREA|SELECT)$/.test(el.tagName) || (el instanceof HTMLInputElement && el.type !== 'checkbox' && el.type !== 'radio'));
 
 /** Runs bound commands from the keyboard. Keys with Mod also work while typing in a field. */
 export function bindCommandKeys(): void {
