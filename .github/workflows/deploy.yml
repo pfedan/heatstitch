@@ -25,8 +25,32 @@ jobs:
   # branch comes to develop.
   # The tests run on several machines side by side, the site is built next to them: the run takes as long
   # as its slowest job instead of all of them one after another. Deploy and preview wait for all of them.
+  # The compute core is built to WebAssembly once (wasm) and handed to every job that runs the app.
+  wasm:
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: wasm-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+      # The same core gives the same module: a run that changed nothing in core/ takes it from the last one.
+      - id: pkg
+        uses: actions/cache@v4
+        with:
+          path: src/wasm/pkg
+          key: wasm-pkg-${{ hashFiles('core/**', 'package.json') }}
+      - if: steps.pkg.outputs.cache-hit != 'true'
+        uses: ./.github/actions/core
+      - uses: actions/upload-artifact@v4
+        with:
+          name: core
+          path: src/wasm/pkg
+          if-no-files-found: error
+
   build:
     if: github.event.action != 'closed'
+    needs: wasm
     runs-on: ubuntu-latest
     concurrency:
       group: build-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
@@ -51,6 +75,7 @@ jobs:
   # by how long each file runs (tests/sequencer.ts, tests/timings.json) so the machines finish together.
   test:
     if: github.event.action != 'closed'
+    needs: wasm
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -83,6 +108,7 @@ jobs:
   # 120 objects, each common operation within a time budget (tests/load.test.ts), alone on the machine.
   load:
     if: github.event.action != 'closed' && (github.event_name != 'pull_request' || github.base_ref == 'develop' || github.base_ref == 'main')
+    needs: wasm
     runs-on: ubuntu-latest
     concurrency:
       group: load-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
@@ -101,6 +127,7 @@ jobs:
   # opening a section of the right column, scrolled down, does not make it jump (tests/sectionScroll.test.ts).
   browser:
     if: github.event.action != 'closed' && (github.event_name != 'pull_request' || github.base_ref == 'develop' || github.base_ref == 'main')
+    needs: wasm
     runs-on: ubuntu-latest
     concurrency:
       group: browser-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
@@ -142,6 +169,7 @@ jobs:
   # scripts/oracle.py): a writer bug that heatstitch's own reader would mirror still shows here.
   oracle:
     if: github.event.action != 'closed' && (github.event_name != 'pull_request' || github.base_ref == 'develop' || github.base_ref == 'main')
+    needs: wasm
     runs-on: ubuntu-latest
     concurrency:
       group: oracle-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
@@ -163,6 +191,7 @@ jobs:
   # (BENCH_SHARD, split by the reference's times); each case gives the same result as in one run.
   korrektur:
     if: github.event.action != 'closed' && (github.event_name != 'pull_request' || github.base_ref == 'develop' || github.base_ref == 'main')
+    needs: wasm
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false

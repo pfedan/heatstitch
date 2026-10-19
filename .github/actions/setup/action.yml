@@ -1,5 +1,10 @@
 name: Set up
-description: Node with the app's packages and the compute core built to WebAssembly (core/, npm run wasm).
+description: Node with the app's packages and the compute core (src/wasm/pkg), from the run's wasm job or built here.
+
+inputs:
+  core:
+    description: "artifact: the core the wasm job of this run built (the job needs: wasm). build: compile it here, for a workflow without that job."
+    default: artifact
 
 runs:
   using: composite
@@ -10,15 +15,14 @@ runs:
         cache: npm
     - run: npm ci
       shell: bash
-    # Rust comes with the runner; rustup picks the version, clippy and the WebAssembly target from
-    # rust-toolchain.toml. The compiled crates are kept per Cargo.lock, so a run only builds the core.
-    - run: rustup show active-toolchain
-      shell: bash
-    - uses: Swatinem/rust-cache@v2
+    - if: inputs.core == 'artifact'
+      uses: actions/download-artifact@v4
       with:
-        workspaces: core
-    - uses: taiki-e/install-action@v2
-      with:
-        tool: wasm-pack
-    - run: npm run wasm
+        name: core
+        path: src/wasm/pkg
+    # npm test, build and typecheck would build the core again first (scripts/wasm.mjs); here it is in place.
+    - if: inputs.core == 'artifact'
+      run: echo CORE_PREBUILT=1 >> "$GITHUB_ENV"
       shell: bash
+    - if: inputs.core == 'build'
+      uses: ./.github/actions/core
