@@ -1469,6 +1469,7 @@ export const deBase = {
   'lettering.font': 'Schrift',
   'lettering.font.hint': 'Schrift wählen. Pfeiltasten probieren sie gleich aus.',
   'lettering.font.from': 'Aus Ink/Stitch,',
+  'lettering.font.fromHershey': 'Hershey-Schrift von A. V. Hershey,',
   'lettering.style.sans': 'Ohne Serifen',
   'lettering.style.serif': 'Mit Serifen',
   'lettering.style.script': 'Schreibschrift',
@@ -1521,6 +1522,7 @@ export const deBase = {
   'lettering.release': 'In Objekte zerlegen',
   'lettering.release.hint': 'Jeder Buchstabe wird ein Objekt. Der Text ist danach fest.',
   'lettering.publicDomain': 'gemeinfrei',
+  'lettering.hersheyLicense': 'frei mit Nennung',
   'canvas.hint.lettering': 'Ziehen: verschieben · Ecke: Größe · Kreis: drehen · Doppelklick: Text bearbeiten · Enter: Buchstaben einzeln · Esc: fertig',
   'canvas.hint.letters': 'Buchstaben ziehen: verschieben · Pfeiltasten: schieben · Esc: zurück zum Schriftzug',
 } as const;
