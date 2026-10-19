@@ -50,7 +50,8 @@ export const SHORT_STITCH_COUNT = 8;
 
 /**
  * Fabric shows through where a single layer is clearly more open than the material's recommended
- * spacing: a fill at spacing s has about 1 / s mm of thread per mm², a satin 2 / s. A cell well
+ * spacing: a fill with rows s apart has about 1 / s mm of thread per mm², a satin at spacing s
+ * (same side) 2 / s. A cell well
  * inside stitched area below this share of that, at the widest recommended spacing, is Caution.
  */
 export const SPARSE_SHARE = 1 / 1.15;
@@ -64,9 +65,11 @@ export interface Thresholds {
   critical: number;
   satinCaution: number;
   satinCritical: number;
+  /** FILL_DENSER: how much more thread a fill layer lays than the layers BASE counts. */
+  fillDenser: number;
   /** Neighbour-count limits, or null when the material is not perforation-sensitive. */
   holes: { caution: number; critical: number } | null;
-  /** Lowest mean density of one fill layer inside stitched area (mm/mm²), satin twice that. */
+  /** Lowest mean density of one layer inside stitched area (mm/mm²), fill or satin alike. */
   sparse: number;
   /** Which gap measurement applies: pull on stable or on stretchy fabric. */
   pull: 'low' | 'high';
@@ -74,27 +77,50 @@ export interface Thresholds {
   long: number;
 }
 
+/**
+ * Fill rows lie this much closer since spacing is counted across two rows and woven's default went
+ * to 0.4 (rows 0.2 mm apart, on every fabric alike): BASE was calibrated with rows 0.4 mm apart (one
+ * layer 2.5 mm/mm², see above), so the fill limits grow with them and still lie between the same
+ * layer counts (Daniel, 2026-10-19: the check moves along).
+ */
+export const FILL_DENSER = 0.4 / 0.2;
+
 /** Density limits scale with the fabric and thread factors; perforation limits are geometric. */
 export function thresholdsFor(p: Profile): Thresholds {
   const fabric = fabricOf(p);
   const k = fabric.factor * threadOf(p).factor;
+  const caution = BASE.caution * FILL_DENSER;
+  const critical = BASE.critical * FILL_DENSER;
   return {
     factor: k,
-    caution: BASE.caution * k,
-    critical: BASE.critical * k,
+    caution: caution * k,
+    critical: critical * k,
     satinCaution: BASE.satinCaution * k,
     satinCritical: BASE.satinCritical * k,
+    fillDenser: FILL_DENSER,
     holes: fabric.perforation ? { caution: HOLES_CAUTION, critical: HOLES_CRITICAL } : null,
-    sparse: SPARSE_SHARE / recommendedSpacing(p)[1],
+    // Fabric shows through where the thread leaves room, which the denser default did not change:
+    // as open as rows at FILL_DENSER times the widest recommended (0.5 mm on woven, as before).
+    sparse: SPARSE_SHARE / (recommendedSpacing(p)[1] * FILL_DENSER),
     pull: fabric.pull,
     long: fabric.longMm * 10,
   };
 }
 
-/** Caution and Critical limits for a cell whose thread is `satinShare` (0 to 1) satin. */
+/**
+ * Caution and Critical limits for a cell whose thread is `satinShare` (0 to 1) satin. They blend
+ * the fill and satin limits by the share of layers, not of thread: a fill layer lays fillDenser
+ * times the thread BASE counted for it, a satin as much as before. So a satin over two fills stays
+ * what it was (one top layer over two), while pure fill and pure satin keep their own limits.
+ */
 export function densityLimits(th: Thresholds, satinShare: number): [number, number] {
   const s = Math.min(1, Math.max(0, satinShare));
-  return [th.caution + s * (th.satinCaution - th.caution), th.critical + s * (th.satinCritical - th.critical)];
+  const f = th.fillDenser;
+  // Thread per layer-counted thread, and the satin share of the layers.
+  const w = s + (1 - s) / f;
+  const layers = w > 0 ? s / w : 0;
+  const blend = (fill: number, satin: number) => (fill / f + layers * (satin - fill / f)) / w;
+  return [blend(th.caution, th.satinCaution), blend(th.critical, th.satinCritical)];
 }
 
 export function classifyDensity(density: number, satinShare: number, th: Thresholds): Level {
@@ -111,5 +137,5 @@ export function classifyHoles(neighbours: number, th: Thresholds): Level {
   return SAFE;
 }
 
-/** Lowest mean density for a cell whose thread is `satinShare` satin. */
+/** Lowest mean density for a cell whose thread is `satinShare` satin (a satin lays twice a fill's thread at the same spacing). */
 export const sparseLimit = (th: Thresholds, satinShare: number): number => th.sparse * (1 + Math.min(1, Math.max(0, satinShare)));

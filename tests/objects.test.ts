@@ -95,11 +95,13 @@ describe('objects made of several sections', () => {
     rememberObjects(r.pattern, [r.starts[0]], r.ends[0]);
     const now = sewObjects(r.pattern);
     expect(now.length).toBe(objs.length);
-    // Nothing of the old object is left (its underlay was a section of its own).
+    // Nothing of the old object is left (its underlay was a section of its own). With rows 0.2 mm
+    // apart about 7 % of the points land on an old one by chance (as many without any underlay); the
+    // old underlay kept would add another 14 %.
     const after = points(r.pattern, now[0].first, now[0].last);
     let kept = 0;
     for (const k of before) if (after.has(k)) kept++;
-    expect(kept).toBeLessThan(before.size * 0.05);
+    expect(kept).toBeLessThan(before.size * 0.1);
     expect(now[0].stitches).toBeLessThan(o.stitches * 1.6);
   });
 

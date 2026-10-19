@@ -385,9 +385,9 @@
             <details class="image-fine" data-section="imageFine">
             <summary><span data-i18n="image.fine"></span> <span class="own-dot" id="image-fine-own" data-i18n-title="image.fine.own" hidden></span></summary>
             <div class="field-row">
-              <label class="field" data-i18n-title="image.spacing.hint">
+              <label class="field" data-i18n-title="image.spacing.hint" data-tip-img="density-{lang}">
                 <span class="label" data-i18n="image.spacing"></span>
-                <input type="number" id="image-spacing" min="0.2" max="1.5" step="0.05" />
+                <input type="number" id="image-spacing" min="0.3" max="3" step="0.05" />
               </label>
               <label class="field" data-i18n-title="image.pull.hint">
                 <span class="label" data-i18n="image.pull"></span>
@@ -812,8 +812,18 @@
               </div>
               <p class="swatch-pick" data-i18n="swatch.pick"></p>
               <table class="swatch-grid" id="swatch-grid" data-i18n-aria="swatch.grid"></table>
+              <p class="swatch-pick" data-i18n="swatch.manual"></p>
+              <form class="swatch-manual" id="swatch-manual">
+                <div class="field row">
+                  <label data-i18n-title="swatch.manual.spacing.hint" data-tip-img="density-{lang}"><span class="label" data-i18n="swatch.manual.spacing"></span><input type="number" id="swatch-spacing" min="0.2" max="3" step="0.01" required /></label>
+                  <label><span class="label" data-i18n="swatch.manual.pull"></span><input type="number" id="swatch-pull" min="0" max="2" step="0.05" required /></label>
+                </div>
+                <button type="submit" data-i18n="swatch.manual.set" data-i18n-title="swatch.manual.set.hint"></button>
+              </form>
               <p class="swatch-own" id="swatch-own" role="status"></p>
               <button type="button" class="link" id="swatch-reset" data-i18n="swatch.reset" data-i18n-title="swatch.reset.hint" hidden></button>
+              <p class="swatch-own" id="swatch-browser" hidden></p>
+              <button type="button" class="link" id="swatch-take" data-i18n="swatch.browser.take" data-i18n-title="swatch.browser.take.hint" hidden></button>
             </details>
             <fieldset class="checks" data-mode="density">
               <legend data-i18n="checks.title"></legend>

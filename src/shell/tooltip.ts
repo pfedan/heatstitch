@@ -1,4 +1,4 @@
-import { onLangChange } from '../i18n';
+import { getLang, onLangChange } from '../i18n';
 
 /**
  * One tooltip for the whole app instead of the browser's title box, which comes late, cannot be
@@ -14,7 +14,8 @@ import { onLangChange } from '../i18n';
  * "Duplizieren (Strg+D)", is set apart as a key.
  *
  * Where a picture says it better than words, `data-tip-img="name"` adds a small screenshot from
- * public/tips/name.webp (made by tools/tips/shoot.mjs) above the text.
+ * public/tips/name.webp (made by tools/tips/shoot.mjs) above the text. `{lang}` in the name stands for
+ * the language, for a shot that carries words or numbers.
  */
 
 const SHOW_MS = 450;
@@ -103,7 +104,7 @@ function render(el: HTMLElement): void {
     parts.push(k);
   }
   const img = el.getAttribute('data-tip-img');
-  if (img) parts.unshift(picture(img));
+  if (img) parts.unshift(picture(img.replace('{lang}', getLang())));
   tip.classList.toggle('has-img', !!img);
   tip.replaceChildren(...parts);
   place(el);

@@ -4,7 +4,7 @@ import { asideOf, storeAside } from '../model/aside';
 import { storeTrace, traceOf } from '../model/trace';
 import type { Pattern } from '../model/pattern';
 import { rememberedIn } from '../model/restitch';
-import { applyMaterial, materialOf, setProfile, sameMaterial, saveSettings, type Mode, type Settings } from '../settings';
+import { applyMaterial, materialOf, sameMaterial, saveSettings, type Mode, type Settings } from '../settings';
 import { toStored } from '../storage/fileStore';
 import { recordingForSave } from '../dev/console';
 import { decodeProject, encodeProject, isProjectName, onlyDesign, PROJECT_EXT, PROJECT_MIME, projectSettings, ProjectError, type Project, type ProjectSettings } from '../storage/project';
@@ -155,7 +155,8 @@ export function bindFileIo(app: FileIoApp) {
   /** Takes over the material, checks, correction and order options of a project (and its image's, if it has one). */
   function applyProjectSettings(s: ProjectSettings, withImage: boolean): void {
     if (s.profile.thread !== app.settings.profile.thread) app.settings.threadMm = threadWidthMm(s.profile);
-    setProfile(app.settings, s.profile);
+    // With the measured values the project keeps, not this browser's.
+    app.settings.profile = s.profile;
     app.settings.checks = s.checks;
     // The panels keep these objects, so they change in place.
     Object.assign(app.settings.correction, s.correction);

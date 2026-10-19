@@ -28,6 +28,7 @@ import { section } from '../shell/ui';
 import { setThinShare, THIN_SHARES, thinShare } from '../areas/stitches/state';
 import { kindWay, type KindState, type KindWay } from '../areas/stitches/kindWay';
 import { APPLIQUE_FABRICS, APPLIQUE_INSETS, APPLIQUE_TACK, APPLIQUE_WIDTHS, placeInset, tackInset, tackOf, TACK_STITCH, type AppliqueFabric, type AppliqueSettings } from '../model/applique';
+import { rowsOf, shownRows } from '../validation/profiles';
 
 /** The kinds on the kind switch: the three of a design's objects and appliqué. */
 type SwitchKind = 'fill' | 'satin' | 'line' | 'applique';
@@ -64,8 +65,10 @@ export interface StitchInfo {
   key: number;
   /** Kinds among the selected objects, and what the first object of each kind has now (the first fill's border beside its fill). */
   measured: Partial<{ fill: FillSettings; border: BorderSettings; satin: SatinSettings; run: RunSettings }>;
-  /** Recommended fill spacing for the material (mm). */
+  /** Recommended distance between fill rows for the material (mm). */
   recommended: [number, number];
+  /** Recommended satin spacing for the material (mm, same side). */
+  recommendedSatin: [number, number];
   /** Values chosen automatically for the material: what "Nach Stoff" gives. */
   auto?: { fillSpacing: number; satinSpacing: number; stitch: number };
   /** How many selected objects have stitches of each kind. */
@@ -296,6 +299,8 @@ const CROSS_SIZES = [1.4, 1.6, 1.8, 2, 2.3, 2.5, 3];
 interface SliderDef {
   label: Key;
   hint?: Key;
+  /** A screenshot above the hint (data-tip-img, see shell/tooltip.ts). */
+  tipImg?: string;
   min: number;
   max: number;
   step: number;
@@ -674,7 +679,7 @@ export class StitchPanel {
       chip(warn ? 'warn' : 'ok', t(`stitches.trust.${info.shape}`), `${t(`stitch.shape.${info.shape}`)} ${t('stitch.undo')}`, warn ? 'warn' : 'ok');
     }
     if (info.hand) chip('warn', t('stitches.hand', { n: formatNumber(info.hand) }), t('stitch.hand', { n: formatNumber(info.hand) }), 'warn');
-    if (info.fixed?.length) chip('fix', t('stitches.fixed'), t('plan.fixed', { list: [...new Set(info.fixed.map(fixText))].join(', ') }));
+    if (info.fixed?.length) chip('fix', t('stitches.fixed'), t('plan.fixed', { list: [...new Set(info.fixed.map((c) => fixText(c, this.kind)))].join(', ') }));
     if (info.free?.on) chip('free', t(info.free.on === 'mixed' ? 'stitches.free.some' : 'stitches.free'), t(info.free.on === 'mixed' ? 'free.someText' : 'free.text'));
     if (!chips.length) return null;
     return h('div', { class: 'stitch-status', role: 'status' }, chips);
@@ -752,18 +757,20 @@ export class StitchPanel {
   private coverLook(s: FillSettings): HTMLElement[] {
     const mm = (d: number) => (v: number) => `${formatNumber(v, d)} mm`;
     const auto = this.info!.auto;
+    // Shown and typed across two rows (see ROW_PAIR); the rows lie half of it apart.
     const density = (label: Key, get: () => number, set: (v: number) => void, own = false) =>
       this.slider({
         label,
         hint: 'stitch.density.hint',
-        min: 0.2,
-        max: 1.2,
+        tipImg: 'density-{lang}',
+        min: shownRows(0.15),
+        max: shownRows(1.2),
         step: 0.01,
-        get,
-        set,
+        get: () => shownRows(get()),
+        set: (v) => set(rowsOf(v)),
         fmt: mm(2),
-        band: this.info!.recommended,
-        note: (v) => t('stitch.densityNote', { d: formatNumber(1 / v, 1) }),
+        band: this.info!.recommended.map(shownRows) as [number, number],
+        note: (v) => t('stitch.densityNote', { d: formatNumber(1 / rowsOf(v), 1) }),
         ...(own && auto ? { auto: { is: () => Math.abs(get() - auto.fillSpacing) < 0.005, reset: () => set(auto.fillSpacing), fabric: true } } : {}),
       });
     const out: HTMLElement[] = [];
@@ -1002,7 +1009,7 @@ export class StitchPanel {
             get: () => s.spacing,
             set: (v) => (s.spacing = v),
             fmt: mm(2),
-            band: info.recommended,
+            band: info.recommendedSatin,
             ...(auto ? { auto: { is: () => Math.abs(s.spacing - auto.satinSpacing) < 0.005, reset: () => (s.spacing = auto.satinSpacing), fabric: true } } : {}),
           }),
     ];
@@ -1383,6 +1390,7 @@ export class StitchPanel {
   private slider(d: SliderDef): HTMLElement {
     const label = h('label', { class: 'field stitch-field' + (d.auto ? ' has-auto' : '') });
     if (d.hint) label.title = t(d.hint);
+    if (d.tipImg) label.dataset.tipImg = d.tipImg;
     const out = h('output');
     const name = h('span', { class: 'name' }, t(d.label));
     const top = h('span', { class: 'label' }, name);

@@ -1,9 +1,9 @@
 import type { Orientation } from '../image/orientation';
-import { BEAM_PIECES, beamOnGrid, chooseAngle, fillRegion, noteTravel, pathLength, planOnGrid, type Pieces, pointCount, sewUnderlay, TRAVEL_STITCH, TRAVEL_TOLERANCE, TravelGrid, type FillParams, type FillResult } from './fill';
+import { BEAM_PIECES, beamOnGrid, chooseAngle, fillRegion, noteTravel, pathLength, planOnGrid, type Pieces, pointCount, SHARED_TURN, sewUnderlay, TRAVEL_STITCH, TRAVEL_TOLERANCE, TravelGrid, type FillParams, type FillResult } from './fill';
 import { coverage, peakDensity } from './measure';
 import { sample, type Region } from './region';
 import { ringFill } from './rings';
-import { MIN_CURVE_STITCH, Path, runStitch, simplify, TOLERANCE } from './run';
+import { MIN_ROW_STITCH, Path, runStitch, simplify, TOLERANCE } from './run';
 import type { Graph, Pt } from './skeleton';
 
 /**
@@ -391,7 +391,7 @@ function lengthen(pts: Pt[], d: number): Pt[] {
  * Stitches along a row: needle points every `len` of arc length, shifted by a quarter stitch from
  * level to level (stagger). Where the row bends between two of them by more than `tol`, a straight
  * stitch would cut the curve, so that stretch is divided into shorter stitches until each keeps
- * within `tol` (not shorter than MIN_CURVE_STITCH).
+ * within `tol` (not shorter than MIN_ROW_STITCH).
  */
 function rowStitches(p: Piece, len: number, tol: number): Pt[] {
   const path = new Path(p.pts);
@@ -410,7 +410,7 @@ function rowStitches(p: Piece, len: number, tol: number): Pt[] {
       return true;
     };
     let parts = 1;
-    while (!fits(parts) && (s1 - s0) / (parts + 1) >= MIN_CURVE_STITCH) parts++;
+    while (!fits(parts) && (s1 - s0) / (parts + 1) >= MIN_ROW_STITCH) parts++;
     for (let q = 1; q <= parts; q++) out.push(path.at(s0 + ((s1 - s0) * q) / parts));
   }
   return out;
@@ -640,7 +640,12 @@ export function sewRows(r: Region, rows: Pt[][], p: FillParams, start: Pt, mean:
   for (const { s: chain, e } of order) {
     const lines = e.rev ? chain.slice().reverse().map((row) => row.slice().reverse()) : chain;
     const pts: Pt[] = [];
-    for (const line of lines) pts.push(...(stitched ? line : rowStitches({ k: count++, pts: line }, p.stitch, p.tolerance ?? TOLERANCE)));
+    for (const line of lines) {
+      const row = stitched ? line : rowStitches({ k: count++, pts: line }, p.stitch, p.tolerance ?? TOLERANCE);
+      // Rows this close share the hole where they turn, as tatami rows do (see SHARED_TURN).
+      const last = pts[pts.length - 1];
+      pts.push(...(last && row.length > 1 && dist(last, row[0]) <= SHARED_TURN + 1e-3 ? row.slice(1) : row));
+    }
     const bd = dist(pos, pts[0]);
     let travel: Pt[] | null = null;
     if (cur && straight(pos, pts[0])) travel = [pos, pts[0]];

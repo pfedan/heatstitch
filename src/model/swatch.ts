@@ -5,7 +5,7 @@ import { placeLettering } from '../lettering/place';
 import { sewLettering } from '../lettering/sew';
 import { parsePath } from '../shape/svgPath';
 import type { Mat } from '../shape/path';
-import { fabricOf, fabricSpacing, type Profile } from '../validation/profiles';
+import { fabricOf, fabricSpacing, rowsOf, shownRows, type Profile } from '../validation/profiles';
 import { addLine, addShape } from './addShape';
 import { sewObjects } from './objects';
 import type { Pattern, ThreadColor } from './pattern';
@@ -30,7 +30,7 @@ export type SwatchKind = 'fill' | 'satin';
 
 export interface SwatchGrid {
   kind: SwatchKind;
-  /** Spacing per row (mm), densest first. */
+  /** Spacing per row (mm, a fill's between neighbouring rows), densest first. */
   spacings: number[];
   /** Pull compensation per column (the fabric's pullMm), none first. */
   pulls: number[];
@@ -67,7 +67,7 @@ const fix = (v: number) => Math.round(v * 1000) / 1000;
  * fabric's in steps of half of it (at least 0.1 mm, the step digitizers adjust it by).
  */
 export function swatchGrid(p: Profile, kind: SwatchKind): SwatchGrid {
-  const s = fabricSpacing(p)[0];
+  const s = kind === 'fill' ? rowsOf(fabricSpacing(p)[0]) : fabricSpacing(p)[0];
   const spacings = Array.from({ length: ROWS }, (_, k) => fix(round(s * SPACING_STEP ** (k - 2), 0.01)));
   const pull = fabricOf(p).pullMm;
   const step = Math.max(0.1, round(pull / 2, 0.05));
@@ -111,7 +111,8 @@ export function testSwatch(p: Profile, kind: SwatchKind, font: Font, fmt: (v: nu
   grid.pulls.forEach((v, c) => label(`+${fmt(v, pullDigits(v))}`, cellAt(0, c)[0] + SWATCH_CELL / 2, HEAD_H - 2.5, 'center'));
   grid.spacings.forEach((s, r) => {
     const [, y] = cellAt(r, 0);
-    label(fmt(s, 2), LABEL_W - 2, y + SWATCH_CELL / 2 + LABEL_MM / 2, 'right');
+    // Labelled as the panels show it: a fill across two rows.
+    label(fmt(kind === 'fill' ? shownRows(s) : s, 2), LABEL_W - 2, y + SWATCH_CELL / 2 + LABEL_MM / 2, 'right');
     // Every other row from the right: shorter ways between the cells.
     const cols = grid.pulls.map((_, c) => c);
     if (r % 2) cols.reverse();

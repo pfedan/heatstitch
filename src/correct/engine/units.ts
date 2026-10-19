@@ -8,7 +8,7 @@ import { fontNow, type Font } from '../../lettering/font';
 import type { Lettering } from '../../lettering/layout';
 import { letteringObjects, placeLettering } from '../../lettering/place';
 import { sewLettering } from '../../lettering/sew';
-import { recommendedSpacing, type Profile } from '../../validation/profiles';
+import { recommendedSatin, type Profile } from '../../validation/profiles';
 import type { FixKind } from './cells';
 import { roleOf, sewWith, type Tool } from './variants';
 
@@ -89,7 +89,7 @@ export function borderTools(u: Unit & { kind: 'border' }, want: Set<FixKind>, pr
   const b = u.line;
   const out: Tool[] = [];
   if (b.type !== 'satin') return out;
-  const [, recMax] = recommendedSpacing(profile);
+  const [, recMax] = recommendedSatin(profile);
   const sp = spacingOf(b);
   if (want.has('density') || want.has('holes')) {
     const under = autoUnder(b);
