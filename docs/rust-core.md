@@ -37,7 +37,8 @@ src/wasm/pkg/         Built by `npm run wasm` (wasm-pack), not in git
 
 Shared pieces of the crate: `geom` (points), `pattern` (records and colors), `shape::path` (forms,
 curves, flattening), and `js`: arithmetic as JavaScript does it (`Math.hypot` as V8 computes it,
-`Math.round`). While a TypeScript twin exists, a ported module uses `js` wherever the last bit can
+`Math.round`) and `trig` (`Math.sin`, `Math.cos`, `Math.pow` bit for bit as Node has them, through
+`JsMath`: `a.js_sin()`). While a TypeScript twin exists, a ported module uses `js` wherever the last bit can
 tip a threshold, so the comparison tests can demand equality.
 
 ## Testing

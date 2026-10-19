@@ -13,6 +13,7 @@ pub mod js;
 pub mod parsers;
 pub mod pattern;
 pub mod shape;
+pub mod trig;
 pub mod validation;
 pub mod writers;
 

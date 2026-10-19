@@ -3,6 +3,7 @@
 
 mod density;
 mod digitize;
+mod fill;
 mod image;
 mod parsers;
 mod shape;
