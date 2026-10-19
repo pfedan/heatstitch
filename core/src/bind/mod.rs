@@ -6,6 +6,7 @@ mod density;
 mod digitize;
 mod fill;
 mod image;
+mod lettering;
 mod model;
 mod parsers;
 mod picture;

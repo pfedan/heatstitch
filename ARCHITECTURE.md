@@ -166,7 +166,9 @@ the runs they get back for a trim (`trimBefore`) or a stop (`stopBefore`).
   quantization, label maps, distance transforms, orientation, SVG reading (`prepare.ts` is the
   staged, cached pipeline).
 - **`src/lettering/`**: fonts (converted from Ink/Stitch, see `tools/fonts/`), layout on lines,
-  arcs and circles, sewing letters and placing them into a design.
+  arcs and circles, sewing letters and placing them into a design. Layout and sewing (with what
+  overlapping letters leave out) run in Rust (`core/src/lettering/`, one call per lettering, the
+  font handed over once); loading fonts, drawing and placing stay TypeScript.
 - **`src/library/`**: the motif library (Twemoji sewn as designs).
 
 Picture to design: `image/prepare.ts` reduces the picture to thread colors and regions, the
