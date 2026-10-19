@@ -23,7 +23,7 @@ use super::flow::{DirField, Grid, contour_fill, sew_rows};
 use super::region::{Region, outline, sample};
 use super::run::run_stitch;
 use crate::geom::Pt;
-use crate::js::{IdMap, dist, hypot, round};
+use crate::js::{IdMap, Random, dist, hypot, round};
 use crate::trig::JsMath;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -68,32 +68,6 @@ pub enum Texture {
     Swell,
     Steps,
     Herringbone,
-}
-
-/// `x >>> 0` in JavaScript: a number as an unsigned 32 bit integer.
-fn to_u32(x: f64) -> u32 {
-    if !x.is_finite() {
-        return 0;
-    }
-    x.trunc().rem_euclid(4294967296.0) as u32
-}
-
-/// Small, fast and repeatable random numbers (mulberry32).
-pub struct Random(u32);
-
-impl Random {
-    pub fn new(seed: f64) -> Random {
-        let a = to_u32(seed);
-        Random(if a == 0 { 1 } else { a })
-    }
-    #[allow(clippy::should_implement_trait)]
-    pub fn next(&mut self) -> f64 {
-        self.0 = self.0.wrapping_add(0x6d2b79f5);
-        let mut t = self.0;
-        t = (t ^ (t >> 15)).wrapping_mul(t | 1);
-        t ^= t.wrapping_add((t ^ (t >> 7)).wrapping_mul(t | 61));
-        f64::from(t ^ (t >> 14)) / 4294967296.0
-    }
 }
 
 // ------------------------------------------------------------------------------------------------

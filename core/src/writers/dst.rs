@@ -1,7 +1,7 @@
 //! Tajima DST (src/writers/dst.ts).
 
+use crate::js::round;
 use crate::parsers::dst::{DST_HEADER_SIZE, DST_TRIM_JUMP_COUNT};
-use crate::parsers::read::js_round;
 use crate::pattern::{COLOR_CHANGE, END, JUMP, Records, STITCH, TRIM};
 
 use super::bytes::{ByteWriter, header_label, split_move};
@@ -74,7 +74,7 @@ pub fn trim_jumps(dx: i64, dy: i64) -> Vec<(i64, i64)> {
         return pieces;
     }
     if dx.abs().max(dy.abs()) >= k {
-        let at = |v: i64, s: i64| js_round((v * s) as f64 / k as f64) as i64;
+        let at = |v: i64, s: i64| round((v * s) as f64 / k as f64) as i64;
         let out: Vec<_> = (1..=k)
             .map(|s| (at(dx, s) - at(dx, s - 1), at(dy, s) - at(dy, s - 1)))
             .collect();

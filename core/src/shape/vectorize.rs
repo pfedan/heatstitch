@@ -3,7 +3,7 @@
 //! operations, simplifying and drawing share.
 
 use crate::digitize::region::{Region, outline};
-use crate::geom::Pt;
+use crate::geom::{Pt, add, dot, mul, signed_area, sub, to_segment};
 use crate::js::{dist, hypot};
 use crate::shape::path::{Cubic, Form, Node, Path};
 
@@ -21,22 +21,6 @@ const SPECK: f64 = 0.3;
 pub type V = [f64; 2];
 
 #[inline]
-fn sub(a: Pt, b: Pt) -> V {
-    [a[0] - b[0], a[1] - b[1]]
-}
-#[inline]
-fn add(a: Pt, b: V) -> Pt {
-    [a[0] + b[0], a[1] + b[1]]
-}
-#[inline]
-fn mul(a: V, s: f64) -> V {
-    [a[0] * s, a[1] * s]
-}
-#[inline]
-fn dot(a: V, b: V) -> f64 {
-    a[0] * b[0] + a[1] * b[1]
-}
-#[inline]
 fn unit(a: V) -> V {
     let l = hypot(a[0], a[1]);
     if l > 1e-12 {
@@ -44,16 +28,6 @@ fn unit(a: V) -> V {
     } else {
         [0.0, 0.0]
     }
-}
-
-fn signed_area(pts: &[Pt]) -> f64 {
-    let mut a = 0.0;
-    let mut j = pts.len().wrapping_sub(1);
-    for i in 0..pts.len() {
-        a += (pts[j][0] - pts[i][0]) * (pts[j][1] + pts[i][1]);
-        j = i;
-    }
-    a / 2.0
 }
 
 /// The area of a region as curves: its outline (holes included) traced and fitted with cubic
@@ -386,18 +360,6 @@ fn max_error(pts: &[Pt], c: &Cubic, u: &[f64], between: bool) -> (f64, usize) {
         }
     }
     (max, idx)
-}
-
-/// Distance from `q` to the segment from `a` to `b`.
-pub fn to_segment(q: Pt, a: Pt, b: Pt) -> f64 {
-    let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
-    let l2 = dx * dx + dy * dy;
-    let t = if l2 != 0.0 {
-        (((q[0] - a[0]) * dx + (q[1] - a[1]) * dy) / l2).clamp(0.0, 1.0)
-    } else {
-        0.0
-    };
-    hypot(q[0] - a[0] - t * dx, q[1] - a[1] - t * dy)
 }
 
 fn reparameterize(pts: &[Pt], u: &[f64], c: &Cubic) -> Vec<f64> {

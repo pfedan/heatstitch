@@ -10,8 +10,9 @@
 use std::collections::HashMap;
 use std::hash::{BuildHasherDefault, Hasher};
 
-use super::color::{Lab, Rgb, delta_e2000, hypot3, js_round, rgb_lab};
+use super::color::{Lab, Rgb, delta_e2000, hypot3, rgb_lab};
 use super::raster::{ALPHA_MIN, LabImage, Raster};
+use crate::js::round;
 
 /// Pixels that are not quantized (transparent).
 pub const NONE: u8 = 255;
@@ -128,9 +129,8 @@ fn histogram(img: &LabImage) -> Vec<Bin> {
             lab[i * 3 + 2] as f64,
         );
         // 3 units of lightness, 4 of a and b: below what a thread palette can tell apart.
-        let key = ((js_round(l / 3.0) * 128.0 + js_round(a / 4.0) + 64.0) * 128.0
-            + js_round(b / 4.0)
-            + 64.0) as i64;
+        let key = ((round(l / 3.0) * 128.0 + round(a / 4.0) + 64.0) * 128.0 + round(b / 4.0) + 64.0)
+            as i64;
         let wt = 1.0 + ALPHA * sal[i] as f64;
         let k = *index.entry(key).or_insert_with(|| {
             bins.push(Bin::default());
@@ -343,10 +343,7 @@ pub fn quantize(img: &LabImage, max_colors: f64, palette: Option<&[Lab]>) -> Qua
             labels: vec![NONE; img.opaque.len()],
         };
     }
-    let k = (js_round(max_colors)
-        .min(16.0)
-        .min(bins.len() as f64)
-        .max(1.0)) as usize;
+    let k = (round(max_colors).min(16.0).min(bins.len() as f64).max(1.0)) as usize;
     let centers = reduce(&bins, lloyd(&bins, seed(&bins, k), 30));
     let labels = assign(img, &centers);
     Quantized { centers, labels }

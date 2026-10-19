@@ -62,6 +62,14 @@ impl Records {
         self.cmd.is_empty()
     }
 
+    /// Distance between records a and b (0.1 mm), with `Math.hypot` as JavaScript has it.
+    pub fn dist(&self, a: usize, b: usize) -> f64 {
+        crate::js::hypot(
+            (self.x[b] - self.x[a]) as f64,
+            (self.y[b] - self.y[a]) as f64,
+        )
+    }
+
     /// Bounds of the STITCH records (all zero without any), as computeBounds in TypeScript.
     pub fn bounds(&self) -> Bounds {
         compute_bounds(&self.x, &self.y, &self.cmd)

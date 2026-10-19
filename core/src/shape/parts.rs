@@ -2,10 +2,9 @@
 
 use std::collections::{HashMap, HashSet};
 
-use crate::geom::Pt;
+use crate::geom::{Pt, to_segment, twice_area};
 use crate::js::dist;
 use crate::shape::path::{Form, flatten};
-use crate::shape::vectorize::to_segment;
 
 /// Sample distance along the curves (mm).
 const STEP: f64 = 0.2;
@@ -174,15 +173,6 @@ fn is_hole(f: &Form, lines: &[Vec<Pt>], k: usize) -> bool {
     !filled_at(f, lines, inside) && filled_at(f, lines, outside)
 }
 
-/// Area enclosed by a closed polyline (absolute).
-fn poly_area(pts: &[Pt]) -> f64 {
-    let mut s = 0.0;
-    for i in 0..pts.len().saturating_sub(1) {
-        s += pts[i][0] * pts[i + 1][1] - pts[i + 1][0] * pts[i][1];
-    }
-    (s / 2.0).abs()
-}
-
 /// The parts a form falls into, each a form of its own, in the order of their first path.
 ///
 /// A line (`area` false): the paths that touch, cross or come within `reach` mm of each other
@@ -226,7 +216,10 @@ pub fn part_groups(f: &Form, area: bool, reach: f64) -> Vec<Vec<usize>> {
                 uf.join(a, b);
             }
         }
-        let size: HashMap<usize, f64> = closed.iter().map(|&k| (k, poly_area(&lines[k]))).collect();
+        let size: HashMap<usize, f64> = closed
+            .iter()
+            .map(|&k| (k, (twice_area(&lines[k]) / 2.0).abs()))
+            .collect();
         // The smallest closed loop around `q` other than `k` (the first of equal ones, as a stable sort).
         let around = |k: usize, q: Pt| -> Option<usize> {
             let mut best: Option<usize> = None;

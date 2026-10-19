@@ -18,7 +18,7 @@
 use serde::Serialize;
 
 use super::medial::{Axis, AxisBranch, AxisNode, leaving, medial_axis};
-use crate::geom::Pt;
+use crate::geom::{Pt, dot, mid, sub};
 use crate::js::{IdMap, dist, hypot, max_of};
 
 /// Two branches at a junction run through when they turn less than this (degrees): at a fork of
@@ -43,16 +43,6 @@ const NODE_CLEAR: f64 = 1.05;
 const WIDE: f64 = 3.0;
 
 type Line = [Pt; 2];
-
-fn sub(a: Pt, b: Pt) -> Pt {
-    [a[0] - b[0], a[1] - b[1]]
-}
-fn mid(a: Pt, b: Pt) -> Pt {
-    [(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0]
-}
-fn dot(a: Pt, b: Pt) -> f64 {
-    a[0] * b[0] + a[1] * b[1]
-}
 
 /// A chord pulled in a little at both ends, so it starts and ends just inside the outline.
 fn inset([a, b]: Line) -> Line {

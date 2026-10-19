@@ -1,7 +1,7 @@
 //! Fewer nodes for a form (src/shape/simplify.ts, "Vereinfachen"): the curves between corners are
 //! fitted anew within a deviation, corners stay where they are and stay corners.
 
-use crate::geom::Pt;
+use crate::geom::{Pt, unit};
 use crate::js::dist;
 use crate::shape::path::{Form, Node, Path, bezier, segment, segments};
 use crate::shape::vectorize::fit_cubic;
@@ -11,14 +11,6 @@ use crate::shape::vectorize::fit_cubic;
 pub const SIMPLIFY_STEPS: [f64; 3] = [0.3, 0.6, 1.2];
 /// Sample distance along the curves when fitting them again (mm).
 const SAMPLE: f64 = 0.05;
-
-fn unit(a: Pt, b: Pt) -> [f64; 2] {
-    let l = match dist(a, b) {
-        0.0 => 1.0,
-        l => l,
-    };
-    [(b[0] - a[0]) / l, (b[1] - a[1]) / l]
-}
 
 pub fn node_count(f: &Form) -> usize {
     f.paths.iter().map(|p| p.nodes.len()).sum()

@@ -12,7 +12,7 @@ use crate::digitize::region::expand_region;
 use crate::digitize::run::{TOLERANCE, run_stitch};
 use crate::digitize::satin::{UnderlayKind, underlay_of};
 use crate::geom::Pt;
-use crate::js::{dist, hypot, round};
+use crate::js::{dist, hypot, math_max, round};
 use crate::material::rules::{LOCK_MM, SATIN_SPLIT_MM, SATIN_UNDER_MIN};
 use crate::model::restitch::{
     Rails, SatinSettings, SatinType, column_of, reversed_rails, satin_runs, swapped_sides,
@@ -89,7 +89,7 @@ impl Lazy {
 
 fn satin_settings(p: &SatinP, density: f64) -> SatinSettings {
     SatinSettings {
-        spacing: js_max(0.15, p.sp * density),
+        spacing: math_max([0.15, p.sp * density]),
         edge: p.pc,
         edge_share: p.ps,
         edge_b: p.pcb,
@@ -107,15 +107,6 @@ fn satin_settings(p: &SatinP, density: f64) -> SatinSettings {
             SatinType::Satin
         }),
         ..Default::default()
-    }
-}
-
-/// `Math.max(a, b)` as JavaScript computes it (NaN wins).
-fn js_max(a: f64, b: f64) -> f64 {
-    if a.is_nan() || b.is_nan() {
-        f64::NAN
-    } else {
-        a.max(b)
     }
 }
 
@@ -191,7 +182,7 @@ fn sew_element(
             let pts = if manual {
                 path
             } else {
-                run_stitch(&path, js_max(0.5, p.len), TOLERANCE)
+                run_stitch(&path, math_max([0.5, p.len]), TOLERANCE)
             };
             if !p.tr.is_some_and(|v| v != 0.0 && !v.is_nan()) {
                 return (vec![pts], false, Lazy::None);
@@ -238,7 +229,7 @@ fn sew_element(
                 return (vec![], false, Lazy::None);
             };
             let params = FillParams {
-                spacing: js_max(0.15, p.sp * l.density),
+                spacing: math_max([0.15, p.sp * l.density]),
                 stitch: p.len,
                 angle: Some((((p.a + turn) % 180.0) + 180.0) % 180.0),
                 pull: 0.0,

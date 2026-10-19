@@ -1,7 +1,7 @@
 //! Janome JEF (src/writers/jef.ts).
 
+use crate::js::{round, to_int32};
 use crate::parsers::palettes::{jef_color, jef_slots};
-use crate::parsers::read::js_round;
 use crate::pattern::{COLOR_CHANGE, END, Hoop, JUMP, Records, STITCH, TRIM};
 
 use super::bytes::{ByteWriter, block_color, extents, split_move};
@@ -46,14 +46,6 @@ pub fn jef_hoop_code(hoop: Hoop) -> Option<i64> {
         .iter()
         .find(|c| c.0 == hoop.w && c.1 == hoop.h)
         .map(|c| c.2)
-}
-
-/// JavaScript's ToInt32, for values the TypeScript writer stored without rounding.
-fn to_int32(v: f64) -> i64 {
-    if !v.is_finite() {
-        return 0;
-    }
-    (v.trunc().rem_euclid(4294967296.0) as u32 as i32) as i64
 }
 
 /// Writes a Janome JEF file. JEF has no trim command: a cut is written as three zero-length jumps, as
@@ -146,8 +138,8 @@ pub fn write_jef(p: &Records, stamp: &str, hoop: Option<Hoop>) -> Vec<u8> {
         b.max_x as i64 - b.min_x as i64,
         b.max_y as i64 - b.min_y as i64,
     );
-    let half_w = js_round(w as f64 / 2.0) as i64;
-    let half_h = js_round(h as f64 / 2.0) as i64;
+    let half_w = round(w as f64 / 2.0) as i64;
+    let half_h = round(h as f64 / 2.0) as i64;
     let mut out = ByteWriter::new();
     out.u32(0x74 + blocks * 8);
     out.u32(0x14);
@@ -171,7 +163,7 @@ pub fn write_jef(p: &Records, stamp: &str, hoop: Option<Hoop>) -> Vec<u8> {
         let ey = hh - half_h as f64;
         let fits = ex.min(ey) >= 0.0;
         for v in [ex, ey, ex, ey] {
-            out.u32(if fits { to_int32(v) } else { -1 });
+            out.u32(if fits { i64::from(to_int32(v)) } else { -1 });
         }
     }
     let colors: Vec<_> = (0..blocks as usize).map(|k| block_color(p, k)).collect();

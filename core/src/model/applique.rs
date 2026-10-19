@@ -5,9 +5,11 @@
 use serde::{Deserialize, Serialize};
 
 use super::along::{BorderType, PathStitch, border_stitches};
+use super::runs;
 use super::runs::Run;
 use crate::digitize::region::Region;
 use crate::geom::Pt;
+use crate::js::{clamp, yes};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -46,7 +48,7 @@ pub fn tack_inset(s: &AppliqueSettings) -> f64 {
         RAW_INSET
     } else {
         let v = s.width * 0.3;
-        if v.is_nan() { v } else { v.clamp(0.5, 1.0) }
+        clamp(v, 0.5, 1.0)
     })
 }
 
@@ -68,15 +70,6 @@ pub fn tack_of(s: &AppliqueSettings) -> PathStitch {
     out
 }
 
-/// A number as a condition tests it: not 0 and not NaN.
-fn yes(v: f64) -> bool {
-    v != 0.0 && !v.is_nan()
-}
-
-fn end_of(runs: &[Run], or: Pt) -> Pt {
-    runs.last().and_then(Run::last).unwrap_or(or)
-}
-
 fn with_offset(mut s: PathStitch, offset: f64) -> PathStitch {
     s.offset = Some(offset);
     s
@@ -93,7 +86,7 @@ pub fn applique_parts(
     let line = PathStitch::run(PLACE_STITCH);
     let no_place = s.place == Some(false);
     // A shape too thin for the placement line as far inside: it is sewn on the outline.
-    let inside = if no_place || !yes(place_inset(s)) {
+    let inside = if no_place || !yes(Some(place_inset(s))) {
         vec![]
     } else {
         border_stitches(
@@ -111,11 +104,11 @@ pub fn applique_parts(
         border_stitches(area, &line, from, None)
     };
     let run = tack_of(s);
-    let tack = if yes(tack_inset(s)) {
+    let tack = if yes(Some(tack_inset(s))) {
         border_stitches(
             area,
             &with_offset(run.clone(), -tack_inset(s)),
-            end_of(&place, from),
+            runs::end_of(&place).unwrap_or(from),
             None,
         )
     } else {
@@ -125,7 +118,7 @@ pub fn applique_parts(
     let held = if !tack.is_empty() {
         tack
     } else {
-        border_stitches(area, &run, end_of(&place, from), None)
+        border_stitches(area, &run, runs::end_of(&place).unwrap_or(from), None)
     };
     if s.edge == AppliqueEdge::None {
         return [place, held, vec![]];
@@ -140,13 +133,13 @@ pub fn applique_parts(
     edge.width = s.width;
     // Where later appliqués lie on its edge their cover is its, but never on all of it.
     let part = match shared {
-        Some(sh) => border_stitches(sh, &edge, end_of(&held, from), Some(area)),
+        Some(sh) => border_stitches(sh, &edge, runs::end_of(&held).unwrap_or(from), Some(area)),
         None => vec![],
     };
     let cover = if !part.is_empty() {
         part
     } else {
-        border_stitches(area, &edge, end_of(&held, from), None)
+        border_stitches(area, &edge, runs::end_of(&held).unwrap_or(from), None)
     };
     [place, held, cover]
 }

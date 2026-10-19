@@ -3,7 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::geom::Pt;
+use crate::geom::{Pt, lerp};
 use crate::js::{dist, hypot};
 
 /// A node: its point and the handles of the curves before (`a`) and after (`b`) it. A handle on
@@ -50,29 +50,6 @@ pub fn compose(m: &Mat, n: &Mat) -> Mat {
         m[0] * n[4] + m[2] * n[5] + m[4],
         m[1] * n[4] + m[3] * n[5] + m[5],
     ]
-}
-
-pub fn transform_form(f: &Form, m: &Mat) -> Form {
-    Form {
-        nonzero: f.nonzero,
-        paths: f
-            .paths
-            .iter()
-            .map(|p| Path {
-                closed: p.closed,
-                nodes: p
-                    .nodes
-                    .iter()
-                    .map(|n| Node {
-                        p: apply(m, n.p),
-                        a: apply(m, n.a),
-                        b: apply(m, n.b),
-                        smooth: n.smooth,
-                    })
-                    .collect(),
-            })
-            .collect(),
-    }
 }
 
 pub type Cubic = [Pt; 4];
@@ -157,36 +134,6 @@ pub fn inside_poly(pts: &[Pt], [x, y]: Pt) -> bool {
         j = i;
     }
     inside
-}
-
-/// Area enclosed (mm², even-odd: a path inside an odd number of others is a hole).
-pub fn form_area(f: &Form) -> f64 {
-    let polys: Vec<Vec<Pt>> = f
-        .paths
-        .iter()
-        .filter(|p| p.closed)
-        .map(|p| flatten(p, 0.1))
-        .collect();
-    let mut sum = 0.0;
-    for (k, pts) in polys.iter().enumerate() {
-        let mut a = 0.0;
-        let mut j = pts.len().wrapping_sub(1);
-        for i in 0..pts.len() {
-            a += (pts[j][0] - pts[i][0]) * (pts[j][1] + pts[i][1]);
-            j = i;
-        }
-        let depth = polys
-            .iter()
-            .enumerate()
-            .filter(|&(m, q)| m != k && inside_poly(q, pts[0]))
-            .count();
-        sum += if depth % 2 == 1 { -1.0 } else { 1.0 } * (a / 2.0).abs();
-    }
-    sum.abs()
-}
-
-fn lerp(a: Pt, b: Pt, t: f64) -> Pt {
-    [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]
 }
 
 /// A new node on curve `seg` of path `path` at parameter `t`, the outline exactly as it was; its
@@ -289,7 +236,6 @@ mod tests {
             paths: vec![square(0.0, 0.0, 10.0), square(2.0, 2.0, 2.0)],
             nonzero: false,
         };
-        assert!((form_area(&f) - 96.0).abs() < 1e-9);
         assert_eq!(bounds(&f), Some([0.0, 0.0, 10.0, 10.0]));
     }
 
@@ -311,16 +257,5 @@ mod tests {
         );
         assert!((da[0] * db[1] - da[1] * db[0]).abs() < 1e-12);
         assert!(n.smooth);
-    }
-
-    #[test]
-    fn transform_moves_handles_too() {
-        let f = Form {
-            paths: vec![square(0.0, 0.0, 1.0)],
-            nonzero: true,
-        };
-        let g = transform_form(&f, &compose(&[1.0, 0.0, 0.0, 1.0, 5.0, 0.0], &IDENTITY));
-        assert_eq!(g.paths[0].nodes[1].b, [6.0, 0.0]);
-        assert!(g.nonzero);
     }
 }

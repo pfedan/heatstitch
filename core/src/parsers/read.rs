@@ -63,12 +63,6 @@ impl Builder {
     }
 }
 
-/// Math.round: halves go up.
-pub fn js_round(v: f64) -> f64 {
-    let f = v.floor();
-    if v - f >= 0.5 { f + 1.0 } else { f }
-}
-
 pub fn signed8(v: u8) -> i64 {
     v as i8 as i64
 }
@@ -247,13 +241,6 @@ mod tests {
         assert_eq!(base_name("a.b.dst"), "a.b");
         assert_eq!(base_name("a."), "a.");
         assert!(has_ext("X.DST", ".dst"));
-    }
-
-    #[test]
-    fn rounds_as_javascript() {
-        assert_eq!(js_round(2.5), 3.0);
-        assert_eq!(js_round(-2.5), -2.0);
-        assert_eq!(js_round(0.49999999999999994), 0.0);
     }
 
     #[test]

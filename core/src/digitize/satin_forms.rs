@@ -14,13 +14,12 @@
 
 use serde::Serialize;
 
-use super::rungs::{InsideTest, by, inside, norm, strips_of_outline, sub};
-use super::satin_shapes::{
-    Material, Shape, add, centroid, degrees, dot, grid, max_of, perp, plan_shape,
-};
+use super::rungs::{InsideTest, strips_of_outline};
+use super::satin_shapes::{Material, Shape, centroid, degrees, grid, plan_shape};
 use super::skeleton::{Branch, Graph, Node};
-use crate::geom::Pt;
-use crate::js::{dist, hypot};
+use crate::geom::{Pt, add_scaled, dot, norm, perp, sub};
+use crate::js::{by, dist, hypot, math_max};
+use crate::shape::path::inside_poly;
 
 /// A sharp bend of an outline: where, how sharp, sticking out or cutting in, and the way into the area.
 #[derive(Clone, Copy, Debug)]
@@ -104,7 +103,7 @@ fn bends(ring: &[Pt], material: &Material, hole: bool) -> Vec<Bend> {
         let convex = if cross.abs() > 0.03 {
             (cross > 0.0) == left
         } else {
-            material.test(add(p, toward, 0.15))
+            material.test(add_scaled(p, toward, 0.15))
         };
         let into = if convex {
             toward
@@ -156,10 +155,10 @@ fn through(material: &Material, a: Pt, b: Pt, clear: f64) -> bool {
     let n = perp(norm(sub(b, a)));
     let mut f = 0.1;
     while f < 0.95 {
-        let q = add(a, sub(b, a), f);
+        let q = add_scaled(a, sub(b, a), f);
         if !material.test(q)
-            || !material.test(add(q, n, clear))
-            || !material.test(add(q, n, -clear))
+            || !material.test(add_scaled(q, n, clear))
+            || !material.test(add_scaled(q, n, -clear))
         {
             return false;
         }
@@ -179,7 +178,7 @@ fn along(ring: &[Pt], s: f64) -> Pt {
     for i in 1..=n {
         let l = dist(ring[i - 1], ring[i % n]);
         if x <= l {
-            return add(
+            return add_scaled(
                 ring[i - 1],
                 sub(ring[i % n], ring[i - 1]),
                 if l != 0.0 { x / l } else { 0.0 },
@@ -265,7 +264,7 @@ pub fn corner_cuts(
             let p = along(pts, a.s + 0.15);
             let q = along(pts, b.s - 0.15);
             let d = norm(sub(q, p));
-            cuts.push([add(p, d, -0.3), add(q, d, 0.3)]);
+            cuts.push([add_scaled(p, d, -0.3), add_scaled(q, d, 0.3)]);
             used[ia] = true;
             used[ib] = true;
             tips_of.push(tips.iter().map(|x| x.p).collect());
@@ -310,10 +309,10 @@ pub fn corner_cuts(
         used[o] = true;
         used[n] = true;
         // From just beyond each corner, so the line crosses the outline there rather than grazing a vertex.
-        let a = add(all[o].p, norm(all[o].into), -0.15);
-        let b = add(all[n].p, norm(all[n].into), -0.15);
+        let a = add_scaled(all[o].p, norm(all[o].into), -0.15);
+        let b = add_scaled(all[n].p, norm(all[n].into), -0.15);
         let d = norm(sub(b, a));
-        cuts.push([add(a, d, -0.3), add(b, d, 0.3)]);
+        cuts.push([add_scaled(a, d, -0.3), add_scaled(b, d, 0.3)]);
         miters += 1;
     }
     // A sharp corner of a hole whose outer corner is round (a ring drawn with a brush): the miter
@@ -326,20 +325,20 @@ pub fn corner_cuts(
         }
         let d = norm(n.into);
         let mut t = 0.1;
-        while t < 1.5 * max && material.test(add(n.p, d, t)) {
+        while t < 1.5 * max && material.test(add_scaled(n.p, d, t)) {
             t += 0.05;
         }
         if t >= 1.5 * max || t < 0.4 {
             continue;
         }
-        let e = add(n.p, d, t);
-        if !through(material, n.p, add(n.p, d, t - 0.1), 0.12)
+        let e = add_scaled(n.p, d, t);
+        if !through(material, n.p, add_scaled(n.p, d, t - 0.1), 0.12)
             || !round_corner(&rings, material, e, t.max(1.0))
         {
             continue;
         }
         used[k] = true;
-        cuts.push([add(n.p, d, -0.45), add(e, d, 0.3)]);
+        cuts.push([add_scaled(n.p, d, -0.45), add_scaled(e, d, 0.3)]);
         miters += 1;
     }
     CornerCuts {
@@ -370,7 +369,7 @@ fn round_corner(rings: &[Vec<Pt>], material: &Material, q: Pt, arm: f64) -> bool
     let (a, b) = arms(&at, best.2 as i64, n, arm);
     let turn = degrees(sub(q, at(a)), sub(at(b), q));
     // Round the material: the chord between the arms' ends runs through it.
-    turn >= BEND_DEG && material.test(add(at(a), sub(at(b), at(a)), 0.5))
+    turn >= BEND_DEG && material.test(add_scaled(at(a), sub(at(b), at(a)), 0.5))
 }
 
 /// How a part the cut lines leave is planned: lines across it, or as a stroke along the centerline
@@ -402,7 +401,11 @@ pub fn plan_parts(
     let mut plans = vec![];
     let as_cuts: Vec<Vec<Pt>> = cuts.iter().map(|c| c.to_vec()).collect();
     for o in outsides {
-        let mine: Vec<Vec<Pt>> = holes.iter().filter(|h| inside(o, h[0])).cloned().collect();
+        let mine: Vec<Vec<Pt>> = holes
+            .iter()
+            .filter(|h| inside_poly(o, h[0]))
+            .cloned()
+            .collect();
         let made = strips_of_outline(o, &[], &as_cuts, &mine);
         if made.hole >= 0 {
             return None;
@@ -411,7 +414,10 @@ pub fn plan_parts(
             // A spike: the part with its corners beyond the only cut line it has, a spike's base.
             let on: Vec<usize> = (0..cuts.len())
                 .filter(|&k| {
-                    near_ring(part, add(cuts[k][0], sub(cuts[k][1], cuts[k][0]), 0.5)) < 0.05
+                    near_ring(
+                        part,
+                        add_scaled(cuts[k][0], sub(cuts[k][1], cuts[k][0]), 0.5),
+                    ) < 0.05
                 })
                 .collect();
             let base = (on.len() == 1
@@ -440,7 +446,7 @@ fn near_ring(ring: &[Pt], q: Pt) -> f64 {
         } else {
             0.0
         };
-        best = best.min(dist(add(a, v, t), q));
+        best = best.min(dist(add_scaled(a, v, t), q));
     }
     best
 }
@@ -448,11 +454,11 @@ fn near_ring(ring: &[Pt], q: Pt) -> f64 {
 /// A spike sewn from its base to its tip: lines along the base, a third and two thirds of the way
 /// up. Wider at its base than `max`: cut along its middle from the tip, each half sewn across.
 fn spike_lines(part: &[Pt], base: [Pt; 2], max: f64) -> Option<PartPlan> {
-    let m = add(base[0], sub(base[1], base[0]), 0.5);
+    let m = add_scaled(base[0], sub(base[1], base[0]), 0.5);
     let b = norm(sub(base[1], base[0]));
     // The tip: the middle of the farthest points (a flat end has many).
     let up = |q: Pt| dot(sub(q, m), perp(b)).abs();
-    let far = max_of(part.iter().map(|&q| up(q)));
+    let far = math_max(part.iter().map(|&q| up(q)));
     let top: Vec<Pt> = part
         .iter()
         .copied()
@@ -467,11 +473,11 @@ fn spike_lines(part: &[Pt], base: [Pt; 2], max: f64) -> Option<PartPlan> {
     let split = dist(base[0], base[1]) > max;
     let mut lines = vec![];
     for f in [0.3, 0.6] {
-        let o = add(m, n, h * f);
+        let o = add_scaled(m, n, h * f);
         let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
         let mut t = -20.0;
         while t <= 20.0 {
-            if mine.test(add(o, u, t)) {
+            if mine.test(add_scaled(o, u, t)) {
                 lo = lo.min(t);
                 hi = hi.max(t);
             }
@@ -487,9 +493,9 @@ fn spike_lines(part: &[Pt], base: [Pt; 2], max: f64) -> Option<PartPlan> {
             vec![(lo + hi) / 2.0]
         };
         for t in at {
-            let c = add(o, u, t);
+            let c = add_scaled(o, u, t);
             if mine.test(c) {
-                lines.push([add(c, u, -0.2), add(c, u, 0.2)]);
+                lines.push([add_scaled(c, u, -0.2), add_scaled(c, u, 0.2)]);
             }
         }
     }
@@ -498,7 +504,7 @@ fn spike_lines(part: &[Pt], base: [Pt; 2], max: f64) -> Option<PartPlan> {
     }
     Some(PartPlan::Lines {
         cuts: if split {
-            vec![[add(m, n, -0.3), add(tip, n, 0.3)]]
+            vec![[add_scaled(m, n, -0.3), add_scaled(tip, n, 0.3)]]
         } else {
             vec![]
         },
@@ -608,9 +614,9 @@ fn plan_part(part: &[Pt], g: &Graph, max: f64) -> Option<PartPlan> {
         };
         let mut lines = vec![];
         for j in 1..=k {
-            let p = add(c, u, ulo + (l * j as f64) / (k + 1) as f64);
+            let p = add_scaled(c, u, ulo + (l * j as f64) / (k + 1) as f64);
             if mine.test(p) {
-                lines.push([add(p, n, -0.3), add(p, n, 0.3)]);
+                lines.push([add_scaled(p, n, -0.3), add_scaled(p, n, 0.3)]);
             }
         }
         if !lines.is_empty() {
@@ -637,7 +643,7 @@ fn plan_part(part: &[Pt], g: &Graph, max: f64) -> Option<PartPlan> {
     }
     Some(PartPlan::Lines {
         cuts: vec![],
-        lines: vec![[add(c, n, -0.3), add(c, n, 0.3)]],
+        lines: vec![[add_scaled(c, n, -0.3), add_scaled(c, n, 0.3)]],
     })
 }
 
@@ -660,7 +666,7 @@ mod tests {
         for w in v.windows(2) {
             let n = (dist(w[0], w[1]) / 0.1).ceil() as usize;
             for k in 0..n {
-                out.push(add(w[0], sub(w[1], w[0]), k as f64 / n as f64));
+                out.push(add_scaled(w[0], sub(w[1], w[0]), k as f64 / n as f64));
             }
         }
         out.push(out[0]);
@@ -692,7 +698,7 @@ mod tests {
         for w in l.windows(2) {
             let n = (dist(w[0], w[1]) / 0.1).ceil() as usize;
             for k in 0..n {
-                ring.push(add(w[0], sub(w[1], w[0]), k as f64 / n as f64));
+                ring.push(add_scaled(w[0], sub(w[1], w[0]), k as f64 / n as f64));
             }
         }
         ring.push(ring[0]);

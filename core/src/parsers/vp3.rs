@@ -3,9 +3,10 @@
 //! a trim it is the first stitch at the new place. Thread colors are real RGB with brand and
 //! catalog number.
 
+use crate::js::round;
 use crate::pattern::{COLOR_CHANGE, JUMP, STITCH, TRIM, ThreadColor};
 
-use super::read::{Builder, Parsed, js_round, js_trim};
+use super::read::{Builder, Parsed, js_trim};
 
 /// "%vsm%\0"
 pub fn is_vp3(data: &[u8]) -> bool {
@@ -95,8 +96,8 @@ pub fn parse_vp3(data: &[u8], file_name: &str) -> Result<Parsed, String> {
             return Err("VP3: color block out of range".into());
         }
         let block_end = block_end as usize;
-        let sx = js_round(r.i32()? as f64 / 100.0 + center_x) as i64;
-        let sy = js_round(-(r.i32()? as f64) / 100.0 + center_y) as i64;
+        let sx = round(r.i32()? as f64 / 100.0 + center_x) as i64;
+        let sy = round(-(r.i32()? as f64) / 100.0 + center_y) as i64;
         if k > 0 {
             b.mark(COLOR_CHANGE);
         }

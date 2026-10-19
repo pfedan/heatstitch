@@ -52,7 +52,7 @@ core/src/<area>/*.rs   Pure Rust, one module per TypeScript module it replaced, 
                        image, shape, digitize, model, density, validation, correct, lettering,
                        parsers, writers, material
 core/src/bind/*.rs     The WebAssembly exports (wasm-bindgen), one file per area, thin
-core/src/js.rs         Arithmetic as JavaScript does it (Math.hypot, Math.round)
+core/src/js.rs         Arithmetic as JavaScript does it (Math.hypot, Math.round, ToInt32, mulberry32)
 core/src/trig.rs       sin, cos and pow bit for bit as V8 has them, on every platform
 src/wasm/core.ts       Loads the module: loadCore() in the app and each worker, on its own in Node
 src/wasm/pkg/          Built by `npm run wasm` (wasm-pack), ignored by version control
@@ -77,6 +77,9 @@ src/wasm/pkg/          Built by `npm run wasm` (wasm-pack), ignored by version c
   `shape/nodeOps.ts` and the node helpers of `shape/path.ts`), loading and placing fonts, storage,
   and small helpers the interface calls per point (`sample` in `digitize/region.ts`, the color
   conversions in `image/color.ts`, the cross stitch grid in `digitize/deco.ts`).
+- **Shared pieces of the crate**: `geom` (points, vector and polyline helpers), `pattern` (records
+  and colors), `shape::path` (forms, curves, flattening, `inside_poly`), `image::color` (Lab,
+  CIEDE2000), `js` and `trig`. Use and extend them instead of writing a helper again.
 - **Where to put new computing.** In the crate, with unit tests (`cargo test`); export it from
   `bind/` only when TypeScript needs it, as a coarse call, and keep the TypeScript side a wrapper.
   The crate builds for speed (`opt-level = 3`), with `strip` and `panic = "abort"` for size.

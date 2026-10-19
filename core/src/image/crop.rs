@@ -3,29 +3,12 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::color::js_round;
-use super::prepare::Stroke;
-
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Crop {
     pub x: f64,
     pub y: f64,
     pub w: f64,
     pub h: f64,
-}
-
-/// Where a drag on the frame grabbed it: an edge, a corner or the inside (move).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum CropHandle {
-    N,
-    S,
-    E,
-    W,
-    Nw,
-    Ne,
-    Sw,
-    Se,
-    Move,
 }
 
 /// Smallest side of a cut, as a share of the picture.
@@ -68,94 +51,6 @@ pub fn read_crop(c: Crop) -> Option<Crop> {
         h: clamp(c.h, MIN_CROP, 1.0 - y),
     };
     if is_full(Some(out)) { None } else { Some(out) }
-}
-
-/// The cut after dragging `handle` by (dx, dy), shares of the picture. Edges stop at the picture
-/// and at the smallest size; the inside moves the whole cut, which stays inside the picture.
-pub fn drag_crop(c: Crop, handle: CropHandle, dx: f64, dy: f64) -> Crop {
-    use CropHandle::*;
-    if handle == Move {
-        return Crop {
-            x: clamp(c.x + dx, 0.0, 1.0 - c.w),
-            y: clamp(c.y + dy, 0.0, 1.0 - c.h),
-            ..c
-        };
-    }
-    let (mut x0, mut y0, mut x1, mut y1) = (c.x, c.y, c.x + c.w, c.y + c.h);
-    if matches!(handle, W | Nw | Sw) {
-        x0 = clamp(x0 + dx, 0.0, x1 - MIN_CROP);
-    }
-    if matches!(handle, E | Ne | Se) {
-        x1 = clamp(x1 + dx, x0 + MIN_CROP, 1.0);
-    }
-    if matches!(handle, N | Nw | Ne) {
-        y0 = clamp(y0 + dy, 0.0, y1 - MIN_CROP);
-    }
-    if matches!(handle, S | Sw | Se) {
-        y1 = clamp(y1 + dy, y0 + MIN_CROP, 1.0);
-    }
-    Crop {
-        x: x0,
-        y: y0,
-        w: x1 - x0,
-        h: y1 - y0,
-    }
-}
-
-/// The handle at (px, py), shares of the picture; `tx`, `ty` is how near counts (also as shares).
-/// Corners before edges, the inside moves only a real cut (on the whole picture a drag pans).
-pub fn crop_handle_at(c: Crop, px: f64, py: f64, tx: f64, ty: f64) -> Option<CropHandle> {
-    use CropHandle::*;
-    let x1 = c.x + c.w;
-    let y1 = c.y + c.h;
-    let in_x = px > c.x - tx && px < x1 + tx;
-    let in_y = py > c.y - ty && py < y1 + ty;
-    if !in_x || !in_y {
-        return None;
-    }
-    let n = (py - c.y).abs() < ty;
-    let s = !n && (py - y1).abs() < ty;
-    let w = (px - c.x).abs() < tx;
-    let e = !w && (px - x1).abs() < tx;
-    match (n, s, w, e) {
-        (true, _, true, _) => Some(Nw),
-        (true, _, _, true) => Some(Ne),
-        (_, true, true, _) => Some(Sw),
-        (_, true, _, true) => Some(Se),
-        (true, ..) => Some(N),
-        (_, true, ..) => Some(S),
-        (_, _, true, _) => Some(W),
-        (.., true) => Some(E),
-        _ if is_full(Some(c)) => None,
-        _ => Some(Move),
-    }
-}
-
-/// The cut in whole pixels (x, y, w, h) of a picture of `ww` × `hh`, at least one pixel.
-pub fn crop_pixels(c: Option<Crop>, ww: usize, hh: usize) -> [usize; 4] {
-    let k = crop_of(c);
-    let (wf, hf) = (ww as f64, hh as f64);
-    let x = clamp(js_round(k.x * wf), 0.0, wf - 1.0);
-    let y = clamp(js_round(k.y * hf), 0.0, hf - 1.0);
-    let w = clamp(js_round((k.x + k.w) * wf) - x, 1.0, wf - x);
-    let h = clamp(js_round((k.y + k.h) * hf) - y, 1.0, hf - y);
-    [x as usize, y as usize, w as usize, h as usize]
-}
-
-/// A brush stroke painted on the cut `from`, moved onto the cut `to`: it stays on the same spot of
-/// the picture. Strokes keep their points as shares of the cut and the radius as a share of its width.
-pub fn move_stroke(s: &Stroke, from: Option<Crop>, to: Option<Crop>) -> Stroke {
-    let a = crop_of(from);
-    let b = crop_of(to);
-    Stroke {
-        points: s
-            .points
-            .iter()
-            .map(|&[x, y]| [(a.x + x * a.w - b.x) / b.w, (a.y + y * a.h - b.y) / b.h])
-            .collect(),
-        radius: (s.radius * a.w) / b.w,
-        color: s.color,
-    }
 }
 
 /// The part of the picture that differs from its background, as a cut with a small margin; none when
@@ -260,47 +155,6 @@ mod tests {
         })
         .unwrap();
         assert_eq!((c.x, c.y, c.w, c.h), (0.5, 0.2, 0.5, MIN_CROP));
-    }
-
-    #[test]
-    fn drags_and_finds_handles() {
-        let c = Crop {
-            x: 0.2,
-            y: 0.2,
-            w: 0.5,
-            h: 0.5,
-        };
-        let d = drag_crop(c, CropHandle::Se, 0.1, 0.1);
-        assert!((d.w - 0.6).abs() < 1e-12 && (d.h - 0.6).abs() < 1e-12);
-        assert_eq!(drag_crop(c, CropHandle::Move, 1.0, 0.0).x, 0.5);
-        assert_eq!(
-            crop_handle_at(c, 0.2, 0.2, 0.01, 0.01),
-            Some(CropHandle::Nw)
-        );
-        assert_eq!(crop_handle_at(c, 0.4, 0.7, 0.01, 0.01), Some(CropHandle::S));
-        assert_eq!(
-            crop_handle_at(c, 0.4, 0.4, 0.01, 0.01),
-            Some(CropHandle::Move)
-        );
-        assert_eq!(crop_handle_at(FULL, 0.4, 0.4, 0.01, 0.01), None);
-    }
-
-    #[test]
-    fn pixels_of_a_cut() {
-        assert_eq!(
-            crop_pixels(
-                Some(Crop {
-                    x: 0.25,
-                    y: 0.5,
-                    w: 0.5,
-                    h: 0.5
-                }),
-                100,
-                10
-            ),
-            [25, 5, 50, 5]
-        );
-        assert_eq!(crop_pixels(None, 7, 3), [0, 0, 7, 3]);
     }
 
     #[test]
