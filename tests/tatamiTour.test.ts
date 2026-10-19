@@ -70,6 +70,17 @@ describe('tatami in one go', () => {
     expect(short).toEqual([]);
   });
 
+  it('lets rows this close share the hole where they turn', () => {
+    // Rows 0.2 mm apart (0.4 mm counted across two rows): a turn as short as that clustered short
+    // stitches at the edge. The row ends share their hole and the turn is slanted instead.
+    const r = area('M0 0 L20 0 L20 10 L0 10 Z');
+    const res = fillRuns(r, { ...BASE, spacing: 0.2, underlay: false, edge: 0 }, { start: [0, 0] })!;
+    const run = res.runs.flat();
+    const travel = new Set((res.travel ?? []).flatMap(([a, b]) => Array.from({ length: b - a }, (_, i) => a + i + 1)));
+    const short = lengths(run).filter((l, i) => !travel.has(i + 1) && l < SHORTEST - 0.01);
+    expect(short.length).toBeLessThan(3);
+  });
+
   it('merges a short stitch into the next, keeping both ends', () => {
     const pts: Pt[] = [[0, 0], [4, 0], [4.2, 0], [8, 0], [8, 0.3]];
     expect(merged(pts, SHORTEST)).toEqual([[0, 0], [4, 0], [8, 0.3]]);
