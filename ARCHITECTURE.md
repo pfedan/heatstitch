@@ -147,9 +147,11 @@ points), `addShape.ts`, `appendDesign.ts`.
 ## Shapes and digitizing
 
 - **`src/shape/`**: vector forms. Paths of nodes with cubic curves (`path.ts`), SVG path data
-  (`svgPath.ts`), boolean operations and offsets (`ops.ts`, using paper.js and Clipper2, both
-  loaded on first use with `loadOps()`), rasterizing, vectorizing and simplifying, and a
-  constrained Delaunay triangulation with exact predicates (`cdt.ts`).
+  (`svgPath.ts`), boolean operations and offsets (`ops.ts`), rasterizing, vectorizing and
+  simplifying, and a constrained Delaunay triangulation with exact predicates (`cdt.ts`). The
+  computing is done by the Rust core (`core/src/shape/`: booleans on the curves with `linesweeper`,
+  offsets with `clipper2-rust`); joining paths and editing nodes (`join.ts`, `nodeOps.ts`, the
+  node helpers of `path.ts`) stay TypeScript.
 - **`src/digitize/`**: stitch generation. Fill variants (`fill.ts`, `flow.ts`, `spiral.ts`,
   `rings.ts`, `deco.ts`, `echo.ts`), satin (`satin*.ts`, `rungs.ts`, `skeleton.ts`; a wide area
   as arms and hubs along its medial axis on the outline in `medial.ts` and `satinInner.ts`), running

@@ -1,2 +1,9 @@
+pub mod band;
 pub mod cdt;
+pub mod ops;
+pub mod parts;
 pub mod path;
+pub mod rasterize;
+pub mod simplify;
+pub mod svg_path;
+pub mod vectorize;

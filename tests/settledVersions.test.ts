@@ -1,10 +1,7 @@
-import { beforeAll, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { keepVersion, relearn, remember, remembered, rememberedIn } from '../src/model/restitch';
 import { hold, rememberObjects, sewObjects } from '../src/model/objects';
-import { loadOps } from '../src/shape/ops';
 import { borderedSquare } from './helpers/torture';
-
-beforeAll(loadOps);
 
 /**
  * A version the app holds (current, undo, redo: kept with keepVersion) is settled: what its objects

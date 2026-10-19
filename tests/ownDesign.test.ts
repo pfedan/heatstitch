@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { digitizeDefaults, digitizeShapes, type ShapeInput } from '../src/digitize/digitize';
 import { digitizedFile } from '../src/model/digitized';
 import { sewObjects } from '../src/model/objects';
@@ -10,7 +10,6 @@ import { writePattern } from '../src/writers';
 import { decodeProject, encodeProject, projectSettings, PROJECT_VERSION } from '../src/storage/project';
 import { DEFAULTS } from '../src/settings';
 import { parsePath } from '../src/shape/svgPath';
-import { loadOps } from '../src/shape/ops';
 import type { Mat } from '../src/shape/path';
 import { DEFAULT_PROFILE } from '../src/validation/profiles';
 
@@ -32,8 +31,6 @@ function design() {
   ];
   return digitizeShapes(shapes, threads, options, { w: 60, h: 45 }, false);
 }
-
-beforeAll(loadOps);
 
 describe('designs made in the app', () => {
   it('keep their thread colors exactly, with brand and catalog number', () => {

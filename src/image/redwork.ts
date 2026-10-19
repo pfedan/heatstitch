@@ -9,7 +9,7 @@ import type { SvgShape } from './svg';
  * The shapes of an SVG for the Bild assistant's Redwork style: sewn from the file's own curves (not
  * from the regions drawn of it), with what the assistant did to the picture before. The part cut
  * out (`box`, mm of the whole file at the size sewn) is kept, in mm from its top left: lines are cut
- * at its edge, areas cut to it (needs loadOps for that). Each color takes the thread its regions
+ * at its edge, areas cut to it. Each color takes the thread its regions
  * got (`prepared.ofSource`, after thread matching, merging and changes of thread); a color not
  * sewn, or left with no region in the cut, is left out. `background` is the shape kept aside as
  * the background (see backgroundOf), or -1.

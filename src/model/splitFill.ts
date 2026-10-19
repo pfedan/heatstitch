@@ -96,8 +96,8 @@ export function canSplit(p: Pattern, o: number): boolean {
 
 /**
  * Fill `o` split along `cuts` (world mm) into objects of their own, sewn one after the other where
- * it was. 'whole' when the cuts do not cut it apart, null when it is no fill or sewing failed. Needs
- * loadOps (the cut runs on the curves).
+ * it was. 'whole' when the cuts do not cut it apart, null when it is no fill or sewing failed. The
+ * cut runs on the curves.
  */
 export function splitFill(p: Pattern, o: number, cuts: Pt[][], trimMm: number): Split | 'whole' | null {
   if (!canSplit(p, o)) return null;

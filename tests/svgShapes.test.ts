@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { digitizeDefaults, digitizeShapes, SATIN_MAX, wideLinesAsAreas, type ShapeInput } from '../src/digitize/digitize';
 import { LINE_WIDTHS, lineClassOf } from '../src/model/line';
-import { loadOps, strokeForm, type StrokeCap, type StrokeJoin } from '../src/shape/ops';
+import { strokeForm, type StrokeCap, type StrokeJoin } from '../src/shape/ops';
 import { formFrom, storeForm, type Mat } from '../src/shape/path';
 import { knockOut, rasterize, rasterizeStroke } from '../src/shape/rasterize';
 import { ellipsePath, parsePath, pointsPath, rectPath } from '../src/shape/svgPath';
@@ -199,7 +199,6 @@ describe('lines sewn by their width', () => {
   });
 
   it('a wide line becomes an area in the shape it paints, ends and corners as in SVG', async () => {
-    await loadOps();
     const corner = parsePath('M5 25 L20 5 L35 25', ID);
     const area = (cap: StrokeCap, join: StrokeJoin) => rasterize(strokeForm(corner, 8, cap, join)!)!.areaMm2;
     // Round ends add a half disc each, square ones a half square, flat ones nothing.
@@ -218,7 +217,6 @@ describe('lines sewn by their width', () => {
   });
 
   it('keeps a wide stroke of a filled shape apart from its fill, not as its border', async () => {
-    await loadOps();
     const d = 'M5 5 H35 V25 H5 Z';
     const shapes = wideLinesAsAreas([
       { color: 0, kind: 'fill', form: parsePath(d, ID), element: 0 },

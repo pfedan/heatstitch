@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { digitizeDefaults, digitizeShapes, type ShapeInput } from '../src/digitize/digitize';
 import { syncBorders } from '../src/model/border';
 import { digitizedFile } from '../src/model/digitized';
@@ -12,7 +12,6 @@ import { writePattern } from '../src/writers';
 import { fromStored, toStored } from '../src/storage/fileStore';
 import { parsePath } from '../src/shape/svgPath';
 import { flatten, type Mat } from '../src/shape/path';
-import { loadOps } from '../src/shape/ops';
 import { DEFAULT_PROFILE } from '../src/validation/profiles';
 
 const ID: Mat = [1, 0, 0, 1, 0, 0];
@@ -153,7 +152,6 @@ describe('a frayed satin border', () => {
 });
 
 describe('the echo of a border set off the edge', () => {
-  beforeAll(loadOps);
 
   it('lies on the offset curve of the form, its pull compensation and the border offset in', () => {
     const q = withBorder(bordered(), (b) => ({ ...b, offset: 1, echo: { side: 'out', count: 1, gap: 2, colors: [threads[1]], link: 'e9' } }));

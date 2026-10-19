@@ -18,15 +18,13 @@
     "wasm": "wasm-pack build core --target web --out-dir ../src/wasm/pkg --no-pack --release"
   },
   "devDependencies": {
+    "clipper2-ts": "^2.0.1-18",
     "highs": "^1.15.3",
+    "paper": "^0.12.18",
     "playwright": "1.56.1",
     "typescript": "^7.0.2",
     "vite": "^8.3.2",
     "vite-plugin-pwa": "^2.0.0",
     "vitest": "^5.0.3"
-  },
-  "dependencies": {
-    "clipper2-ts": "^2.0.1-18",
-    "paper": "^0.12.18"
   }
 }

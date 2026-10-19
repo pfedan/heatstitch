@@ -185,6 +185,51 @@ pub fn form_area(f: &Form) -> f64 {
     sum.abs()
 }
 
+fn lerp(a: Pt, b: Pt, t: f64) -> Pt {
+    [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]
+}
+
+/// A new node on curve `seg` of path `path` at parameter `t`, the outline exactly as it was; its
+/// index.
+pub fn insert_node(f: &mut Form, path: usize, seg: usize, t: f64) -> usize {
+    let p = &mut f.paths[path];
+    let c = segment(p, seg);
+    let n = p.nodes.len();
+    if straight(&c) {
+        let m = lerp(c[0], c[3], t);
+        p.nodes.insert(
+            seg + 1,
+            Node {
+                p: m,
+                a: m,
+                b: m,
+                smooth: false,
+            },
+        );
+        return seg + 1;
+    }
+    // de Casteljau: the curve split in two at t.
+    let (a, b, cc) = (
+        lerp(c[0], c[1], t),
+        lerp(c[1], c[2], t),
+        lerp(c[2], c[3], t),
+    );
+    let (ab, bc) = (lerp(a, b, t), lerp(b, cc, t));
+    let m = lerp(ab, bc, t);
+    p.nodes[seg].b = a;
+    p.nodes[(seg + 1) % n].a = cc;
+    p.nodes.insert(
+        seg + 1,
+        Node {
+            p: m,
+            a: ab,
+            b: bc,
+            smooth: true,
+        },
+    );
+    seg + 1
+}
+
 /// Node `i` of path `path` made smooth (handles along the line through its neighbours, a third of
 /// the way to each) or a corner (handles on the node).
 pub fn set_smooth(f: &Form, path: usize, i: usize, smooth: bool) -> Form {
