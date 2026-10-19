@@ -9,6 +9,7 @@ import { remember, rememberShapes } from './restitch';
 import { lineStitchFor, lineStitches } from './line';
 import type { PathStitch } from './along';
 import { runRecords } from './border';
+import { settleTravel } from './travel';
 
 /**
  * New shapes sewn into a design: an area becomes a fill (or satin, when it is a stroke), a line is
@@ -45,7 +46,7 @@ export function addShape(p: Pattern, shape: NewShape, color: ThreadColor, after:
   const r = insertObject(p, body(d.pattern), d.pattern.colors[0], after, options.trimMm);
   if (!r) return null;
   rememberShapes(r.pattern, sewObjects(r.pattern), [r.start], [d.objects[0].shape], [d.objects[0]]);
-  return r;
+  return settled(r, options.trimMm);
 }
 
 /** A line sewn along its curves (see line.ts); it remembers them, so it can be edited as a line. */
@@ -56,7 +57,20 @@ export function addLine(p: Pattern, form: Form, st: PathStitch, color: ThreadCol
   if (!r) return null;
   const obj = sewObjects(r.pattern).find((o) => stitchesBefore(r.pattern, o.first) === r.start);
   if (obj) remember(r.pattern, obj, { region: null, geo: form, line: { ...st } });
-  return r;
+  return settled(r, options.trimMm);
+}
+
+/**
+ * `r` with the ways between objects of one thread hidden where they now can be: a new fill can hide
+ * the way between objects sewn before it (see travel.ts). The new object's first stitch moves with
+ * the stitches of the ways before it.
+ */
+function settled(r: Added, trimMm: number): Added {
+  const pattern = settleTravel(r.pattern, trimMm);
+  if (pattern === r.pattern) return r;
+  const id = sewObjects(r.pattern).find((o) => stitchesBefore(r.pattern, o.first) === r.start)?.id;
+  const o = sewObjects(pattern).find((x) => x.id === id);
+  return { pattern, start: o ? stitchesBefore(pattern, o.first) : r.start };
 }
 
 const same = (a: ThreadColor, b: ThreadColor) => a.r === b.r && a.g === b.g && a.b === b.b;

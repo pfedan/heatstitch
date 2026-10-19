@@ -66,7 +66,7 @@ describe('designs made in the app', () => {
     const { data, pattern } = digitizedFile(design(), 'leaf', options.trimMm);
     const bytes = await encodeProject({ files: [{ name: 'leaf.pes', data, acks: [], objects: rememberedIn(pattern), own: true }], active: 0, image: null, settings: projectSettings(DEFAULTS) });
     const back = (await decodeProject(bytes)).files[0];
-    expect(PROJECT_VERSION).toBe(4);
+    expect(PROJECT_VERSION).toBe(5);
     const q = parsePattern(back.data, back.name);
     expect(q.colors).toEqual(pattern.colors);
     expect(Array.from(q.cmd)).toEqual(Array.from(pattern.cmd));

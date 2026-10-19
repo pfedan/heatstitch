@@ -2226,6 +2226,13 @@ button.tool:disabled {
   border-left-color: #6fd3ff;
 }
 
+/* A hidden way under what is sewn later, in the color it is drawn with on the stage. */
+.jump.hidden,
+.jump.hidden:hover,
+.jump.hidden.selected {
+  border-left-color: #c792ff;
+}
+
 .j-top {
   display: flex;
   align-items: baseline;
