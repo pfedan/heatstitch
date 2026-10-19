@@ -60,10 +60,10 @@ describe('digitize', () => {
       expect(y).toBeGreaterThan(8 - 0.6);
       expect(y).toBeLessThan(32 + 0.6);
     }
-    // 30 x 24 mm at 0.4 mm rows and 4 mm stitches: about 1 stitch per 1.6 mm² plus underlay.
+    // 30 x 24 mm at 0.2 mm rows and 4 mm stitches: about 1 stitch per 0.8 mm² plus underlay.
     const n = stitches(pattern, 40).length;
-    expect(n).toBeGreaterThan(400);
-    expect(n).toBeLessThan(1000);
+    expect(n).toBeGreaterThan(800);
+    expect(n).toBeLessThan(2000);
     expect(noCritical(pattern)).toEqual([]);
     roundTrips(pattern);
   });

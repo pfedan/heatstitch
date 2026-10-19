@@ -18,7 +18,8 @@ const terry: Profile = { fabric: 'terry', thread: '40' };
 describe('test swatch', () => {
   it('centres the spacing on the fabric default and steps the pull from none', () => {
     const g = swatchGrid({ fabric: 'woven', thread: '40' }, 'fill');
-    expect(g.spacings[2]).toBe(0.36);
+    // Rows 0.2 mm apart: woven's 0.4 counted across two rows.
+    expect(g.spacings[2]).toBe(0.2);
     expect(g.spacings[0]).toBeLessThan(g.spacings[1]);
     expect(g.pulls).toEqual([0, 0.1, 0.2, 0.3]);
     expect(swatchGrid(terry, 'fill').pulls).toEqual([0, 0.2, 0.4, 0.6]);

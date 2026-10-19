@@ -5,7 +5,7 @@ import { STITCH, type Pattern } from '../../model/pattern';
 import { analyze, isGradient, isOpenPattern, remembered, restitch, SATIN_SPLIT, shapeTrust, type Fixed, type Settings } from '../../model/restitch';
 import { stitchKinds } from '../../model/sequence';
 import { currentSettings } from '../plan';
-import { fabricOf, recommendedSpacing, type Profile } from '../../validation/profiles';
+import { fabricOf, recommendedSatin, recommendedSpacing, type Profile } from '../../validation/profiles';
 import type { FixKind } from './cells';
 import { areaOf } from '../../model/geo';
 
@@ -138,8 +138,9 @@ export function toolsFor(p: Pattern, objs: SewObject[], o: SewObject, s: Setting
   const longMm = fabricOf(profile).longMm;
   const known = remembered(p, o);
   const dense = want.has('density') || want.has('holes');
-  const steps = (from: number, kinds: FixKind[]) => {
-    const list = [round2(from * 1.05), round2(from * 1.1), round2(recMax)].filter((v, i, a) => v > from + 0.005 && v <= recMax + 0.005 && a.indexOf(v) === i);
+  const [, satinMax] = recommendedSatin(profile);
+  const steps = (from: number, kinds: FixKind[], max = recMax) => {
+    const list = [round2(from * 1.05), round2(from * 1.1), round2(max)].filter((v, i, a) => v > from + 0.005 && v <= max + 0.005 && a.indexOf(v) === i);
     for (const to of list) out.push({ id: `spacing:${to}`, changes: [fix('spacing', from, to)], strength: Math.min(1.5, (to / from - 1) / SPACING_FULL), kinds });
   };
   if (s.kind === 'fill') {
@@ -171,9 +172,9 @@ export function toolsFor(p: Pattern, objs: SewObject[], o: SewObject, s: Setting
       if (t.underlay && w > 0 && w < NARROW_SATIN) out.push({ id: 'underlayOff', changes: [fix('underlay', true, false)], strength: 0, kinds: ['density', 'holes'] });
       else if (t.underlay && w < MEDIUM_SATIN && (t.under ?? 'auto') !== 'center') out.push({ id: 'underCenter', changes: [fix('under', t.under ?? 'auto', 'center')], strength: 0, kinds: ['density', 'holes'] });
       if (!t.byWidth && t.type !== 'e') out.push({ id: 'byWidth', changes: [fix('byWidth', false, true)], strength: 0.4, kinds: ['density', 'holes'] });
-      steps(t.spacing, ['density', 'holes']);
+      steps(t.spacing, ['density', 'holes'], satinMax);
     }
-    if (want.has('sparse') && t.spacing > recMax + 0.005) out.push({ id: `spacing:${round2(recMax)}`, changes: [fix('spacing', t.spacing, round2(recMax))], strength: Math.min(1.5, (1 - recMax / t.spacing) / SPACING_FULL), kinds: ['sparse'] });
+    if (want.has('sparse') && t.spacing > satinMax + 0.005) out.push({ id: `spacing:${round2(satinMax)}`, changes: [fix('spacing', t.spacing, round2(satinMax))], strength: Math.min(1.5, (1 - satinMax / t.spacing) / SPACING_FULL), kinds: ['sparse'] });
     if (want.has('gap') && t.edge < MAX_SATIN_EDGE - 0.01) {
       for (const d of [0.1, 0.2]) {
         const to = round2(Math.min(MAX_SATIN_EDGE, t.edge + d));

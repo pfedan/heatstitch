@@ -275,7 +275,7 @@
         </figure>
         <dl>
           <dt>Abstand, Winkel, Stichlänge, Kanten</dt>
-          <dd>Unter <i>Gestaltung</i>: <i>Abstand</i> benachbarter Reihen (kleiner ist dichter; die Karte rechnet ihn in Garn pro mm² um), <i>Winkel</i> der Reihen (0 bis 179° in Grad-Schritten, am Rad oder Regler; oder direkt auf der Bühne: Der Knopf neben dem Regler oder <kbd>W</kbd>, dann eine Linie über die Fläche ziehen: Sie zeigt, in welche Richtung die Reihen nacheinander gestickt werden, die Reihen laufen also quer zu ihr, schon beim Ziehen, Loslassen übernimmt, <kbd>Umschalt</kbd> rastet auf 15°, <kbd>Esc</kbd> bricht ab; so auch bei Kreuzschraffur und den offenen Mustern), <i>Stichlänge</i> entlang einer Reihe. <i>Kanten</i> unter <i>Stoff und Halt</i> lässt die Reihen an beiden Enden weiter (+) oder weniger weit (−) reichen: Zugausgleich, weil der Faden den Stoff zusammenzieht. <i>Auto</i> setzt ihn aus Stoff und Größe der Füllung, ein eigener Wert schaltet das ab.</dd>
+          <dd>Unter <i>Gestaltung</i>: <i>Abstand</i> über zwei Reihen, hin und zurück, wie in gängiger Sticksoftware: 0,4 mm heißt Reihen 0,2 mm auseinander (kleiner ist dichter; die Karte rechnet ihn in Garn pro mm² um), <i>Winkel</i> der Reihen (0 bis 179° in Grad-Schritten, am Rad oder Regler; oder direkt auf der Bühne: Der Knopf neben dem Regler oder <kbd>W</kbd>, dann eine Linie über die Fläche ziehen: Sie zeigt, in welche Richtung die Reihen nacheinander gestickt werden, die Reihen laufen also quer zu ihr, schon beim Ziehen, Loslassen übernimmt, <kbd>Umschalt</kbd> rastet auf 15°, <kbd>Esc</kbd> bricht ab; so auch bei Kreuzschraffur und den offenen Mustern), <i>Stichlänge</i> entlang einer Reihe. <i>Kanten</i> unter <i>Stoff und Halt</i> lässt die Reihen an beiden Enden weiter (+) oder weniger weit (−) reichen: Zugausgleich, weil der Faden den Stoff zusammenzieht. <i>Auto</i> setzt ihn aus Stoff und Größe der Füllung, ein eigener Wert schaltet das ab.</dd>
           <dt>In einem Zug</dt>
           <dd>Tatami und Verlauf werden ohne Fadenschnitt gestickt, auch um Löcher, Arme und Spitzen herum. heatstitch plant die Abschnitte als eine Tour: Die Nadel läuft verdeckt unter Reihen, die noch kommen, bis ans Ende eines Zweigs und stickt von dort zurück, so dass kein Weg auf schon gestickten Reihen liegt. Stiche kürzer als 0,4 mm, etwa an der Wende dichter Reihen oder in einer schmalen Spitze, gehen im nächsten Stich auf; sie würden nur ein Loch neben das letzte setzen. Das geschieht von selbst, ohne Einstellung.</dd>
           <dt>Reihenenden</dt>
@@ -689,7 +689,7 @@
         <table>
           <thead><tr><th>Prüfung</th><th>Erkennt</th><th>Vorsicht / Kritisch (Webware, 40 wt)</th></tr></thead>
           <tbody>
-            <tr><td>Garndichte</td><td>Zu viele übereinanderliegende Lagen, die Hauptprüfung</td><td>7 / 12 mm/mm² bei Füllstich, bis 15 / 17,5 bei reinem Satin</td></tr>
+            <tr><td>Garndichte</td><td>Zu viele übereinanderliegende Lagen, die Hauptprüfung</td><td>14 / 24 mm/mm² bei Füllstich, 15 / 17,5 bei reinem Satin</td></tr>
             <tr><td>Kurzstich-Häufung</td><td>Garnknäuel, Knoten</td><td>8 Stiche unter 1 mm in einer Zelle: Vorsicht auf Webware und Kappen, Kritisch auf anderen Stoffen</td></tr>
             <tr><td>Perforation (nur Leder)</td><td>Löcher so dicht, dass sie das Material schwächen</td><td>6 / 9 Löcher im Umkreis von 1 mm</td></tr>
             <tr><td>Deckung und Lücken</td><td>Stoff scheint durch eine zu lockere Lage; zwischen zwei Objekten öffnet sich eine Lücke, wenn der Faden den Stoff zusammenzieht</td><td>nur Vorsicht</td></tr>
@@ -725,7 +725,7 @@
         <h3 id="de-density">Heatmap</h3>
         <dl>
           <dt>Garnlänge (mm/mm²)</dt>
-          <dd>Jeder Stich wird exakt auf die Rasterzellen verteilt, die er durchläuft. Zu viel davon macht Stickereien steif, wellig oder brettartig. Eine Füllstichlage mit 0,4 mm Abstand hat 2,5 mm/mm².</dd>
+          <dd>Jeder Stich wird exakt auf die Rasterzellen verteilt, die er durchläuft. Zu viel davon macht Stickereien steif, wellig oder brettartig. Eine Füllstichlage mit 0,4 mm Abstand (Reihen 0,2 mm auseinander) hat 5 mm/mm².</dd>
           <dt>Einstiche (1/mm²)</dt>
           <dd>Nadellöcher pro Fläche. Wichtig bei Leder, Kunstleder und empfindlichen Stoffen.</dd>
           <dt>Rasterzelle, Glättung, Skala-Maximum</dt>
@@ -1304,7 +1304,7 @@
         </figure>
         <dl>
           <dt>Spacing, angle, stitch length, edges</dt>
-          <dd>Under <i>Styling</i>: <i>Spacing</i> between neighboring rows (smaller is denser; the card converts it to thread per mm²), <i>Angle</i> of the rows (0 to 179° in steps of one degree, at the dial or slider; or right on the stage: the button beside the slider or <kbd>W</kbd>, then drag a line over the area: it shows the way the rows are sewn one after the other, so the rows run across it, already while you drag, letting go takes it over, <kbd>Shift</kbd> snaps to 15°, <kbd>Esc</kbd> cancels; the same for crosshatch and the open patterns), <i>Stitch length</i> along a row. <i>Edges</i> under <i>Fabric and hold</i> lets the rows reach further (+) or less far (−) at both ends: pull compensation, because the thread pulls the fabric together. <i>Auto</i> sets it from the fabric and the size of the fill; an own value turns that off.</dd>
+          <dd>Under <i>Styling</i>: <i>Spacing</i> across two rows, there and back, as common embroidery software counts it: 0.4 mm means rows 0.2 mm apart (smaller is denser; the card converts it to thread per mm²), <i>Angle</i> of the rows (0 to 179° in steps of one degree, at the dial or slider; or right on the stage: the button beside the slider or <kbd>W</kbd>, then drag a line over the area: it shows the way the rows are sewn one after the other, so the rows run across it, already while you drag, letting go takes it over, <kbd>Shift</kbd> snaps to 15°, <kbd>Esc</kbd> cancels; the same for crosshatch and the open patterns), <i>Stitch length</i> along a row. <i>Edges</i> under <i>Fabric and hold</i> lets the rows reach further (+) or less far (−) at both ends: pull compensation, because the thread pulls the fabric together. <i>Auto</i> sets it from the fabric and the size of the fill; an own value turns that off.</dd>
           <dt>In one go</dt>
           <dd>Tatami and gradient fills are sewn without a trim, also around holes, arms and points. heatstitch plans the sections as one tour: the needle runs hidden under rows still to come to the far end of a branch and sews back from there, so no way lies on top of rows sewn already. Stitches shorter than 0.4 mm, as where dense rows turn or in a narrow point, go into the next stitch; they would only set a hole beside the last one. This happens by itself, without a setting.</dd>
           <dt>Row ends</dt>
@@ -1711,7 +1711,7 @@
         <table>
           <thead><tr><th>Check</th><th>Finds</th><th>Caution / Critical (woven, 40 wt)</th></tr></thead>
           <tbody>
-            <tr><td>Thread density</td><td>Too many layers on top of each other, the main check</td><td>7 / 12 mm/mm² for fill stitch, up to 15 / 17.5 for pure satin</td></tr>
+            <tr><td>Thread density</td><td>Too many layers on top of each other, the main check</td><td>14 / 24 mm/mm² for fill stitch, 15 / 17.5 for pure satin</td></tr>
             <tr><td>Short-stitch cluster</td><td>Thread lumps, knots</td><td>8 stitches under 1 mm in one cell: caution on woven fabric and caps, critical on other fabrics</td></tr>
             <tr><td>Perforation (leather only)</td><td>Holes so dense that they weaken the material</td><td>6 / 9 holes within 1 mm</td></tr>
             <tr><td>Coverage and gaps</td><td>Fabric shows through a layer that is too loose; a gap opens between two objects when the thread pulls the fabric together</td><td>caution only</td></tr>
@@ -1746,7 +1746,7 @@
         <h3 id="en-density">Heatmap</h3>
         <dl>
           <dt>Thread length (mm/mm²)</dt>
-          <dd>Every stitch is distributed exactly over the grid cells it crosses. Too much of it makes embroidery stiff, wavy or board-like. One fill layer at 0.4 mm spacing has 2.5 mm/mm².</dd>
+          <dd>Every stitch is distributed exactly over the grid cells it crosses. Too much of it makes embroidery stiff, wavy or board-like. One fill layer at 0.4 mm spacing (rows 0.2 mm apart) has 5 mm/mm².</dd>
           <dt>Needle points (1/mm²)</dt>
           <dd>Needle holes per area. Important on leather, faux leather and delicate fabrics.</dd>
           <dt>Grid cell, smoothing, scale maximum</dt>

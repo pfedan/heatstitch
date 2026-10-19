@@ -36,7 +36,7 @@ export interface OwnValues {
 }
 
 /** Sensible bounds for measured values: anything outside is not kept. */
-const OWN_SPACING: [number, number] = [0.2, 1.5];
+const OWN_SPACING: [number, number] = [0.1, 1.5];
 const OWN_PULL: [number, number] = [0, 2];
 
 const ownOk = (v: unknown): v is Own => {
@@ -83,7 +83,20 @@ export function threadWidthMm(p: Profile): number {
   return 0.4 / threadOf(p).factor;
 }
 
-/** The fabric's spacing range for the profile's thread, without measured values (thicker thread needs wider spacing). */
+/**
+ * Spacing is counted as embroidery software commonly counts it: across two rows, a fill row there
+ * and the one back, as a satin's spacing is between penetrations on the same side (Daniel,
+ * 2026-10-19: the established language, 0.4 mm on woven). The fabric table,
+ * the panels and the test swatch show it so; a fill's rows lie half of it apart, which is what
+ * FillSettings.spacing and measured fill values keep.
+ */
+export const ROW_PAIR = 2;
+/** A fill's distance between neighbouring rows as shown and typed (across two rows). */
+export const shownRows = (rowSpacing: number): number => rowSpacing * ROW_PAIR;
+/** A fill's distance between neighbouring rows for a spacing shown or typed across two rows. */
+export const rowsOf = (shown: number): number => shown / ROW_PAIR;
+
+/** The fabric's spacing range for the profile's thread, counted across two rows, without measured values (thicker thread needs wider spacing). */
 export function fabricSpacing(p: Profile): [number, number] {
   const k = threadOf(p).factor;
   const [a, b] = fabricOf(p).spacing;
@@ -91,12 +104,20 @@ export function fabricSpacing(p: Profile): [number, number] {
 }
 
 /**
- * Recommended spacing range in mm for the profile. A spacing measured with a fill test swatch
- * becomes its lower end (the default), the range keeping the fabric's width ratio.
+ * Recommended distance between neighbouring fill rows in mm for the profile. A spacing measured
+ * with a fill test swatch becomes its lower end (the default), the range keeping the fabric's
+ * width ratio.
  */
 export function recommendedSpacing(p: Profile): [number, number] {
-  const [a, b] = fabricSpacing(p);
+  const [a, b] = fabricSpacing(p).map(rowsOf);
   const own = p.own?.fill?.spacing;
+  return own ? [own, (own * b) / a] : [a, b];
+}
+
+/** Recommended satin spacing range in mm (between penetrations on the same side): measured, else the fabric's. */
+export function recommendedSatin(p: Profile): [number, number] {
+  const [a, b] = fabricSpacing(p);
+  const own = p.own?.satin?.spacing;
   return own ? [own, (own * b) / a] : [a, b];
 }
 

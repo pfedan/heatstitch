@@ -10,7 +10,7 @@ import { digitizeDefaults, fillUnder, pullFor } from '../digitize/digitize';
 import { withRecords } from '../model/edit';
 import { settledBy, type Acknowledgement } from '../validation/acks';
 import { measurePattern } from '../validation/measure';
-import { fabricOf, recommendedSpacing, type Profile } from '../validation/profiles';
+import { fabricOf, recommendedSatin, recommendedSpacing, type Profile } from '../validation/profiles';
 import { classify, CRITICAL, type Checks, type Reason, type ValidationResult, type Zone } from '../validation/validate';
 import type { CorrectionFocus } from './auto';
 import { areaOf, geoOf, lineGeoOf } from '../model/geo';
@@ -269,6 +269,7 @@ function satinWidth(p: Pattern, o: SewObject): number {
 function candidates(p: Pattern, objs: SewObject[], o: SewObject, s: Settings, reasons: Set<Reason>, profile: Profile, areaMm2: number): Candidate[] {
   const out: Candidate[] = [];
   const [, recMax] = recommendedSpacing(profile);
+  const [, satinMax] = recommendedSatin(profile);
   const longMm = fabricOf(profile).longMm;
   const tooMuch = reasons.has('density') || reasons.has('perforation');
   const known = remembered(p, o);
@@ -308,11 +309,11 @@ function candidates(p: Pattern, objs: SewObject[], o: SewObject, s: Settings, re
       else if (t.underlay && w < MEDIUM_SATIN && (t.under ?? 'auto') !== 'center') out.push({ changes: [fix('under', t.under ?? 'auto', 'center')], visibility: 'invisible', reason: 'density' });
       // Narrow parts are densest: spacing by width loosens them first.
       if (!t.byWidth && t.type !== 'e') out.push({ changes: [fix('byWidth', false, true)], visibility: 'slight', reason: 'density' });
-      for (const to of [round2(Math.min(recMax, t.spacing * 1.08)), round2(recMax)]) {
+      for (const to of [round2(Math.min(satinMax, t.spacing * 1.08)), round2(satinMax)]) {
         if (to > t.spacing + 0.005) out.push({ changes: [fix('spacing', t.spacing, to)], visibility: 'slight', reason: 'density' });
       }
     }
-    if (reasons.has('sparse') && t.spacing > recMax + 0.005) out.push({ changes: [fix('spacing', t.spacing, round2(recMax))], visibility: 'slight', reason: 'sparse' });
+    if (reasons.has('sparse') && t.spacing > satinMax + 0.005) out.push({ changes: [fix('spacing', t.spacing, round2(satinMax))], visibility: 'slight', reason: 'sparse' });
     if (reasons.has('gap') && t.edge < MAX_SATIN_EDGE - 0.01) {
       out.push({ changes: [fix('edge', t.edge, round2(Math.min(MAX_SATIN_EDGE, t.edge + 0.1)))], visibility: 'slight', reason: 'gap' });
       out.push({ changes: [fix('edge', t.edge, round2(MAX_SATIN_EDGE))], visibility: 'slight', reason: 'gap' });
@@ -533,7 +534,10 @@ async function tune(p: Pattern, profile: Profile, checks: Checks, opt: Pick<Plan
   // Where the fabric shows through now: only there is spacing made denser.
   const open = openOnPurpose(p, objs);
   const thin = classify(measurePattern(p, open ?? undefined), profile, checks).zones.filter((z) => z.reasons.includes('sparse') || z.reasons.includes('gap')).map((z) => z.bbox);
-  const into = (v: number, b: Box) => round2(Math.max(recMin, v > recMax && thin.some((z) => overlaps(z, b)) ? recMax : v));
+  const [satinMin, satinMax] = recommendedSatin(profile);
+  const intoRange = (lo: number, hi: number) => (v: number, b: Box) => round2(Math.max(lo, v > hi && thin.some((z) => overlaps(z, b)) ? hi : v));
+  const into = intoRange(recMin, recMax);
+  const intoSatin = intoRange(satinMin, satinMax);
   let cur = p;
   for (const [done, o] of objs.entries()) {
     await opt.progress?.(done, objs.length);
@@ -564,7 +568,7 @@ async function tune(p: Pattern, profile: Profile, checks: Checks, opt: Pick<Plan
       covered = u.underlay && !f.underCover && coversOver(p, objs, o, 0.1).length > 0;
     } else {
       const t = s.s;
-      if (Math.abs(into(t.spacing, box) - t.spacing) > 0.005) changes.push(fix('spacing', t.spacing, into(t.spacing, box)));
+      if (Math.abs(intoSatin(t.spacing, box) - t.spacing) > 0.005) changes.push(fix('spacing', t.spacing, intoSatin(t.spacing, box)));
       if ((t.split ?? SATIN_SPLIT) > longMm && longest(p, o) > longMm) changes.push(fix('split', t.split ?? SATIN_SPLIT, longMm));
       // Automatic underlay crossed sooner on stretchy fabric (see underTier).
       if (known?.satin && t.underlay && (t.under ?? 'auto') === 'auto' && !!t.underCross !== !!under.underCross) changes.push(fix('underCross', !!t.underCross, !!under.underCross));

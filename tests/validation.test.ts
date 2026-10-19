@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_PROFILE, normalizeProfile, recommendedSpacing, type Profile } from '../src/validation/profiles';
 import { satinMask } from '../src/validation/satin';
-import { BASE, classifyDensity, densityLimits, thresholdsFor } from '../src/validation/thresholds';
+import { BASE, classifyDensity, densityLimits, FILL_DENSER, thresholdsFor } from '../src/validation/thresholds';
 import {
   ALL_CHECKS,
   CAUTION,
@@ -53,41 +53,48 @@ function peakIn(r: ValidationResult, x0: number, y0: number, x1: number, y1: num
 const inner = (r: ValidationResult) => levelsIn(r, 14, 14, 26, 26);
 const all = (levels: Level[], l: Level) => levels.length > 50 && levels.every((v) => v === l);
 
+/** Woven's fill rows: 0.4 mm counted across two rows. */
+const ROW = 0.2;
+
 /** One fill layer at `angle` with a 2 mm underlay across it. */
-const fillWithUnderlay = (s: Shape, angle: number, spacing = 0.4) =>
+const fillWithUnderlay = (s: Shape, angle: number, spacing = ROW) =>
   s.fillAt(20, 20, 10, angle + Math.PI / 2, 2, 3).fillAt(20, 20, 10, angle, spacing);
 
 /** `n` fill layers at varied angles, without underlay. */
 const layers = (n: number, s = new Shape()) => {
-  for (let i = 0; i < n; i++) s.fillAt(20, 20, 10, i * 0.8 + 0.2);
+  for (let i = 0; i < n; i++) s.fillAt(20, 20, 10, i * 0.8 + 0.2, ROW);
   return s;
 };
 
 describe('thresholds and profiles', () => {
   it('blends the limits by satin share', () => {
     const th = thresholdsFor(WOVEN);
-    expect(densityLimits(th, 0)).toEqual([BASE.caution, BASE.critical]);
+    // Fill limits 14 and 24 with rows 0.2 mm apart (twice the thread per layer); satin as calibrated.
+    expect(densityLimits(th, 0)).toEqual([BASE.caution * FILL_DENSER, BASE.critical * FILL_DENSER]);
     expect(densityLimits(th, 1)).toEqual([BASE.satinCaution, BASE.satinCritical]);
-    expect(classifyDensity(6.99, 0, th)).toBe(SAFE);
-    expect(classifyDensity(7, 0, th)).toBe(CAUTION);
-    expect(classifyDensity(12, 0, th)).toBe(CRITICAL);
+    expect(classifyDensity(13.99, 0, th)).toBe(SAFE);
+    expect(classifyDensity(14, 0, th)).toBe(CAUTION);
+    expect(classifyDensity(24, 0, th)).toBe(CRITICAL);
     expect(classifyDensity(12, 1, th)).toBe(SAFE);
-    expect(classifyDensity(14, 0.5, th)).toBe(CAUTION);
+    // A satin over two fills (5 + 10 mm/mm², a third of it satin) is Safe, over three it is not.
+    expect(classifyDensity(15, 1 / 3, th)).toBe(SAFE);
+    expect(classifyDensity(20, 1 / 4, th)).toBe(CAUTION);
   });
 
   it('scales the limits with fabric and thread', () => {
-    expect(thresholdsFor({ fabric: 'knit', thread: '40' }).caution).toBeCloseTo(7 * 0.85);
-    expect(thresholdsFor({ fabric: 'woven', thread: '12' }).critical).toBeCloseTo(12 * 0.5);
+    expect(thresholdsFor({ fabric: 'knit', thread: '40' }).caution).toBeCloseTo(14 * 0.85);
+    expect(thresholdsFor({ fabric: 'woven', thread: '12' }).critical).toBeCloseTo(24 * 0.5);
     expect(thresholdsFor({ fabric: 'terry', thread: '30' }).factor).toBeCloseTo(0.65 * 0.8);
     expect(thresholdsFor(WOVEN).holes).toBeNull();
     expect(thresholdsFor(LEATHER).holes).not.toBeNull();
   });
 
   it('widens the recommended spacing for thick thread', () => {
-    expect(recommendedSpacing(WOVEN)).toEqual([0.36, 0.45]);
+    // Rows 0.2 to 0.25 mm apart: 0.4 to 0.5 counted across two rows.
+    expect(recommendedSpacing(WOVEN)).toEqual([0.2, 0.25]);
     const [a, b] = recommendedSpacing({ fabric: 'woven', thread: '12' });
-    expect(a).toBeCloseTo(0.72);
-    expect(b).toBeCloseTo(0.9);
+    expect(a).toBeCloseTo(0.4);
+    expect(b).toBeCloseTo(0.5);
   });
 
   it('falls back to the defaults for unknown ids', () => {
@@ -116,7 +123,7 @@ describe('density tiers (40 wt on woven)', () => {
     const two = fillWithUnderlay(fillWithUnderlay(new Shape(), 0.3), 1.1).build();
     const r = validatePattern(two, WOVEN);
     expect(r.zones).toEqual([]);
-    expect(peakIn(r, 14, 14, 26, 26)).toBeGreaterThan(5.9);
+    expect(peakIn(r, 14, 14, 26, 26)).toBeGreaterThan(11);
   });
 
   it('flags 3 and 4 layers as CAUTION and 5 layers as CRITICAL at any angle', () => {
@@ -125,12 +132,13 @@ describe('density tiers (40 wt on woven)', () => {
     const r = validatePattern(layers(5).build(), WOVEN);
     expect(all(inner(r), CRITICAL)).toBe(true);
     expect(r.zones.filter((z) => z.level === CRITICAL)).toHaveLength(1);
-    expect(r.zones[0].reasons).toEqual(['density']);
+    // Five fill edges on top of each other also gather the row turns, 0.2 mm each.
+    expect(r.zones[0].reasons).toContain('density');
   });
 
   it('reports separate zones for separate patches, worst first', () => {
     const s = layers(5);
-    for (let i = 0; i < 4; i++) s.fillAt(60, 20, 10, i);
+    for (let i = 0; i < 4; i++) s.fillAt(60, 20, 10, i, ROW);
     const r = validatePattern(s.build(), WOVEN);
     expect(r.zones.map((z) => z.level)).toEqual([CRITICAL, CAUTION]);
     expect(r.zones[0].bbox.maxX).toBeLessThan(35);
@@ -175,10 +183,10 @@ describe('satin', () => {
 describe('profiles change the verdict without re-measuring', () => {
   const m = measurePattern(fillWithUnderlay(fillWithUnderlay(new Shape(), 0.3), 1.1).build());
 
-  it('two stacked fills: Safe on woven, Caution on knit, Critical with 12 wt', () => {
+  it('two stacked fills: Safe on woven, Caution on fleece, Critical with 12 wt on knit', () => {
     expect(classify(m, WOVEN).worst).toBe(SAFE);
-    expect(classify(m, { fabric: 'knit', thread: '40' }).worst).toBe(CAUTION);
-    expect(classify(m, { fabric: 'woven', thread: '12' }).worst).toBe(CRITICAL);
+    expect(classify(m, { fabric: 'fleece', thread: '40' }).worst).toBe(CAUTION);
+    expect(classify(m, { fabric: 'knit', thread: '12' }).worst).toBe(CRITICAL);
   });
 
   it('a 60 wt profile tolerates more than 40 wt', () => {

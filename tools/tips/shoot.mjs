@@ -369,4 +369,142 @@ for (const [name, [setup, [x, y, w, h], moves, leave]] of Object.entries(MOVES))
   await leave?.(page);
   console.log(`${name}.webp (${n} frames)`);
 }
+/**
+ * How spacing is counted (density-de, density-en): a fill of the test swatch so close that single
+ * rows show (thin threads), the way the rows are sewn drawn over it, there and back, and the
+ * spacing between a row and the next one sewn the same way. Numbers in each language's notation.
+ */
+const DENSITY = { de: '0,4 mm', en: '0.4 mm' };
+const densityShot = async () => {
+  const p = await browser.newPage({ viewport: { width: 1600, height: 1000 }, locale: 'de-DE', colorScheme: 'light' });
+  await p.goto(APP_URL);
+  await p.waitForTimeout(1000);
+  // A blank design with the fill swatch: rows straight across, its left edge where they turn.
+  await p.evaluate(() => document.querySelector('.start-cards button:nth-child(3)').click());
+  await p.waitForTimeout(1500);
+  await p.evaluate(() => (document.getElementById('swatch').open = true));
+  await p.evaluate(() => document.getElementById('swatch-make').click());
+  await p.waitForTimeout(4000);
+  await p.evaluate(() => {
+    document.querySelectorAll('#bg-swatches .bg-sw')[2].click();
+    const m = document.getElementById('marks-toggle');
+    if (m.getAttribute('aria-pressed') === 'true') m.click();
+  });
+  // Close in on the left edge of the 0.40 / +0.0 cell (about 120 px per mm).
+  await p.keyboard.down('Control');
+  for (let i = 0; i < 15; i++) {
+    await p.mouse.move(628, 548);
+    await p.mouse.wheel(0, -300);
+    await p.waitForTimeout(150);
+  }
+  await p.keyboard.up('Control');
+  await p.evaluate(() => {
+    const w = document.getElementById('thread-width');
+    w.value = '0.12';
+    w.dispatchEvent(new Event('input', { bubbles: true }));
+    const r = document.getElementById('realistic');
+    if (!r.checked) r.click();
+  });
+  await p.mouse.move(360, 60);
+  await p.waitForTimeout(7000);
+  const [x, y, w, h] = [400, 420, 400, 250];
+  if (DEBUG) await p.screenshot({ path: path.join(DEBUG, 'density.full.png') });
+  const shot = await (await p.context().newCDPSession(p)).send('Page.captureScreenshot', { format: 'png', clip: { x, y, width: w, height: h, scale: 2 } });
+  for (const [lang, label] of Object.entries(DENSITY)) {
+    const webp = await p.evaluate(
+      async ([png, W, H, label]) => {
+        const img = new Image();
+        img.src = `data:image/png;base64,${png}`;
+        await img.decode();
+        const c = Object.assign(document.createElement('canvas'), { width: W, height: H });
+        const ctx = c.getContext('2d');
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, 0, 0, W, H);
+        // Rows: where the blue thread is, row by row of pixels, right of the edge.
+        const data = ctx.getImageData(0, 0, W, H).data;
+        const blue = (px, py) => {
+          const i = (py * W + px) * 4;
+          return data[i + 2] - data[i] > 60 ? 1 : 0;
+        };
+        let edge = 0;
+        while (edge < W - 1 && [...Array(H).keys()].filter((py) => blue(edge, py)).length < H * 0.2) edge++;
+        const prof = [...Array(H).keys()].map((py) => {
+          let n = 0;
+          for (let px = edge + 20; px < W; px += 2) n += blue(px, py);
+          return n;
+        });
+        // Smoothed, as the twist of the thread draws light lines across each row.
+        const sm = prof.map((_, py) => prof.slice(Math.max(0, py - 3), py + 4).reduce((s, v) => s + v, 0));
+        const top = Math.max(...sm);
+        const peaks = [];
+        for (let py = 4; py < H - 4; py++) if (sm[py] >= Math.max(...sm.slice(py - 9, py + 10)) && sm[py] > 0.5 * top) if (!peaks.length || py - peaks.at(-1) > 14) peaks.push(py);
+        const mid = peaks.findIndex((py) => py > H * 0.32);
+        const [r1, r2, r3] = peaks.slice(mid, mid + 3);
+        const pink = '#de4d8c';
+        const outlined = (draw, width) => {
+          ctx.lineCap = ctx.lineJoin = 'round';
+          ctx.strokeStyle = '#fff';
+          ctx.lineWidth = width + 3;
+          draw();
+          ctx.stroke();
+          ctx.strokeStyle = pink;
+          ctx.lineWidth = width;
+          draw();
+          ctx.stroke();
+        };
+        // The way the needle goes: there along one row, back along the next, there again.
+        const a = edge + 26;
+        const b = W - 40;
+        outlined(() => {
+          ctx.beginPath();
+          ctx.moveTo(a, r1);
+          ctx.lineTo(b, r1);
+          ctx.arc(b, (r1 + r2) / 2, (r2 - r1) / 2, -Math.PI / 2, Math.PI / 2);
+          ctx.lineTo(a, r2);
+          ctx.arc(a, (r2 + r3) / 2, (r3 - r2) / 2, -Math.PI / 2, Math.PI / 2, true);
+          ctx.lineTo(b - 6, r3);
+        }, 3);
+        const head = (x, y, dir) => {
+          ctx.beginPath();
+          ctx.moveTo(x + dir * 10, y);
+          ctx.lineTo(x - dir * 4, y - 8);
+          ctx.lineTo(x - dir * 4, y + 8);
+          ctx.closePath();
+          ctx.fillStyle = '#fff';
+          ctx.lineWidth = 3;
+          ctx.strokeStyle = '#fff';
+          ctx.stroke();
+          ctx.fillStyle = pink;
+          ctx.fill();
+        };
+        head(b - 6, r3, 1);
+        head(a + (b - a) * 0.6, r1, 1);
+        head(a + (b - a) * 0.4, r2, -1);
+        // The spacing: from one row to the next sewn the same way.
+        const bx = edge - 22;
+        outlined(() => {
+          ctx.beginPath();
+          ctx.moveTo(bx + 10, r1);
+          ctx.lineTo(bx, r1);
+          ctx.lineTo(bx, r3);
+          ctx.lineTo(bx + 10, r3);
+        }, 3);
+        ctx.font = '600 26px Inter, system-ui, sans-serif';
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        ctx.lineWidth = 6;
+        ctx.strokeStyle = '#fff';
+        ctx.strokeText(label, bx - 8, (r1 + r3) / 2);
+        ctx.fillStyle = pink;
+        ctx.fillText(label, bx - 8, (r1 + r3) / 2);
+        return c.toDataURL('image/webp', 0.85).split(',')[1];
+      },
+      [shot.data, W, H, label],
+    );
+    fs.writeFileSync(path.join(OUT, `density-${lang}.webp`), Buffer.from(webp, 'base64'));
+    console.log(`density-${lang}.webp`);
+  }
+  await p.close();
+};
+if (!wanted.length || wanted.includes('density')) await densityShot();
 await browser.close();

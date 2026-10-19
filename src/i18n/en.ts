@@ -172,7 +172,7 @@ const enBase: Record<keyof typeof deBase, string> = {
   'validation.overlay': 'Markings',
   'validation.explain': 'How the check works',
   'validation.explain.metric':
-    'It measures thread length per area (mm/mm²) in 1 mm cells, taking the peak after light smoothing. One fill layer at 0.4 mm spacing is 2.5 mm/mm², a satin at 0.4 mm spacing 5.0 mm/mm².',
+    'It measures thread length per area (mm/mm²) in 1 mm cells, taking the peak after light smoothing. One fill layer at 0.4 mm spacing (rows 0.2 mm apart) is 5.0 mm/mm², and so is a satin at 0.4 mm spacing.',
   'validation.explain.limits':
     'Reference for 40 wt on stable woven fabric: Caution from {caution} (about three layers), Critical from {critical} (four layers). Fabric and thread scale both limits, currently by a factor of {factor}.',
   'validation.explain.satin':
@@ -182,7 +182,7 @@ const enBase: Record<keyof typeof deBase, string> = {
   'validation.explain.perforation':
     'Leather and vinyl: a needle hole with {caution} or more neighbours within 1 mm (a hole row tighter than about 0.33 mm, stacked edges, tight inner curves) is Caution, {critical} or more is Critical.',
   'validation.explain.coverage':
-    'Coverage and gaps (Caution only): an area whose layer is more open than about {spacing} mm spacing (satin twice as dense) lets the fabric show through; gradients do not count. Rows and satin stitches pull the fabric in at their ends, on this fabric by about {pull} % of their length, at most {cap} mm; where fabric shows between two objects because of that, it is a gap.',
+    'Coverage and gaps (Caution only): an area whose layer is more open than about {spacing} mm spacing (fill across two rows, satin on one side) lets the fabric show through; gradients do not count. Rows and satin stitches pull the fabric in at their ends, on this fabric by about {pull} % of their length, at most {cap} mm; where fabric shows between two objects because of that, it is a gap.',
   'validation.explain.long': 'Long stitches (Caution only): stitches over {v} mm can snag on this fabric.',
   'validation.explain.practice':
     'Normal in practice and not counted: small spots (caution up to {small} mm², a single critical cell), satin joins (mostly satin, up to {join} mm², at most {excess} % over the limit) and short-stitch clusters on woven fabric and caps. Perforation always counts. Any such zone can still be checked from the list.',
@@ -559,7 +559,7 @@ const enBase: Record<keyof typeof deBase, string> = {
   'stitch.lineTraced': 'Read from the stitches. Sewn anew from the first change on.',
   'stitch.lineNote': 'Follows the curve of the line, also when you change it.',
   'stitch.density': 'Spacing',
-  'stitch.density.hint': 'Distance between rows. Green: recommended for the material.',
+  'stitch.density.hint': 'Distance across two rows (there and back), as common embroidery software counts it. Green: recommended for the material.',
   'stitch.densityNote': 'about {d} mm thread per mm²',
   'stitch.angle': 'Angle',
   'stitch.angle.hint': 'Direction of the rows',
@@ -1377,7 +1377,7 @@ const enBase: Record<keyof typeof deBase, string> = {
   'image.threads.hint': 'Each color gets the closest thread of the Brother palette.',
   'image.stitch': 'Stitches',
   'image.spacing': 'Spacing (mm)',
-  'image.spacing.hint': 'Distance between neighbouring fill rows and between needle points on the same side of a satin.',
+  'image.spacing.hint': 'Fill: counted across two rows (there and back). Satin: between needle points on one side.',
   'image.pull': 'Pull comp. (mm)',
   'image.pull.hint': 'Lengthens the stitches because the fabric pulls in while sewing.',
   'image.angle': 'Fill direction',

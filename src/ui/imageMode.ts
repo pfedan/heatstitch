@@ -22,7 +22,7 @@ import { CAUTION, CRITICAL, type ValidationResult } from '../validation/validate
 import { clearImage, loadImage, saveImage, saveWork, type StoredImage, type StoredWork } from '../storage/imageStore';
 import { hoopShort } from './hoopPanel';
 import { cssColor, ThreadPicker } from './threadPicker';
-import { FABRICS, THREADS } from '../validation/profiles';
+import { FABRICS, rowsOf, shownRows, THREADS } from '../validation/profiles';
 import { STORAGE_NS } from '../storage/namespace';
 import { command, commandTitle, getCommand, keyLabel } from '../shell/commands';
 import { components, type Components } from '../image/labels';
@@ -371,7 +371,11 @@ export class ImageMode {
     num('image-colors', (v) => (s.prepare.maxColors = v), 'prepare');
     num('image-smooth', (v) => (s.prepare.smooth = v), 'prepare');
     num('image-min-area', (v) => (s.prepare.minAreaMm2 = v), 'prepare');
-    num('image-spacing', (v) => (s.stitch.spacing = s.stitch.satinSpacing = Math.min(1.5, Math.max(0.2, v))), 'stitches');
+    // One number for both, as embroidery software counts: across two fill rows, between a satin's penetrations on one side.
+    num('image-spacing', (v) => {
+      s.stitch.satinSpacing = Math.min(3, Math.max(0.3, v));
+      s.stitch.spacing = rowsOf(s.stitch.satinSpacing);
+    }, 'stitches');
     num('image-satin-max', (v) => (s.stitch.satinMax = v), 'stitches');
     num('image-tolerance', (v) => (s.stitch.tolerance = v), 'stitches');
     num('image-pull', (v) => (s.stitch.pull = Math.min(1, Math.max(0, v))), 'stitches');
@@ -1480,7 +1484,7 @@ export class ImageMode {
     out('image-min-area-out', `${formatNumber(s.prepare.minAreaMm2, 1)} mm²`);
     $<HTMLInputElement>('image-background').checked = s.prepare.background;
     $<HTMLInputElement>('image-threads').checked = s.prepare.threads;
-    setVal('image-spacing', o.spacing);
+    setVal('image-spacing', shownRows(o.spacing));
     setVal('image-pull', o.pull);
     setVal('image-satin-max', o.satinMax);
     out('image-satin-max-out', `${formatNumber(o.satinMax, 1)} mm`);

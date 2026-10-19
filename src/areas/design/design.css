@@ -283,6 +283,23 @@ body[data-mode='flow'] .material-panel .profile-info span:nth-child(2) {
   color: var(--ink);
 }
 
+/* Own values typed in, beside the grid: the same as a picked cell. */
+.material-panel .swatch-manual {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.material-panel .swatch-manual .field {
+  align-self: stretch;
+  margin: 0;
+}
+
+.material-panel .swatch-manual .label {
+  white-space: nowrap;
+}
+
 /* Garne */
 
 .dt-list {

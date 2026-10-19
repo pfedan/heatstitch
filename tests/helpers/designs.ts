@@ -96,10 +96,13 @@ export interface FillOpts {
   underlay?: number | null;
 }
 
+/** Woven's fill rows: 0.4 mm counted across two rows. */
+export const FILL_ROWS = 0.2;
+
 /** Tatami fill of a polygon: boustrophedon rows split into sweeps wherever the shape branches. */
 export function fill(w: Writer, poly: Pt[], o: FillOpts = {}): void {
   const angle = o.angle ?? 0;
-  const spacing = o.spacing ?? 0.4;
+  const spacing = o.spacing ?? FILL_ROWS;
   const L = o.stitch ?? 3.5;
   if (o.underlay !== null) runAround(w, offset(poly, -(o.underlay ?? 0.6)), 2);
   const ca = Math.cos(angle);

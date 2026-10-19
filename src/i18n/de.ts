@@ -170,7 +170,7 @@ export const deBase = {
   'validation.overlay': 'Markierungen',
   'validation.explain': 'So wird geprüft',
   'validation.explain.metric':
-    'Gemessen wird die Garnlänge pro Fläche (mm/mm²) in 1-mm-Zellen, jeweils der Spitzenwert nach leichter Glättung. Eine Füllstichlage mit 0,4 mm Abstand hat 2,5 mm/mm², ein Satin mit 0,4 mm Abstand 5,0 mm/mm².',
+    'Gemessen wird die Garnlänge pro Fläche (mm/mm²) in 1-mm-Zellen, jeweils der Spitzenwert nach leichter Glättung. Eine Füllstichlage mit 0,4 mm Abstand (Reihen 0,2 mm auseinander) hat 5,0 mm/mm², ein Satin mit 0,4 mm Abstand ebenso.',
   'validation.explain.limits':
     'Referenz für 40 wt auf stabiler Webware: Vorsicht ab {caution} (etwa drei Lagen), Kritisch ab {critical} (vier Lagen). Stoff und Garn verschieben beide Grenzen, aktuell um den Faktor {factor}.',
   'validation.explain.satin':
@@ -180,7 +180,7 @@ export const deBase = {
   'validation.explain.perforation':
     'Leder und Kunstleder: Hat ein Einstich {caution} oder mehr Nachbarn im Umkreis von 1 mm (Lochreihe enger als etwa 0,33 mm, gestapelte Kanten, enge Innenkurven), gilt Vorsicht, ab {critical} Kritisch.',
   'validation.explain.coverage':
-    'Deckung und Lücken (nur Vorsicht): Eine Fläche, deren Lage lockerer ist als etwa {spacing} mm Abstand (Satin doppelt so dicht), lässt den Stoff durchscheinen; Verläufe zählen nicht. Reihen und Satinstiche ziehen den Stoff an ihren Enden zusammen, auf diesem Stoff um etwa {pull} % ihrer Länge, höchstens {cap} mm; wo sich dadurch zwischen zwei Objekten Stoff zeigt, ist eine Lücke.',
+    'Deckung und Lücken (nur Vorsicht): Eine Fläche, deren Lage lockerer ist als etwa {spacing} mm Abstand (Füllung über zwei Reihen, Satin auf einer Seite gezählt), lässt den Stoff durchscheinen; Verläufe zählen nicht. Reihen und Satinstiche ziehen den Stoff an ihren Enden zusammen, auf diesem Stoff um etwa {pull} % ihrer Länge, höchstens {cap} mm; wo sich dadurch zwischen zwei Objekten Stoff zeigt, ist eine Lücke.',
   'validation.explain.long': 'Lange Stiche (nur Vorsicht): Stiche über {v} mm können auf diesem Stoff hängen bleiben.',
   'validation.explain.practice':
     'Praxisüblich und nicht mitgezählt: kleine Stellen (Vorsicht bis {small} mm², einzelne kritische Zelle), Satin-Übergänge (überwiegend Satin, bis {join} mm², höchstens {excess} % über der Grenze) und Kurzstich-Häufungen auf Webware und Caps. Perforation zählt immer. Jede solche Zone lässt sich in der Liste trotzdem prüfen.',
@@ -557,7 +557,7 @@ export const deBase = {
   'stitch.lineTraced': 'Aus den Stichen gelesen. Ab der ersten Änderung neu gestickt.',
   'stitch.lineNote': 'Folgt der Kurve der Linie, auch wenn du sie änderst.',
   'stitch.density': 'Abstand',
-  'stitch.density.hint': 'Abstand der Reihen. Grün: empfohlen für das Material.',
+  'stitch.density.hint': 'Abstand über zwei Reihen (hin und zurück), wie in gängiger Sticksoftware. Grün: empfohlen für das Material.',
   'stitch.densityNote': 'etwa {d} mm Garn pro mm²',
   'stitch.angle': 'Winkel',
   'stitch.angle.hint': 'Richtung der Reihen',
@@ -1375,7 +1375,7 @@ export const deBase = {
   'image.threads.hint': 'Jede Farbe bekommt das nächste Garn der Brother-Palette.',
   'image.stitch': 'Stiche',
   'image.spacing': 'Abstand (mm)',
-  'image.spacing.hint': 'Abstand benachbarter Füllreihen und der Einstiche auf derselben Satinseite.',
+  'image.spacing.hint': 'Füllung: über zwei Reihen gezählt (hin und zurück). Satin: zwischen Einstichen auf einer Seite.',
   'image.pull': 'Zugausgleich (mm)',
   'image.pull.hint': 'Verlängert die Stiche, weil der Stoff sich beim Sticken zusammenzieht.',
   'image.angle': 'Füllrichtung',
