@@ -6,19 +6,21 @@
 use serde::{Deserialize, Serialize};
 
 use super::line_order::{LineOrder, with_order};
-use super::restitch::{FringeSide, Rails, SatinSettings, SatinType, satin_runs, yes};
+use super::restitch::{FringeSide, Rails, SatinSettings, SatinType, satin_runs};
 use super::runs::Run;
+use super::truthy;
 use crate::digitize::border::{
     self, BORDER_STITCH, KeptLine, border_loops, border_rails, border_run, kept_lines, kept_open,
     kept_rails, line_rails, order_loops,
 };
+pub use crate::digitize::echo::EchoSide;
 use crate::digitize::motif::{LineMotif, motif_stitches};
 use crate::digitize::region::{Region, sample};
 use crate::digitize::run::TOLERANCE;
 use crate::digitize::satin::UnderlayKind;
 use crate::digitize::satin_joins::{SatinCorner, SatinEnd, stroke_rails};
 use crate::geom::Pt;
-use crate::js::{hypot, round};
+use crate::js::{clamp, hypot, round, yes};
 use crate::material::rules::SATIN_UNDER_MIN;
 use crate::shape::path::{Form, flatten};
 
@@ -56,14 +58,6 @@ impl LineUnder {
             LineUnder::Both => Some(UnderlayKind::Both),
         }
     }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum EchoSide {
-    Out,
-    In,
-    Both,
 }
 
 /// LineEcho of digitize/echo.ts: copies of a line beside it. Of `colors` only whether a copy has
@@ -177,10 +171,6 @@ impl PathStitch {
     }
 }
 
-fn truthy<'de, D: serde::Deserializer<'de>>(d: D) -> Result<bool, D::Error> {
-    Ok(Option::<bool>::deserialize(d)?.unwrap_or(false))
-}
-
 /// For each copy, whether it has a thread of its own (a color, not null).
 fn own_thread<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Option<Vec<bool>>, D::Error> {
     let v = Option::<Vec<Option<serde::de::IgnoredAny>>>::deserialize(d)?;
@@ -192,13 +182,8 @@ pub fn is_run_type(t: BorderType) -> bool {
     matches!(t, BorderType::Run | BorderType::Triple)
 }
 
-/// As Math.min(hi, Math.max(lo, v)), NaN kept.
-fn clamp_js(v: f64, lo: f64, hi: f64) -> f64 {
-    if v.is_nan() { v } else { v.clamp(lo, hi) }
-}
-
 fn repeat_of(s: &PathStitch) -> f64 {
-    clamp_js(round(s.repeat.unwrap_or(1.0)), 1.0, 5.0)
+    clamp(round(s.repeat.unwrap_or(1.0)), 1.0, 5.0)
 }
 
 fn is_hand_motif(m: Option<LineMotif>) -> bool {

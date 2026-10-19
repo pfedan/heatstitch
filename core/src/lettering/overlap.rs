@@ -8,9 +8,10 @@
 //! and pulls in to about that width on the fabric.
 
 use crate::digitize::region::{Region, sample};
-use crate::geom::Pt;
+use crate::geom::{Pt, lerp};
 use crate::js::dist;
 use crate::model::restitch::{Rails, column_of};
+use crate::shape::path::inside_poly;
 
 /// Longest running stitch hidden under the letter on top (mm).
 const TRAVEL: f64 = 2.0;
@@ -33,19 +34,7 @@ fn in_quad(q: &Quad, p: Pt) -> bool {
     if p[0] < q.min_x || p[0] > q.max_x || p[1] < q.min_y || p[1] > q.max_y {
         return false;
     }
-    let mut c = false;
-    let mut j = 3;
-    for i in 0..4 {
-        let a = q.pts[i];
-        let b = q.pts[j];
-        if (a[1] > p[1]) != (b[1] > p[1])
-            && p[0] < ((b[0] - a[0]) * (p[1] - a[1])) / (b[1] - a[1]) + a[0]
-        {
-            c = !c;
-        }
-        j = i;
-    }
-    c
+    inside_poly(&q.pts, p)
 }
 
 enum Shape {
@@ -129,10 +118,6 @@ fn under(covers: &[&Cover], p: Pt) -> bool {
     covers.iter().any(|c| {
         p[0] >= c.min_x && p[0] <= c.max_x && p[1] >= c.min_y && p[1] <= c.max_y && c.inside(p)
     })
-}
-
-fn lerp(a: Pt, b: Pt, t: f64) -> Pt {
-    [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]
 }
 
 /// Whether the stitch a to b lies under the covers along its whole length.

@@ -9,15 +9,14 @@
 //! Ported from src/digitize/rungs.ts, which keeps the helpers its interface and satinEase call.
 
 use std::cell::OnceCell;
-use std::cmp::Ordering;
 use std::rc::Rc;
 
 use serde::{Deserialize, Serialize};
 
 use super::satin::Column;
-use crate::geom::Pt;
-use crate::js::{dist, hypot};
-use crate::shape::path::{Form, Node, Path, flatten, set_smooth};
+use crate::geom::{Pt, cumulative, dedupe, lerp, mid, norm, point_at, sub, twice_area};
+use crate::js::{by, dist, hypot, median, sign};
+use crate::shape::path::{Form, Node, Path, flatten, inside_poly, set_smooth};
 
 pub type Rung = [f64; 2];
 /// A cut line (Trennlinie) drawn across an area: the points it goes through, two for a straight
@@ -28,30 +27,6 @@ pub type Arc = [f64; 2];
 
 /// Rungs closer than this to each other or to the ends (mm along a rail) are not kept apart.
 pub const RUNG_GAP: f64 = 0.2;
-
-#[inline]
-pub(crate) fn sub(a: Pt, b: Pt) -> Pt {
-    [a[0] - b[0], a[1] - b[1]]
-}
-#[inline]
-pub(crate) fn norm(v: Pt) -> Pt {
-    let l = hypot(v[0], v[1]);
-    let l = if l == 0.0 || l.is_nan() { 1.0 } else { l };
-    [v[0] / l, v[1] / l]
-}
-#[inline]
-pub(crate) fn lerp(a: Pt, b: Pt, t: f64) -> Pt {
-    [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]
-}
-#[inline]
-fn mid(a: Pt, b: Pt) -> Pt {
-    [(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0]
-}
-/// A JavaScript sort comparator on numbers: NaN counts as equal, as V8 takes it.
-#[inline]
-pub(crate) fn by(a: f64, b: f64) -> Ordering {
-    a.partial_cmp(&b).unwrap_or(Ordering::Equal)
-}
 
 /// A cut line as a path: through its points, the ones between its ends round (as set_smooth makes
 /// them). At an end the curve leaves as it arrives at the next point, mirrored about the line
@@ -110,42 +85,6 @@ pub fn cut_line(c: &[Pt]) -> Vec<Pt> {
 pub fn cut_pieces(c: &[Pt]) -> Vec<[Pt; 2]> {
     let l = cut_line(c);
     l.windows(2).map(|w| [w[0], w[1]]).collect()
-}
-
-/// Length along the rail up to each of its points.
-pub fn cumulative(rail: &[Pt]) -> Vec<f64> {
-    let mut out = Vec::with_capacity(rail.len().max(1));
-    out.push(0.0);
-    for i in 1..rail.len() {
-        out.push(out[i - 1] + dist(rail[i - 1], rail[i]));
-    }
-    out
-}
-
-/// The point at distance `s` along the rail.
-pub fn point_at(rail: &[Pt], cum: &[f64], s: f64) -> Pt {
-    if s <= 0.0 {
-        return rail[0];
-    }
-    let n = rail.len() - 1;
-    if s >= cum[n] {
-        return rail[n];
-    }
-    let (mut lo, mut hi) = (0, n);
-    while hi - lo > 1 {
-        let m = (lo + hi) >> 1;
-        if cum[m] <= s {
-            lo = m;
-        } else {
-            hi = m;
-        }
-    }
-    let l = cum[hi] - cum[lo];
-    if l > 0.0 {
-        lerp(rail[lo], rail[hi], (s - cum[lo]) / l)
-    } else {
-        rail[lo]
-    }
 }
 
 /// Direction of the rail at distance `s`.
@@ -212,12 +151,6 @@ fn crossings(rail: &[Pt], cum: &[f64], a: Pt, b: Pt) -> Vec<Cross> {
     out
 }
 
-/// The median of widths as the TypeScript takes it (the upper middle), 0 for none.
-pub(crate) fn median_width(mut widths: Vec<f64>) -> f64 {
-    widths.sort_by(|a, b| by(*a, *b));
-    widths.get(widths.len() >> 1).copied().unwrap_or(0.0)
-}
-
 /// The column between the rails with the rungs: each section between two rungs (or a rung and an
 /// end) walked on both rails at the same share of its length, a pair every `step` mm or so.
 pub fn column_from_rungs(left: &[Pt], right: &[Pt], rungs: &[Rung], step: f64) -> Column {
@@ -248,7 +181,7 @@ pub fn column_from_rungs(left: &[Pt], right: &[Pt], rungs: &[Rung], step: f64) -
         center: c,
         left: l,
         right: r,
-        width: median_width(widths),
+        width: median(&widths),
     }
 }
 
@@ -324,31 +257,6 @@ pub fn seed_rungs(left: &[Pt], right: &[Pt], max_deg: f64) -> Vec<Rung> {
         .map(|k| [cl[k], cr[k]])
         .collect();
     tidy_rungs(&kept, cl[cl.len() - 1], cr[cr.len() - 1])
-}
-
-/// A rung along the line from a to b (drawn across the column): where it crosses the two rails,
-/// or None when it does not cross both. The line counts longer than drawn (the crossings nearest
-/// its middle are taken).
-pub fn rung_from_line(left: &[Pt], right: &[Pt], a: Pt, b: Pt) -> Option<Rung> {
-    let d = sub(b, a);
-    // A short line drawn inside the column reaches out to the rails, up to 10 mm on.
-    let ext = (10.0 / hypot(d[0], d[1]).max(0.1)).max(0.25);
-    let a2 = [a[0] - d[0] * ext, a[1] - d[1] * ext];
-    let b2 = [b[0] + d[0] * ext, b[1] + d[1] * ext];
-    let near = |xs: Vec<Cross>| {
-        xs.into_iter()
-            .reduce(|x, y| {
-                if (y.t - 0.5).abs() < (x.t - 0.5).abs() {
-                    y
-                } else {
-                    x
-                }
-            })
-            .map(|x| x.s)
-    };
-    let sa = near(crossings(left, &cumulative(left), a2, b2))?;
-    let sb = near(crossings(right, &cumulative(right), a2, b2))?;
-    Some([sa, sb])
 }
 
 /// The rungs with `r` added, or None when it would cross one of them or lie on an end.
@@ -611,17 +519,6 @@ fn walk(
     dedupe(out)
 }
 
-/// Points without those on the one before.
-fn dedupe(out: Vec<Pt>) -> Vec<Pt> {
-    let mut kept: Vec<Pt> = Vec::with_capacity(out.len());
-    for (i, &p) in out.iter().enumerate() {
-        if i == 0 || dist(p, out[i - 1]) > 1e-6 {
-            kept.push(p);
-        }
-    }
-    kept
-}
-
 /// The order round an outline in which the rungs' ends come 1, 2 … n on one side and n … 2, 1 on
 /// the other: the index in `ends` of the first one, or None when they do not.
 fn strip_start(ends: &[(f64, usize)], n: usize) -> Option<usize> {
@@ -879,21 +776,6 @@ fn strip_of_ring(
     })
 }
 
-/// Whether q lies inside the closed outline (even-odd).
-pub fn inside(ring: &[Pt], q: Pt) -> bool {
-    let mut c = false;
-    let mut j = ring.len().wrapping_sub(1);
-    for i in 0..ring.len() {
-        let [xi, yi] = ring[i];
-        let [xj, yj] = ring[j];
-        if (yi > q[1]) != (yj > q[1]) && q[0] < ((xj - xi) * (q[1] - yi)) / (yj - yi) + xi {
-            c = !c;
-        }
-        j = i;
-    }
-    c
-}
-
 /// Height of the bands the edges of an outline are sorted into for InsideTest (mm).
 const BAND: f64 = 0.5;
 
@@ -973,15 +855,6 @@ impl Ring {
     }
 }
 
-/// Where a line drawn inside a closed outline meets it: going out from the line's middle both ways,
-/// the first crossing each side (distances along the outline). None when the middle is outside.
-pub fn chord_of(ring: &[Pt], a: Pt, b: Pt) -> Option<[f64; 2]> {
-    if !inside(ring, lerp(a, b, 0.5)) {
-        return None;
-    }
-    chord_across(ring, &cumulative(ring), a, b)
-}
-
 fn chord_in(ring: &Ring, a: Pt, b: Pt) -> Option<[f64; 2]> {
     if !ring.contains(lerp(a, b, 0.5)) {
         return None;
@@ -1014,25 +887,6 @@ fn chord_across(ring: &[Pt], cum: &[f64], a: Pt, b: Pt) -> Option<[f64; 2]> {
         }
     }
     Some([lo?.s, hi?.s])
-}
-
-/// Twice the signed area of a closed outline (its sign tells which way round it goes).
-fn signed_area(ring: &[Pt]) -> f64 {
-    let mut a = 0.0;
-    for i in 1..ring.len() {
-        a += ring[i - 1][0] * ring[i][1] - ring[i][0] * ring[i - 1][1];
-    }
-    a
-}
-
-fn sign(x: f64) -> f64 {
-    if x > 0.0 {
-        1.0
-    } else if x < 0.0 {
-        -1.0
-    } else {
-        x
-    }
 }
 
 /// A closed outline walked once round from distance u along it, back to that point.
@@ -1142,11 +996,6 @@ fn cut_of(ring: &Ring, line: &[Pt]) -> Option<(f64, f64, Vec<Pt>)> {
     Some((l.s, h.s, inner))
 }
 
-/// Whether a cut line (straight or bent) is drawn across a closed outline (its middle inside, both ways out of it).
-pub fn cut_across(ring: &[Pt], c: &[Pt]) -> bool {
-    cut_of(&Ring::new(ring.to_vec()), &cut_line(c)).is_some()
-}
-
 /// A closed outline cut in two by the line from distance u to v along it (both closed again):
 /// straight across, or through `inner`, the points of a bent line from u to v.
 fn split_ring(ring: &[Pt], u: f64, v: f64, cum: &[f64], inner: &[Pt]) -> [Vec<Pt>; 2] {
@@ -1191,10 +1040,10 @@ fn open_hole(p: &mut Parts, line: &[Pt]) -> bool {
     // Going out from the line's middle both ways, the first crossing one side on the part's outline
     // and the other on a hole's.
     let Some(m) = mid_of(line) else { return false };
-    if p.open.iter().any(|h| inside(&h.pts, m)) {
+    if p.open.iter().any(|h| inside_poly(&h.pts, m)) {
         return false;
     }
-    let Some(k) = p.parts.iter().position(|r| inside(&r.pts, m)) else {
+    let Some(k) = p.parts.iter().position(|r| inside_poly(&r.pts, m)) else {
         return false;
     };
     let rings: Vec<&Ring> = std::iter::once(&*p.parts[k])
@@ -1216,7 +1065,7 @@ fn open_hole(p: &mut Parts, line: &[Pt]) -> bool {
     let q = point_at(&hole.pts, &hole.cum, v);
     let mut around = rotated(&hole.pts, v, &hole.cum);
     // Round the hole the other way than round the edge, so the outline stays one simple loop.
-    if sign(signed_area(&around)) == sign(signed_area(&ring.pts)) {
+    if sign(twice_area(&around)) == sign(twice_area(&ring.pts)) {
         around.reverse();
     }
     let mut out = rotated(&ring.pts, u, &ring.cum);
@@ -1518,7 +1367,7 @@ pub struct AreaStrips {
 /// The holes that lie in outline `o`, by index.
 fn holes_in(o: &[Pt], holes: &[Vec<Pt>]) -> Vec<usize> {
     (0..holes.len())
-        .filter(|&j| inside(o, holes[j][0]))
+        .filter(|&j| inside_poly(o, holes[j][0]))
         .collect()
 }
 
@@ -1608,8 +1457,9 @@ pub fn cut_lines_between(
     outlines: &[Vec<Pt>],
     holes: &[Vec<Pt>],
 ) -> Vec<[Pt; 2]> {
-    let within =
-        |q: Pt| outlines.iter().any(|o| inside(o, q)) && !holes.iter().any(|h| inside(h, q));
+    let within = |q: Pt| {
+        outlines.iter().any(|o| inside_poly(o, q)) && !holes.iter().any(|h| inside_poly(h, q))
+    };
     let mut cuts: Vec<[Pt; 2]> = vec![];
     for (left, right) in cols {
         let n = left.len().min(right.len());
@@ -1732,7 +1582,7 @@ mod tests {
         for y in -60..60 {
             for x in -60..60 {
                 let q = [x as f64 / 10.0 + 0.013, y as f64 / 10.0 + 0.007];
-                assert_eq!(test.test(q), inside(&ring, q));
+                assert_eq!(test.test(q), inside_poly(&ring, q));
             }
         }
     }

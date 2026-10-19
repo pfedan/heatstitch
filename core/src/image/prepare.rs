@@ -10,13 +10,14 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::color::{Lab, Rgb, delta_e2000, hypot3, js_round, lab_to_rgb, rgb_lab, rgb_to_lab};
+use super::color::{Lab, Rgb, delta_e2000, hypot3, lab_to_rgb, rgb_lab, rgb_to_lab};
 use super::filters::bilateral;
 use super::labels::{distance_to_other, merge_small, mode_filter, remove_background, remove_seams};
 use super::orientation::{Orientation, orientation};
 use super::quantize::NONE;
 use super::raster::{LabImage, Raster, resize_area, to_lab};
 use super::thread_match::{Thread, match_threads, nearest_thread};
+use crate::js::round;
 use crate::pattern::ThreadColor;
 
 #[derive(Clone, Debug, Deserialize)]
@@ -89,17 +90,6 @@ pub fn working_px_mm(width_mm: f64, height_mm: f64) -> f64 {
     (width_mm.max(height_mm) / 1200.0).max(0.1)
 }
 
-/// Size of the working image in pixels (w, h) and mm per pixel, for a source of `src_w` × `src_h`.
-pub fn working_size(width_mm: f64, src_w: usize, src_h: usize) -> (usize, usize, f64) {
-    let height_mm = (width_mm * src_h as f64) / src_w as f64;
-    let px_mm = working_px_mm(width_mm, height_mm);
-    (
-        js_round(width_mm / px_mm).max(1.0) as usize,
-        js_round(height_mm / px_mm).max(1.0) as usize,
-        px_mm,
-    )
-}
-
 /// Stage 1: the image at w × h in Lab, smoothed with `smooth` passes, and the direction of its own
 /// structure, taken before smoothing flattens fur and strands.
 pub fn smooth(
@@ -114,7 +104,7 @@ pub fn smooth(
     let orient = orientation(&img, 1.0 / px_mm);
     // 0.4 mm spatial sigma: texture finer than the thread is flattened, edges stay.
     if smooth > 0.0 {
-        img = bilateral(&img, js_round(smooth) as usize, (0.4 / px_mm).max(1.0), 8.0);
+        img = bilateral(&img, round(smooth) as usize, (0.4 / px_mm).max(1.0), 8.0);
     }
     (img, orient)
 }
@@ -499,6 +489,17 @@ mod tests {
     use super::*;
     use crate::image::quantize::quantize;
     use crate::image::thread_match::threads_of;
+
+    /// The working image's size for a source of `src_w` × `src_h`, as the app picks it.
+    fn working_size(width_mm: f64, src_w: usize, src_h: usize) -> (usize, usize, f64) {
+        let height_mm = (width_mm * src_h as f64) / src_w as f64;
+        let px_mm = working_px_mm(width_mm, height_mm);
+        (
+            round(width_mm / px_mm).max(1.0) as usize,
+            round(height_mm / px_mm).max(1.0) as usize,
+            px_mm,
+        )
+    }
 
     fn options() -> PrepareOptions {
         PrepareOptions {

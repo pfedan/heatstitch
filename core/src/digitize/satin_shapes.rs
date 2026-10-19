@@ -18,10 +18,10 @@
 use serde::{Deserialize, Serialize};
 
 use super::region::{Bbox, Region, build_region, pixel_mm};
-use super::rungs::{InsideTest, by, norm, sub};
+use super::rungs::InsideTest;
 use super::skeleton::{Branch, Graph, Node};
-use crate::geom::Pt;
-use crate::js::{dist, round};
+use crate::geom::{Pt, add_scaled, dot, norm, perp, polyline_length, sub};
+use crate::js::{by, dist, math_max, math_min, median, round};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -49,45 +49,6 @@ const CORNER_ARM: f64 = 0.7;
 /// Grid the shape of a thick place is sampled on (mm).
 const STEP: f64 = 0.15;
 
-#[inline]
-pub(crate) fn add(a: Pt, b: Pt, k: f64) -> Pt {
-    [a[0] + b[0] * k, a[1] + b[1] * k]
-}
-#[inline]
-pub(crate) fn dot(a: Pt, b: Pt) -> f64 {
-    a[0] * b[0] + a[1] * b[1]
-}
-#[inline]
-pub(crate) fn perp(v: Pt) -> Pt {
-    [-v[1], v[0]]
-}
-pub(crate) fn median(v: &[f64]) -> f64 {
-    let mut s = v.to_vec();
-    s.sort_by(|a, b| by(*a, *b));
-    s.get(s.len() >> 1).copied().unwrap_or(0.0)
-}
-fn length_of(pts: &[Pt]) -> f64 {
-    pts.windows(2).map(|w| dist(w[1], w[0])).sum()
-}
-pub(crate) fn max_of(v: impl IntoIterator<Item = f64>) -> f64 {
-    // Math.max: NaN wins.
-    v.into_iter().fold(f64::NEG_INFINITY, |m, x| {
-        if x.is_nan() || m.is_nan() {
-            f64::NAN
-        } else {
-            m.max(x)
-        }
-    })
-}
-fn min_of(v: impl IntoIterator<Item = f64>) -> f64 {
-    v.into_iter().fold(f64::INFINITY, |m, x| {
-        if x.is_nan() || m.is_nan() {
-            f64::NAN
-        } else {
-            m.min(x)
-        }
-    })
-}
 pub(crate) fn centroid(pts: &[Pt]) -> Pt {
     let (mut x, mut y) = (0.0, 0.0);
     for p in pts {
@@ -133,7 +94,7 @@ pub fn small_holes(g: &Graph, holes: &[Vec<Pt>]) -> Vec<usize> {
                 area += p[0] * hole[(i + 1) % n][1] - hole[(i + 1) % n][0] * p[1];
             }
             let area = area.abs() / 2.0;
-            let far = max_of(hole.iter().map(|&q| dist(q, c)));
+            let far = math_max(hole.iter().map(|&q| dist(q, c)));
             if area < 0.5 * std::f64::consts::PI * far * far {
                 return false;
             }
@@ -265,7 +226,7 @@ pub fn split_blobs(g: &Graph) -> Option<Blobs> {
     }
     let max_r: Vec<f64> = clusters
         .iter()
-        .map(|c| max_of(c.iter().map(|d| d.r)))
+        .map(|c| math_max(c.iter().map(|d| d.r)))
         .collect();
     // The circle each thick place fills about (its disks reach its edge all round).
     let circle: Vec<(Pt, f64)> = clusters
@@ -278,7 +239,7 @@ pub fn split_blobs(g: &Graph) -> Option<Blobs> {
                 w += d.r;
             }
             let o = [x / w, y / w];
-            (o, max_of(c.iter().map(|d| dist(o, d.p) + d.r)))
+            (o, math_max(c.iter().map(|d| dist(o, d.p) + d.r)))
         })
         .collect();
     // The thick place a centerline point belongs to (-1: none).
@@ -344,7 +305,7 @@ pub fn split_blobs(g: &Graph) -> Option<Blobs> {
             let to = if j + 1 < len_b { at[j + 1] } else { -1 };
             let pts = &b.pts[i..=j];
             let r = &b.r[i..=j];
-            let len = length_of(pts);
+            let len = polyline_length(pts);
             let free = (i == 0 && deg(b.a) == 1) || (j == len_b - 1 && deg(b.b) == 1);
             let owner = if from >= 0 { from } else { to };
             // A short piece into a corner, a short neck between two sides of the same thick place, or a
@@ -403,7 +364,7 @@ pub fn split_blobs(g: &Graph) -> Option<Blobs> {
                     r: piece_r[k],
                 });
                 let w = piece_r[k] * 1.25 + 0.3;
-                cuts.push([add(p, perp(t), -w), add(p, perp(t), w)]);
+                cuts.push([add_scaled(p, perp(t), -w), add_scaled(p, perp(t), w)]);
                 nodes.push(Node { p, r: piece_r[k] });
                 nodes.len() - 1
             };
@@ -482,17 +443,17 @@ pub fn blob_shape(
     material: &Material,
 ) -> Shape {
     let disks: Vec<Disk> = blob.disks.iter().step_by(2).copied().collect();
-    let reach = max_of(disks.iter().map(|d| d.r));
+    let reach = math_max(disks.iter().map(|d| d.r));
     // Corners reach out up to about twice the widest disk beyond it (a narrow triangle further).
     let m = 3.0 * reach;
     let bx: Vec<Pt> = disks
         .iter()
-        .flat_map(|d| [add(d.p, [m, m], 1.0), add(d.p, [-m, -m], 1.0)])
+        .flat_map(|d| [add_scaled(d.p, [m, m], 1.0), add_scaled(d.p, [-m, -m], 1.0)])
         .collect();
-    let x0 = min_of(bx.iter().map(|p| p[0]));
-    let x1 = max_of(bx.iter().map(|p| p[0]));
-    let y0 = min_of(bx.iter().map(|p| p[1]));
-    let y1 = max_of(bx.iter().map(|p| p[1]));
+    let x0 = math_min(bx.iter().map(|p| p[0]));
+    let x1 = math_max(bx.iter().map(|p| p[0]));
+    let y0 = math_min(bx.iter().map(|p| p[1]));
+    let y1 = math_max(bx.iter().map(|p| p[1]));
     let within = |q: Pt| q[0] >= x0 && q[0] <= x1 && q[1] >= y0 && q[1] <= y1;
     let others: Vec<Disk> = lines
         .branches
@@ -549,10 +510,10 @@ pub fn blob_shape(
 
 /// Points on a grid over the box of `bx` that `keep` keeps.
 pub fn grid(bx: &[Pt], keep: &dyn Fn(Pt) -> bool) -> Vec<Pt> {
-    let x0 = min_of(bx.iter().map(|p| p[0]));
-    let x1 = max_of(bx.iter().map(|p| p[0]));
-    let y0 = min_of(bx.iter().map(|p| p[1]));
-    let y1 = max_of(bx.iter().map(|p| p[1]));
+    let x0 = math_min(bx.iter().map(|p| p[0]));
+    let x1 = math_max(bx.iter().map(|p| p[0]));
+    let y0 = math_min(bx.iter().map(|p| p[1]));
+    let y1 = math_max(bx.iter().map(|p| p[1]));
     let mut out = vec![];
     let mut y = y0 + STEP / 2.0;
     while y < y1 {
@@ -602,7 +563,10 @@ pub fn corners(s: &Shape, material: &dyn Fn(Pt) -> bool) -> (Vec<Pt>, Vec<Pt>) {
             let deg = dot(din, dout).clamp(-1.0, 1.0).acos() * 180.0 / std::f64::consts::PI;
             // Sticking out where the area lies between the arms: the middle of the two arm ends is on it.
             let m = [(run[a][0] + run[b][0]) / 2.0, (run[a][1] + run[b][1]) / 2.0];
-            Some((deg, material(add(run[i], norm(sub(m, run[i])), 0.15))))
+            Some((
+                deg,
+                material(add_scaled(run[i], norm(sub(m, run[i])), 0.15)),
+            ))
         };
         let ts: Vec<Option<(f64, bool)>> = (0..run.len()).map(turn).collect();
         let deg_at = |k: Option<usize>| {
@@ -751,7 +715,7 @@ fn plan_halves(
             false,
         )?);
     }
-    let mut cuts = vec![[add(notch, d, -0.3), add(tip, d, 0.3)]];
+    let mut cuts = vec![[add_scaled(notch, d, -0.3), add_scaled(tip, d, 0.3)]];
     cuts.extend(plans.iter().flat_map(|p| p.cuts.iter().copied()));
     Some(ShapePlan {
         kind: BlobKind::Pointed,
@@ -812,17 +776,17 @@ fn plan_fan(s: &Shape, tips: &[Tip], material: &dyn Fn(Pt) -> bool, max: f64) ->
     for k in 0..n {
         let f = 0.12 + (0.76 * k as f64) / (n - 1) as f64;
         let a = lo + span * f;
-        let d = norm(add(
+        let d = norm(add_scaled(
             [toward[0] * a.cos(), toward[1] * a.cos()],
             side,
             a.sin(),
         ));
-        let from = add(apex, along, w * (2.0 * f - 1.0));
+        let from = add_scaled(apex, along, w * (2.0 * f - 1.0));
         // From just outside the corner to beyond the edge opposite it, along the shape.
         let mut end = 0.0;
         let mut t = 0.1;
         while t <= reach + 0.2 {
-            if material(add(from, d, t)) {
+            if material(add_scaled(from, d, t)) {
                 end = t;
             }
             t += 0.05;
@@ -830,7 +794,7 @@ fn plan_fan(s: &Shape, tips: &[Tip], material: &dyn Fn(Pt) -> bool, max: f64) ->
         if end < 0.4 {
             continue;
         }
-        lines.push([add(from, d, -0.4), add(from, d, end + 0.4)]);
+        lines.push([add_scaled(from, d, -0.4), add_scaled(from, d, end + 0.4)]);
     }
     (lines.len() >= 3).then(|| Option_ {
         plan: ShapePlan {
@@ -898,8 +862,8 @@ fn plan_dot(s: &Shape, material: &dyn Fn(Pt) -> bool, max: f64, tips: &[Pt]) -> 
         let m = if uhi - ulo > 1.3 * (nhi - nlo) { 3 } else { 1 };
         let lines = (1..=m)
             .map(|k| {
-                let p = add(c, axis, ulo + ((uhi - ulo) * k as f64) / (m + 1) as f64);
-                [add(p, n, nlo - 0.4), add(p, n, nhi + 0.4)]
+                let p = add_scaled(c, axis, ulo + ((uhi - ulo) * k as f64) / (m + 1) as f64);
+                [add_scaled(p, n, nlo - 0.4), add_scaled(p, n, nhi + 0.4)]
             })
             .collect();
         return Some(Option_ {
@@ -965,7 +929,7 @@ fn run(material: &dyn Fn(Pt) -> bool, o: Pt, d: Pt, to: f64) -> Option<(f64, f64
     let mut b = 0.0;
     let mut t = 0.0;
     while t <= to {
-        let on = material(add(o, d, t));
+        let on = material(add_scaled(o, d, t));
         if on && a.is_none() {
             a = Some(t);
         }
@@ -1006,13 +970,16 @@ fn halves(
             d,
             (if sgn < 0.0 { -ulo } else { uhi }) + 1.0,
         )?;
-        ends.push(add(base, d, r.1));
+        ends.push(add_scaled(base, d, r.1));
         if hole {
-            cuts.push([add(base, d, r.0 - 0.3), add(base, d, r.1 + 0.3)]);
+            cuts.push([
+                add_scaled(base, d, r.0 - 0.3),
+                add_scaled(base, d, r.1 + 0.3),
+            ]);
         }
     }
     if !hole {
-        cuts.push([add(ends[0], u, -0.4), add(ends[1], u, 0.4)]);
+        cuts.push([add_scaled(ends[0], u, -0.4), add_scaled(ends[1], u, 0.4)]);
     }
     // Clear of where lines leave the shape (their cut lines lie there).
     let clear = |p: Pt| s.attach.iter().all(|a| dist(a.p, p) > a.r * 1.25 + 0.8);
@@ -1028,9 +995,9 @@ fn halves(
     };
     let mut lines = vec![];
     for f in [0.15, 0.32, 0.5, 0.68, 0.85] {
-        let p = add(base, u, ulo + (uhi - ulo) * f);
+        let p = add_scaled(base, u, ulo + (uhi - ulo) * f);
         for sgn in [-1.0, 1.0] {
-            let d = norm(add(
+            let d = norm(add_scaled(
                 [n[0] * sgn * a.sin(), n[1] * sgn * a.sin()],
                 u,
                 a.cos(),
@@ -1047,8 +1014,8 @@ fn halves(
                 continue;
             }
             lines.push([
-                add(p, d, if r.0 > 0.1 { r.0 - 0.3 } else { -0.3 }),
-                add(p, d, r.1 + 0.3),
+                add_scaled(p, d, if r.0 > 0.1 { r.0 - 0.3 } else { -0.3 }),
+                add_scaled(p, d, r.1 + 0.3),
             ]);
         }
     }

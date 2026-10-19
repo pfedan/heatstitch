@@ -2,6 +2,7 @@
 //! gaps that open where the thread pulls the fabric in, and stitches long enough to snag.
 
 use super::kinds::{FILL, SATIN};
+use crate::geom::signed_area;
 use crate::js::{hypot, round};
 use crate::pattern::{Records, STITCH};
 use std::f64::consts::PI;
@@ -184,16 +185,6 @@ fn cells_of(p: &Records, mark: &[u8], ox: f64, oy: f64, cols: usize, rows: usize
     out
 }
 
-fn ring_area(pts: &[[f64; 2]]) -> f64 {
-    let mut a = 0.0;
-    let mut j = pts.len() - 1;
-    for k in 0..pts.len() {
-        a += (pts[j][0] - pts[k][0]) * (pts[j][1] + pts[k][1]);
-        j = k;
-    }
-    a / 2.0
-}
-
 /// The fabric of the appliqués on the gap raster: per pixel inside a placement line or tack-down
 /// (records marked PATCH, each run of stitches one loop, even-odd), an owner of its own (negative:
 /// it does not pull), else 0.
@@ -224,7 +215,7 @@ fn patch_raster(p: &Records, skip: &[u8], g: Grid) -> Option<Vec<i32>> {
             pts.push(q);
             if pts.len() > 3
                 && hypot(q[0] - pts[0][0], q[1] - pts[0][1]) < 0.05
-                && ring_area(pts).abs() > LOOP_MM2
+                && signed_area(pts).abs() > LOOP_MM2
             {
                 closed = true;
             }

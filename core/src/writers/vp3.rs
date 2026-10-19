@@ -1,6 +1,6 @@
 //! Pfaff / Husqvarna Viking VP3 (src/writers/vp3.ts). Big endian.
 
-use crate::parsers::read::js_round;
+use crate::js::round;
 use crate::pattern::{COLOR_CHANGE, END, Records, STITCH, TRIM};
 
 use super::bytes::{ByteWriter, block_color, extents};
@@ -65,7 +65,7 @@ pub fn write_vp3(p: &Records) -> Vec<u8> {
     let w = max_x - min_x;
     let h = max_y - min_y;
     let records = p.cmd.iter().take_while(|&&c| c != END).count() as i64;
-    let half = |v: i64| js_round(v as f64 / 2.0) as i64 * 100;
+    let half = |v: i64| round(v as f64 / 2.0) as i64 * 100;
 
     let mut out = ByteWriter::new();
     out.ascii("%vsm%");

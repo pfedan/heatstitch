@@ -9,9 +9,9 @@
 use serde::{Deserialize, Serialize};
 
 use super::region::{Region, outline};
-use crate::geom::Pt;
+use crate::geom::{Pt, bounds_of, polyline_length, twice_area};
 use crate::image::edt::distance_to_seeds;
-use crate::js::{dist, round};
+use crate::js::{dist, round, sign};
 use crate::shape::path::inside_poly;
 
 /// Which side the copies lie on. Closed lines: outside, inside or both. Open lines: `Out` is the
@@ -44,25 +44,6 @@ const MIN_PIECE: f64 = 1.5;
 const MAX_PIXELS: f64 = 3e6;
 /// Copies nearer the line than this (mm) lie on it.
 const ON_LINE: f64 = 0.05;
-
-fn length_of(l: &[Pt]) -> f64 {
-    let mut s = 0.0;
-    for i in 1..l.len() {
-        s += dist(l[i - 1], l[i]);
-    }
-    s
-}
-
-/// Math.sign: 0 stays 0, NaN stays NaN.
-fn sign(x: f64) -> f64 {
-    if x > 0.0 {
-        1.0
-    } else if x < 0.0 {
-        -1.0
-    } else {
-        x
-    }
-}
 
 /// A line to sew: `back` when it runs against the drawn direction of the line it echoes (what lies
 /// to one side of it stays there).
@@ -137,7 +118,7 @@ pub fn echo_lines(
     let local: Vec<Pt> = line.iter().map(|q| [q[0] - ox, q[1] - oy]).collect();
     let field = (gap >= ON_LINE).then(|| distance_field(&local, reach, px));
     let mut out = Vec::new();
-    let turn = if closed { sign(area(line)) } else { 0.0 };
+    let turn = if closed { sign(twice_area(line)) } else { 0.0 };
     let mut at: Option<Pt> = None;
     for &k in &levels {
         // No gap: each copy lies on the line.
@@ -148,7 +129,7 @@ pub fn echo_lines(
                 .into_iter()
                 .map(|(pl, pc)| {
                     let l: Vec<Pt> = pl.iter().map(|q| [q[0] + ox, q[1] + oy]).collect();
-                    let back = pc && sign(area(&l)) != turn;
+                    let back = pc && sign(twice_area(&l)) != turn;
                     EchoLine {
                         line: l,
                         closed: pc,
@@ -172,36 +153,14 @@ pub fn echo_lines(
     out
 }
 
-/// Twice the signed area of a loop: its sign tells which way round it goes.
-fn area(l: &[Pt]) -> f64 {
-    let mut a = 0.0;
-    for i in 1..l.len() {
-        a += l[i - 1][0] * l[i][1] - l[i][0] * l[i - 1][1];
-    }
-    a
-}
-
 struct Field {
     r: Region,
-}
-
-/// The box around the points of `line`.
-fn box_of(line: &[Pt]) -> (f64, f64, f64, f64) {
-    let (mut min_x, mut min_y) = (f64::INFINITY, f64::INFINITY);
-    let (mut max_x, mut max_y) = (f64::NEG_INFINITY, f64::NEG_INFINITY);
-    for &[x, y] in line {
-        min_x = min_x.min(x);
-        min_y = min_y.min(y);
-        max_x = max_x.max(x);
-        max_y = max_y.max(y);
-    }
-    (min_x, min_y, max_x, max_y)
 }
 
 /// The pixel size (mm) of the distance field out to `reach` mm around the line: fine enough for
 /// copies `gap` apart.
 fn pixel_of(line: &[Pt], reach: f64, gap: f64) -> f64 {
-    let (min_x, min_y, max_x, max_y) = box_of(line);
+    let [min_x, min_y, max_x, max_y] = bounds_of(line);
     let span = (max_x - min_x + 2.0 * reach) * (max_y - min_y + 2.0 * reach);
     // A few pixels from copy to copy at least, so near copies stay smooth.
     0.1f64
@@ -211,7 +170,7 @@ fn pixel_of(line: &[Pt], reach: f64, gap: f64) -> f64 {
 
 /// Distance (mm) of each pixel `px` mm wide to the line, out to `reach` mm around it (see pixel_of).
 fn distance_field(line: &[Pt], reach: f64, px: f64) -> Field {
-    let (min_x, min_y, max_x, max_y) = box_of(line);
+    let [min_x, min_y, max_x, max_y] = bounds_of(line);
     let x0 = ((min_x - reach) / px).floor() - 2.0;
     let y0 = ((min_y - reach) / px).floor() - 2.0;
     let w = (((max_x + reach) / px).ceil() + 2.0 - x0) as usize;
@@ -324,7 +283,7 @@ fn copies_at(f: &Field, line: &[Pt], closed: bool, level: f64) -> Vec<(Vec<Pt>, 
         let want = level > 0.0;
         return loops
             .into_iter()
-            .filter(|l| length_of(l) >= MIN_PIECE)
+            .filter(|l| polyline_length(l) >= MIN_PIECE)
             .filter(|l| {
                 // A ring is outside or inside the line as a whole; its middle point tells.
                 let q = l[l.len() / 2];
@@ -354,7 +313,7 @@ fn copies_at(f: &Field, line: &[Pt], closed: bool, level: f64) -> Vec<(Vec<Pt>, 
         let mut pts: Vec<Pt> = Vec::new();
         let mut ss: Vec<f64> = Vec::new();
         let mut flush = |pts: &mut Vec<Pt>, ss: &mut Vec<f64>| {
-            if pts.len() >= 2 && length_of(pts) >= MIN_PIECE {
+            if pts.len() >= 2 && polyline_length(pts) >= MIN_PIECE {
                 // Along the line's direction.
                 let forward = ss[ss.len() - 1] >= ss[0];
                 let mut p = std::mem::take(pts);
@@ -462,7 +421,7 @@ mod tests {
         assert_eq!(ks, vec![-2, -1, 0, 1, 2]);
         // The outer copy 2 mm out: about 40 + 2π·2 long.
         let outer = &lines[4];
-        assert!((length_of(&outer.line) - (40.0 + 4.0 * std::f64::consts::PI)).abs() < 1.0);
+        assert!((polyline_length(&outer.line) - (40.0 + 4.0 * std::f64::consts::PI)).abs() < 1.0);
     }
 
     #[test]

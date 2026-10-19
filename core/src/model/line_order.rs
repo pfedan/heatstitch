@@ -5,7 +5,10 @@
 use serde::{Deserialize, Serialize};
 
 use super::restitch::{Rails, SectionStep, reversed_rails};
-use crate::digitize::rungs::{Rung, cumulative};
+use super::truthy;
+use crate::digitize::rungs::Rung;
+use crate::geom::cumulative;
+use crate::js::clamp;
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct LineOrder {
@@ -31,21 +34,12 @@ pub struct LineOrder {
     pub turned: bool,
 }
 
-fn truthy<'de, D: serde::Deserializer<'de>>(d: D) -> Result<bool, D::Error> {
-    Ok(Option::<bool>::deserialize(d)?.unwrap_or(false))
-}
-
 /// `o` turned round: sewn from the other end of its path.
 pub fn turned_order(o: &LineOrder) -> LineOrder {
     LineOrder {
         turned: !o.turned,
         ..o.clone()
     }
-}
-
-/// As Math.min(1, Math.max(0, v)).
-fn clamp(v: f64) -> f64 {
-    if v.is_nan() { v } else { v.clamp(0.0, 1.0) }
 }
 
 /// Each rail's length, at least 1e-6.
@@ -64,14 +58,15 @@ pub fn with_order(r: Rails, order: Option<&LineOrder>) -> Rails {
     };
     let base = if order.turned { reversed_rails(&r) } else { r };
     let (la, lb) = lengths(&base);
-    let at = |g: &Rung| -> Rung { [clamp(g[0]) * la, clamp(g[1]) * lb] };
+    let at = |g: &Rung| -> Rung { [clamp(g[0], 0.0, 1.0) * la, clamp(g[1], 0.0, 1.0) * lb] };
     let mut out = Rails::new(base.left, base.right);
     out.rungs = order.rungs.as_ref().map(|v| v.iter().map(at).collect());
     out.cuts = order.cuts.as_ref().map(|v| v.iter().map(at).collect());
-    out.spacings = order
-        .spacings
-        .as_ref()
-        .map(|v| v.iter().map(|&[s, x]| [clamp(s) * la, x]).collect());
+    out.spacings = order.spacings.as_ref().map(|v| {
+        v.iter()
+            .map(|&[s, x]| [clamp(s, 0.0, 1.0) * la, x])
+            .collect()
+    });
     // A plan only holds while the line has as many sections as it has steps (see Rails.plan).
     if let Some(plan) = &order.plan
         && plan.len() == order.cuts.as_ref().map_or(0, Vec::len) + 1

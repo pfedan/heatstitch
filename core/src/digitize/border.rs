@@ -6,21 +6,13 @@
 
 use super::region::{Region, outline, sample, signed_field};
 use super::run::run_stitch;
-use crate::geom::Pt;
+use crate::geom::{Pt, polyline_length};
 use crate::js::dist;
 
 /// Stitch length of a running or triple border (mm).
 pub const BORDER_STITCH: f64 = 2.5;
 /// Loops shorter than this are left without a border (mm).
 const MIN_LOOP: f64 = 1.5;
-
-fn length_of(l: &[Pt]) -> f64 {
-    let mut s = 0.0;
-    for i in 1..l.len() {
-        s += dist(l[i - 1], l[i]);
-    }
-    s
-}
 
 /// The edge of the area as closed lines (first point repeated at the end), long enough to sew;
 /// `offset` mm outside it (inside when negative).
@@ -34,7 +26,7 @@ pub fn border_loops(r: &Region, offset: f64) -> Vec<Vec<Pt>> {
     };
     outline(f, offset, &f.sdf_base)
         .into_iter()
-        .filter(|l| length_of(l) >= MIN_LOOP)
+        .filter(|l| polyline_length(l) >= MIN_LOOP)
         .collect()
 }
 
@@ -341,7 +333,7 @@ pub fn kept_lines(lp: &[Pt], keep: impl Fn(Pt) -> bool) -> Vec<KeptLine> {
                 }
             }
         })
-        .filter(|l| l.closed || length_of(&l.line) >= MIN_LOOP)
+        .filter(|l| l.closed || polyline_length(&l.line) >= MIN_LOOP)
         .collect()
 }
 
@@ -358,13 +350,13 @@ pub fn kept_open(line: &[Pt], keep: impl Fn(Pt) -> bool) -> Vec<Vec<Pt>> {
         if keep(q) {
             piece.push(q);
         } else {
-            if piece.len() > 1 && length_of(&piece) >= MIN_LOOP {
+            if piece.len() > 1 && polyline_length(&piece) >= MIN_LOOP {
                 out.push(std::mem::take(&mut piece));
             }
             piece.clear();
         }
     }
-    if piece.len() > 1 && length_of(&piece) >= MIN_LOOP {
+    if piece.len() > 1 && polyline_length(&piece) >= MIN_LOOP {
         out.push(piece);
     }
     out
@@ -387,7 +379,7 @@ pub fn kept_rails(
             if b - a == n {
                 return Some(rails.clone());
             }
-            (length_of(&span(&center, n, a, b)) >= MIN_LOOP).then(|| Rails {
+            (polyline_length(&span(&center, n, a, b)) >= MIN_LOOP).then(|| Rails {
                 left: span(&rails.left, n, a, b),
                 right: span(&rails.right, n, a, b),
             })
@@ -406,7 +398,7 @@ mod tests {
         let loops = border_loops(&r, 0.0);
         assert_eq!(loops.len(), 1);
         let l = &loops[0];
-        assert!((length_of(l) - 2.0 * std::f64::consts::PI * 4.0).abs() < 0.5);
+        assert!((polyline_length(l) - 2.0 * std::f64::consts::PI * 4.0).abs() < 0.5);
         let rails = border_rails(&r, l, 2.0, 0.0);
         assert_eq!(rails.left.len(), rails.right.len());
         let ordered = order_loops(&loops, [6.0, 10.0]);

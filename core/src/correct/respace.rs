@@ -11,8 +11,8 @@
 
 use super::structure::{stitch_runs, turning_points};
 use super::thin::TURN_COS;
-use crate::geom::Pt;
-use crate::js::{hypot, round};
+use crate::geom::{Pt, cumulative};
+use crate::js::{hypot, median, round};
 use crate::pattern::{Records, STITCH};
 use crate::validation::satin::{MIN_LEN, satin_mask};
 
@@ -39,10 +39,6 @@ pub struct Row {
     pub b: usize,
 }
 
-fn dist(p: &Records, a: usize, b: usize) -> f64 {
-    hypot((p.x[b] - p.x[a]) as f64, (p.y[b] - p.y[a]) as f64)
-}
-
 /// `l || 1` for a length.
 fn or_one(l: f64) -> f64 {
     if l == 0.0 || l.is_nan() { 1.0 } else { l }
@@ -53,13 +49,13 @@ pub fn fill_sweeps(p: &Records, start: usize, end: usize, mask: &[u8]) -> Vec<Ve
     let t = turning_points(p, start, end, TURN_COS);
     let mut sweeps = vec![];
     let is_row = |k: usize| {
-        if k + 1 >= t.len() || dist(p, t[k], t[k + 1]) < ROW_MIN {
+        if k + 1 >= t.len() || p.dist(t[k], t[k + 1]) < ROW_MIN {
             return false;
         }
         (t[k] + 1..=t[k + 1]).any(|i| mask[i] == 0)
     };
     let unit = |r: Row| {
-        let l = or_one(dist(p, r.a, r.b));
+        let l = or_one(p.dist(r.a, r.b));
         [
             (p.x[r.b] - p.x[r.a]) as f64 / l,
             (p.y[r.b] - p.y[r.a]) as f64 / l,
@@ -105,7 +101,7 @@ pub fn fill_sweeps(p: &Records, start: usize, end: usize, mask: &[u8]) -> Vec<Ve
         // Next row: directly, or after one short connector.
         if is_row(k + 1) {
             k += 1;
-        } else if k + 2 < t.len() && dist(p, t[k + 1], t[k + 2]) <= CONNECTOR_MAX && is_row(k + 2) {
+        } else if k + 2 < t.len() && p.dist(t[k + 1], t[k + 2]) <= CONNECTOR_MAX && is_row(k + 2) {
             k += 2;
         } else {
             flush(&mut cur, &mut sweeps);
@@ -114,16 +110,6 @@ pub fn fill_sweeps(p: &Records, start: usize, end: usize, mask: &[u8]) -> Vec<Ve
     }
     flush(&mut cur, &mut sweeps);
     sweeps
-}
-
-/// `s[s.length >> 1]` of the sorted values, 0 for none.
-fn median(v: &[f64]) -> f64 {
-    if v.is_empty() {
-        return 0.0;
-    }
-    let mut s = v.to_vec();
-    s.sort_by(|a, b| a.total_cmp(b));
-    s[s.len() >> 1]
 }
 
 /// Linear interpolation along a chain of (v, x, y) points sorted by v.
@@ -168,18 +154,18 @@ pub struct Rebuilt {
 /// sweep is not regular enough to rebuild or the gain would be too small.
 pub fn rebuild_sweep(p: &Records, rows: &[Row], need: f64, max_spacing: f64) -> Option<Rebuilt> {
     let r0 = rows[0];
-    let lens: Vec<f64> = rows.iter().map(|r| dist(p, r.a, r.b)).collect();
+    let lens: Vec<f64> = rows.iter().map(|r| p.dist(r.a, r.b)).collect();
     if median(&lens) < MIN_WIDTH {
         return None;
     }
     // Row direction from the longest row; short rows near tips are dominated by their ends.
     let mut rf = rows[0];
     for &r in &rows[1..] {
-        if dist(p, r.a, r.b) > dist(p, rf.a, rf.b) {
+        if p.dist(r.a, r.b) > p.dist(rf.a, rf.b) {
             rf = r;
         }
     }
-    let l0 = dist(p, rf.a, rf.b);
+    let l0 = p.dist(rf.a, rf.b);
     let ux = (p.x[rf.b] - p.x[rf.a]) as f64 / l0;
     let uy = (p.y[rf.b] - p.y[rf.a]) as f64 / l0;
     let nx = -uy;
@@ -242,7 +228,7 @@ pub fn rebuild_sweep(p: &Records, rows: &[Row], need: f64, max_spacing: f64) -> 
         let mut i = r.a;
         while i != r.b {
             let j = if up { i + 1 } else { i - 1 };
-            lens.push(dist(p, i, j));
+            lens.push(p.dist(i, j));
             i = j;
         }
         if r.a.abs_diff(r.b) > 1 {
@@ -251,8 +237,8 @@ pub fn rebuild_sweep(p: &Records, rows: &[Row], need: f64, max_spacing: f64) -> 
             } else {
                 (r.a - 1, r.b + 1)
             };
-            ends.push(dist(p, r.a, na));
-            ends.push(dist(p, r.b, nb));
+            ends.push(p.dist(r.a, na));
+            ends.push(p.dist(r.b, nb));
         }
     }
     sort_chain(&mut low);
@@ -441,10 +427,7 @@ fn splice(p: &Records, edits: &[Edit]) -> (Vec<i32>, Vec<i32>, Vec<u8>) {
 
 /// Resamples a polyline at `n` points evenly spaced by arc length (first and last kept).
 fn resample(pts: &[Pt], n: usize) -> Vec<Pt> {
-    let mut cum = vec![0.0];
-    for i in 1..pts.len() {
-        cum.push(cum[i - 1] + hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
-    }
+    let cum = cumulative(pts);
     let total = cum[cum.len() - 1];
     let mut out = vec![];
     let mut j = 1;

@@ -6,8 +6,9 @@
 use serde::Deserialize;
 
 use super::covers::{Cover, cut_away};
-use super::restitch::{nan, yes};
+use super::restitch::nan;
 use super::runs::Run;
+use super::truthy;
 use crate::digitize::deco::{
     self, CrossGrid, CrossKind, Figure, GridKind, Motif, OpenParams, Texture, ZigzagRows,
     region_box,
@@ -20,7 +21,7 @@ use crate::digitize::region::{Region, expand_region, signed_field};
 use crate::digitize::spiral::spiral_fill;
 use crate::geom::Pt;
 use crate::image::edt::distance_inside;
-use crate::js::hypot;
+use crate::js::{clamp, hypot, to_int32, yes};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -57,10 +58,6 @@ impl FillPattern {
         use FillPattern::*;
         matches!(self, Waves | Grain | Rays | Swirl | Circles)
     }
-}
-
-fn truthy<'de, D: serde::Deserializer<'de>>(d: D) -> Result<bool, D::Error> {
-    Ok(Option::<bool>::deserialize(d)?.unwrap_or(false))
 }
 
 /// DecoSettings of restitch.ts (the blend it may name is not needed to sew it).
@@ -230,11 +227,6 @@ pub const ROUGH_LONG: f64 = 1.5;
 /// Only points between stitches at least this long move (mm).
 const ROUGH_MIN: f64 = 0.8;
 
-/// As Math.min(hi, Math.max(lo, v)), NaN kept.
-fn clamp_js(v: f64, lo: f64, hi: f64) -> f64 {
-    if v.is_nan() { v } else { v.clamp(lo, hi) }
-}
-
 /// The areas together, as one region on the finest grid among them (unionRegion in restitch.ts).
 pub fn union_region(rs: &[&Region]) -> Option<Region> {
     match rs.len() {
@@ -297,21 +289,13 @@ pub fn union_region(rs: &[&Region]) -> Option<Region> {
     })
 }
 
-/// JavaScript's ToInt32.
-fn to_i32(x: f64) -> i32 {
-    if !x.is_finite() {
-        return 0;
-    }
-    x.trunc().rem_euclid(4294967296.0) as u32 as i32
-}
-
 /// A repeatable number from 0 to 1 for point `i` and `seed` (roughHash in restitch.ts).
 fn rough_hash(i: usize, seed: f64) -> f64 {
     let imul = |a: i32, b: i32| a.wrapping_mul(b);
     let mut h = imul(
-        to_i32(i as f64) ^ 0x9e3779b9u32 as i32,
+        to_int32(i as f64) ^ 0x9e3779b9u32 as i32,
         0x85ebca6bu32 as i32,
-    ) ^ imul(to_i32(seed + f64::from(0x27d4eb2f)), 0xc2b2ae35u32 as i32);
+    ) ^ imul(to_int32(seed + f64::from(0x27d4eb2f)), 0xc2b2ae35u32 as i32);
     h = imul(h ^ ((h as u32) >> 16) as i32, 0x7feb352d);
     h = imul(h ^ ((h as u32) >> 15) as i32, 0x846ca68bu32 as i32);
     f64::from((h ^ ((h as u32) >> 16) as i32) as u32) / 4294967296.0
@@ -443,7 +427,7 @@ pub fn cross_grid_of(s: &FillSettings, whole: Option<&Region>) -> Option<CrossGr
         return None;
     }
     let (def, [lo, hi]) = open_size(FillPattern::Cross);
-    let size = clamp_js(d.size.unwrap_or(def), lo, hi);
+    let size = clamp(d.size.unwrap_or(def), lo, hi);
     let angle = d.angle.unwrap_or(0.0);
     match whole {
         Some(w) if d.own_grid => {
@@ -467,7 +451,7 @@ fn open_fill(r: &Region, s: &FillSettings, fp: &FillParams, start: Pt) -> Option
     let d = s.deco.clone().unwrap_or_default();
     let (def, [lo, hi]) = open_size(s.pattern);
     let p = OpenParams {
-        size: clamp_js(d.size.unwrap_or(def), lo, hi),
+        size: clamp(d.size.unwrap_or(def), lo, hi),
         stitch: s.stitch.min(3.0),
         seed: d.seed.unwrap_or(1.0),
         triple: d.triple.unwrap_or(false),
@@ -540,7 +524,7 @@ fn looks(d: Option<&DecoSettings>, fp: &mut FillParams) {
         let [lo, hi] = TEXTURE_SIZE_RANGE;
         fp.texture = Some(TextureSpec {
             kind: t,
-            size: clamp_js(d.texture_size.unwrap_or(TEXTURE_SIZE), lo, hi),
+            size: clamp(d.texture_size.unwrap_or(TEXTURE_SIZE), lo, hi),
         });
     }
 }
@@ -651,7 +635,7 @@ pub fn fill_runs(area: &Region, s: &FillSettings, way: &FillWay) -> Option<NewFi
         }
     };
     let mut res = res?;
-    let rough = clamp_js(s.rough.unwrap_or(0.0), 0.0, 1.0);
+    let rough = clamp(s.rough.unwrap_or(0.0), 0.0, 1.0);
     if yes(Some(rough)) && !s.pattern.is_open() {
         roughen_runs(
             &mut res.runs,
@@ -792,8 +776,6 @@ pub(crate) mod tests {
     #[test]
     fn hashes_as_javascript_does() {
         // Math.imul and the unsigned shifts of roughHash in restitch.ts.
-        assert_eq!(to_i32(4294967297.0), 1);
-        assert_eq!(to_i32(-1.5), -1);
         let h = rough_hash(7, 3.0);
         assert!((0.0..1.0).contains(&h));
         assert_ne!(h, rough_hash(8, 3.0));

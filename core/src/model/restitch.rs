@@ -8,18 +8,19 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 use super::runs::Run;
+use super::truthy;
 use crate::digitize::run::run_stitch;
 use crate::digitize::rungs::{
-    InsideTest, Rung, column_from_rungs, cumulative, inside, point_at, project, reversed_rungs,
-    strip_of_loop, tidy_rungs,
+    InsideTest, Rung, column_from_rungs, project, reversed_rungs, strip_of_loop, tidy_rungs,
 };
 use crate::digitize::satin::{
     Column, Pair, ROUGH_IN, SatinParams, UnderInset, UnderlayKind, e_stitches, fringed_column,
     pairs, satin_stitches, underlay_of,
 };
-use crate::geom::Pt;
-use crate::js::{dist, hypot};
+use crate::geom::{Pt, bounds_of, cumulative, lerp, mid, point_at, to_segment};
+use crate::js::{Random, dist, yes};
 use crate::material::rules::SATIN_SPLIT_MM;
+use crate::shape::path::inside_poly;
 
 /// One section of a column in the order its satin is sewn: which, turned round, trimmed before.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -70,11 +71,6 @@ impl Rails {
 /// A number JavaScript would read from a missing field: undefined, NaN in arithmetic.
 pub(crate) fn nan() -> f64 {
     f64::NAN
-}
-
-/// A boolean field as a condition reads it: absent, null or false is false.
-fn truthy<'de, D: serde::Deserializer<'de>>(d: D) -> Result<bool, D::Error> {
-    Ok(Option::<bool>::deserialize(d)?.unwrap_or(false))
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -175,22 +171,6 @@ impl SatinSettings {
     fn is_e(&self) -> bool {
         self.kind == Some(SatinType::E)
     }
-}
-
-/// A number as JavaScript tests it in a condition: not 0 and not NaN.
-#[inline]
-pub(crate) fn yes(x: Option<f64>) -> bool {
-    x.is_some_and(|v| v != 0.0 && !v.is_nan())
-}
-
-#[inline]
-fn lerp(a: Pt, b: Pt, t: f64) -> Pt {
-    [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]
-}
-
-#[inline]
-fn mid(a: Pt, b: Pt) -> Pt {
-    [(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0]
 }
 
 fn last<T: Copy>(v: &[T]) -> T {
@@ -451,7 +431,7 @@ pub fn section_loops(r: &Rails) -> Vec<SectionLoop> {
 /// The section a free rung lies in (its middle inside the section's outline).
 pub fn section_of_rung(loops: &[SectionLoop], [a, b]: [Pt; 2]) -> Option<usize> {
     let m = mid(a, b);
-    loops.iter().position(|l| inside(&l.ring, m))
+    loops.iter().position(|l| inside_poly(&l.ring, m))
 }
 
 /// A section with free rungs as a column of its own (see spanSection in restitch.ts).
@@ -716,32 +696,6 @@ fn outline_of(r: &Rails) -> Vec<Pt> {
     out
 }
 
-/// The bounding box of an outline, [x0, y0, x1, y1].
-fn box_of(o: &[Pt]) -> [f64; 4] {
-    let mut b = [
-        f64::INFINITY,
-        f64::INFINITY,
-        f64::NEG_INFINITY,
-        f64::NEG_INFINITY,
-    ];
-    for &[x, y] in o {
-        b = [b[0].min(x), b[1].min(y), b[2].max(x), b[3].max(y)];
-    }
-    b
-}
-
-/// Distance from q to the segment from a to b.
-fn to_segment(q: Pt, a: Pt, b: Pt) -> f64 {
-    let v = [b[0] - a[0], b[1] - a[1]];
-    let l2 = v[0] * v[0] + v[1] * v[1];
-    let t = if l2 != 0.0 {
-        (((q[0] - a[0]) * v[0] + (q[1] - a[1]) * v[1]) / l2).clamp(0.0, 1.0)
-    } else {
-        0.0
-    };
-    hypot(q[0] - a[0] - v[0] * t, q[1] - a[1] - v[1] * t)
-}
-
 /// Whether the end `q` touches outline `o` (its box and `PUSH_TOUCH` around it).
 fn touches(q: Pt, o: &[Pt], b: &[f64; 4]) -> bool {
     if q[0] < b[0] - PUSH_TOUCH
@@ -751,7 +705,7 @@ fn touches(q: Pt, o: &[Pt], b: &[f64; 4]) -> bool {
     {
         return false;
     }
-    if inside(o, q) {
+    if inside_poly(o, q) {
         return true;
     }
     (1..o.len()).any(|i| to_segment(q, o[i - 1], o[i]) < PUSH_TOUCH)
@@ -764,7 +718,7 @@ pub fn push_ends(rails: &[Rails], s: &SatinSettings) -> Vec<PushEnd> {
         return vec![];
     }
     let outlines: Vec<Vec<Pt>> = rails.iter().map(outline_of).collect();
-    let boxes: Vec<[f64; 4]> = outlines.iter().map(|o| box_of(o)).collect();
+    let boxes: Vec<[f64; 4]> = outlines.iter().map(|o| bounds_of(o)).collect();
     let pull = (s.edge + s.edge_b.unwrap_or(s.edge)) / 2.0;
     let mut out = vec![];
     for (k, r) in rails.iter().enumerate() {
@@ -807,7 +761,7 @@ pub fn seam_ends(rails: &[Rails], s: &SatinSettings) -> Vec<PushEnd> {
         return vec![];
     }
     let outlines: Vec<Vec<Pt>> = rails.iter().map(outline_of).collect();
-    let boxes: Vec<[f64; 4]> = outlines.iter().map(|o| box_of(o)).collect();
+    let boxes: Vec<[f64; 4]> = outlines.iter().map(|o| bounds_of(o)).collect();
     let mut out = vec![];
     for (k, r) in rails.iter().enumerate() {
         if r.left.len() < 2 || r.right.len() < 2 {
@@ -1454,7 +1408,7 @@ pub fn travel_of(cols: &[Rails], s: &SatinSettings) -> (f64, f64) {
                 for j in 0..n {
                     let q = lerp(way[i - 1], way[i], (j as f64 + 0.5) / n as f64);
                     // Under a column sewn later (k itself is sewn right after the way, so it covers it too).
-                    if (k..outlines.len()).any(|c| inside(&outlines[c], q)) {
+                    if (k..outlines.len()).any(|c| inside_poly(&outlines[c], q)) {
                         hidden += l / n as f64;
                     } else {
                         visible += l / n as f64;
@@ -2044,16 +1998,8 @@ fn searched_chain(n: usize, cx: &mut ChainCx, later: &mut Later) -> Vec<Step> {
     sr.search();
     let mut best = (sr.total(), sr.cs.clone(), sr.ws.clone());
     // Shaken up: from the best so far, two stretches swapped and a few columns sewn another way.
-    let mut seed: u32 = 0x9e37_79b9;
-    let mut random = || {
-        seed = seed.wrapping_add(0x6d2b_79f5);
-        let x0 = seed;
-        let mut x = ((x0 ^ (x0 >> 15)) as i32).wrapping_mul((x0 | 1) as i32);
-        let xu = x as u32;
-        x ^= x.wrapping_add(((xu ^ (xu >> 7)) as i32).wrapping_mul(x | 61));
-        let xu = x as u32;
-        (xu ^ (xu >> 14)) as f64 / 4_294_967_296.0
-    };
+    let mut rnd = Random::new(f64::from(0x9e37_79b9u32));
+    let mut random = || rnd.next();
     for _ in 0..SHAKES {
         sr.cs.copy_from_slice(&best.1);
         sr.ws.copy_from_slice(&best.2);
@@ -2313,7 +2259,7 @@ fn nearest_along(line: &[Pt], cum: &[f64], q: Pt) -> f64 {
 
 impl WayModel {
     fn new(outlines: Vec<Vec<Pt>>, columns: &[Column]) -> WayModel {
-        let boxes: Vec<[f64; 4]> = outlines.iter().map(|o| box_of(o)).collect();
+        let boxes: Vec<[f64; 4]> = outlines.iter().map(|o| bounds_of(o)).collect();
         let tests = outlines
             .iter()
             .zip(&boxes)

@@ -10,14 +10,10 @@
 
 use std::sync::OnceLock;
 
+use crate::js::{hypot, round};
+
 pub type Lab = [f64; 3];
 pub type Rgb = [u8; 3];
-
-/// `Math.round` of JavaScript: halves round up (towards +infinity), not away from zero.
-pub fn js_round(v: f64) -> f64 {
-    let f = v.floor();
-    if v - f >= 0.5 { f + 1.0 } else { f }
-}
 
 fn to_linear(c: f64) -> f64 {
     let v = c / 255.0;
@@ -34,7 +30,7 @@ fn from_linear(v: f64) -> u8 {
     } else {
         1.055 * v.powf(1.0 / 2.4) - 0.055
     };
-    js_round(c * 255.0).clamp(0.0, 255.0) as u8
+    round(c * 255.0).clamp(0.0, 255.0) as u8
 }
 
 // D65 reference white.
@@ -108,20 +104,20 @@ fn hue(b: f64, a: f64) -> f64 {
     if h < 0.0 { h + 360.0 } else { h }
 }
 
-/// CIEDE2000 color difference with kL = kC = kH = 1.
+/// CIEDE2000 color difference with kL = kC = kH = 1, with `Math.hypot` as JavaScript has it.
 pub fn delta_e2000(l1: &Lab, l2: &Lab) -> f64 {
     let [ll1, a1, b1] = *l1;
     let [ll2, a2, b2] = *l2;
-    let c1 = a1.hypot(b1);
-    let c2 = a2.hypot(b2);
+    let c1 = hypot(a1, b1);
+    let c2 = hypot(a2, b2);
     let cm = (c1 + c2) / 2.0;
     let p25 = 25f64.powf(7.0);
     let cm7 = cm.powf(7.0);
     let g = 0.5 * (1.0 - (cm7 / (cm7 + p25)).sqrt());
     let a1p = (1.0 + g) * a1;
     let a2p = (1.0 + g) * a2;
-    let c1p = a1p.hypot(b1);
-    let c2p = a2p.hypot(b2);
+    let c1p = hypot(a1p, b1);
+    let c2p = hypot(a2p, b2);
     let h1p = hue(b1, a1p);
     let h2p = hue(b2, a2p);
     let dlp = ll2 - ll1;
@@ -152,7 +148,8 @@ pub fn delta_e2000(l1: &Lab, l2: &Lab) -> f64 {
         + 0.24 * (2.0 * hpm * RAD).cos()
         + 0.32 * ((3.0 * hpm + 6.0) * RAD).cos()
         - 0.2 * ((4.0 * hpm - 63.0) * RAD).cos();
-    let d_theta = 30.0 * (-((hpm - 275.0) / 25.0).powf(2.0)).exp();
+    let q = (hpm - 275.0) / 25.0;
+    let d_theta = 30.0 * (-(q * q)).exp();
     let cpm7 = cpm.powf(7.0);
     let rc = 2.0 * (cpm7 / (cpm7 + p25)).sqrt();
     let lm50 = (lpm - 50.0) * (lpm - 50.0);
@@ -211,12 +208,5 @@ mod tests {
         for (a, b, want) in pairs {
             assert!((delta_e2000(&a, &b) - want).abs() < 1e-4, "{a:?} {b:?}");
         }
-    }
-
-    #[test]
-    fn js_round_rounds_halves_up() {
-        assert_eq!(js_round(-2.5), -2.0);
-        assert_eq!(js_round(2.5), 3.0);
-        assert_eq!(js_round(-2.6), -3.0);
     }
 }

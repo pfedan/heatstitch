@@ -1,6 +1,6 @@
 //! Running stitch along a line: simplification, even stitches and shorter ones on curves.
 
-use crate::geom::Pt;
+use crate::geom::{Pt, to_segment};
 use crate::js::{dist, hypot};
 
 /// How far a stitch may lie from the line it follows by default (mm): a straight stitch cuts every
@@ -52,19 +52,6 @@ pub fn simplify(pts: &[Pt], tol: f64) -> Vec<Pt> {
         .filter(|(_, k)| **k)
         .map(|(p, _)| *p)
         .collect()
-}
-
-/// Distance from p to the segment a-b.
-fn to_segment(p: Pt, a: Pt, b: Pt) -> f64 {
-    let dx = b[0] - a[0];
-    let dy = b[1] - a[1];
-    let l2 = dx * dx + dy * dy;
-    let t = if l2 > 0.0 {
-        (((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2).clamp(0.0, 1.0)
-    } else {
-        0.0
-    };
-    hypot(p[0] - a[0] - dx * t, p[1] - a[1] - dy * t)
 }
 
 /// A polyline with its arc length, for points at a distance along it.

@@ -267,55 +267,6 @@ pub fn knock_out(base: &Region, covers: &[Cover], overlap: f64) -> (bool, Option
     )
 }
 
-/// A mask in its window.
-pub struct Mask<'a> {
-    pub x0: i32,
-    pub y0: i32,
-    pub w: usize,
-    pub h: usize,
-    pub mask: &'a [u8],
-}
-
-/// Pixels two masks share, as a count.
-pub fn shared_pixels(a: &Mask, b: &Mask) -> usize {
-    let fx = a.x0.max(b.x0) as i64;
-    let tx = (a.x0 as i64 + a.w as i64).min(b.x0 as i64 + b.w as i64);
-    let fy = a.y0.max(b.y0) as i64;
-    let ty = (a.y0 as i64 + a.h as i64).min(b.y0 as i64 + b.h as i64);
-    let mut n = 0;
-    for y in fy..ty {
-        for x in fx..tx {
-            let ia = (y - a.y0 as i64) * a.w as i64 + x - a.x0 as i64;
-            let ib = (y - b.y0 as i64) * b.w as i64 + x - b.x0 as i64;
-            if a.mask[ia as usize] != 0 && b.mask[ib as usize] != 0 {
-                n += 1;
-            }
-        }
-    }
-    n
-}
-
-/// Masks of the same pixel size as one region.
-pub fn union_of(rs: &[Mask], px_mm: f64) -> Option<Region> {
-    let x0 = rs.iter().map(|r| r.x0).min()?;
-    let y0 = rs.iter().map(|r| r.y0).min()?;
-    let w = (rs.iter().map(|r| r.x0 as i64 + r.w as i64).max()? - x0 as i64) as usize;
-    let h = (rs.iter().map(|r| r.y0 as i64 + r.h as i64).max()? - y0 as i64) as usize;
-    let mut mask = vec![0u8; w * h];
-    for r in rs {
-        for y in 0..r.h {
-            for x in 0..r.w {
-                if r.mask[y * r.w + x] != 0 {
-                    let i = (y as i64 + r.y0 as i64 - y0 as i64) as usize * w
-                        + (x as i64 + r.x0 as i64 - x0 as i64) as usize;
-                    mask[i] = 1;
-                }
-            }
-        }
-    }
-    region_of(mask, x0, y0, w, h, px_mm, None)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -372,20 +323,5 @@ mod tests {
         assert!(changed);
         let left = left.unwrap();
         assert!(left.area_mm2 < a.area_mm2 && left.area_mm2 > 0.0);
-        fn m(r: &Region) -> Mask<'_> {
-            Mask {
-                x0: r.x0,
-                y0: r.y0,
-                w: r.w,
-                h: r.h,
-                mask: &r.mask,
-            }
-        }
-        assert_eq!(
-            shared_pixels(&m(&a), &m(&left)) as f64 * 0.01,
-            left.area_mm2
-        );
-        let u = union_of(&[m(&a), m(&left)], 0.1).unwrap();
-        assert!((u.area_mm2 - a.area_mm2).abs() < 1e-9);
     }
 }

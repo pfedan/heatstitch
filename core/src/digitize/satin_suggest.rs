@@ -34,8 +34,8 @@ use serde::{Deserialize, Serialize};
 use super::medial::Axis;
 use super::region::{Region, outline};
 use super::rungs::{
-    Cut, InsideTest, Strip, by, column_from_rungs, cut_lines_between, cut_pieces, inside, norm,
-    rails_from_outline, strips_of_areas, sub,
+    Cut, InsideTest, Strip, column_from_rungs, cut_lines_between, cut_pieces, rails_from_outline,
+    strips_of_areas,
 };
 use super::satin_forms::{PartPlan, corner_cuts, plan_parts};
 use super::satin_inner::plan_inner;
@@ -43,9 +43,10 @@ use super::satin_shapes::{
     BlobKind, Material, blob_shape, filled, plan_shape, small_holes, split_blobs, whole_shape,
 };
 use super::skeleton::{Branch, Graph, Node, skeleton};
-use crate::geom::Pt;
-use crate::js::{dist, hypot, round};
+use crate::geom::{Pt, add_scaled, dot, norm, polyline_length, sub};
+use crate::js::{by, dist, hypot, median, round};
 use crate::model::restitch::{Rails, SatinSettings, chained};
+use crate::shape::path::inside_poly;
 use crate::trig::JsMath;
 
 /// Steps along a column checked for running across a hole (mm, see covers).
@@ -116,21 +117,8 @@ struct Planned {
 }
 
 #[inline]
-fn add(a: Pt, b: Pt, k: f64) -> Pt {
-    [a[0] + b[0] * k, a[1] + b[1] * k]
-}
-#[inline]
-fn dot(a: Pt, b: Pt) -> f64 {
-    a[0] * b[0] + a[1] * b[1]
-}
-#[inline]
 fn half_way(l: &Line) -> Pt {
-    add(l[0], sub(l[1], l[0]), 0.5)
-}
-fn median(v: &[f64]) -> f64 {
-    let mut s = v.to_vec();
-    s.sort_by(|a, b| by(*a, *b));
-    if s.is_empty() { 0.0 } else { s[s.len() >> 1] }
+    add_scaled(l[0], sub(l[1], l[0]), 0.5)
 }
 fn min_of(v: impl IntoIterator<Item = f64>) -> f64 {
     v.into_iter().fold(
@@ -175,14 +163,7 @@ fn to_segment(q: Pt, a: Pt, b: Pt) -> f64 {
     } else {
         0.0
     };
-    dist(q, add(a, v, t))
-}
-fn length_of(pts: &[Pt]) -> f64 {
-    let mut a = 0.0;
-    for i in 1..pts.len() {
-        a += dist(pts[i], pts[i - 1]);
-    }
-    a
+    dist(q, add_scaled(a, v, t))
 }
 fn area2(ring: &[Pt]) -> f64 {
     let n = ring.len();
@@ -217,7 +198,7 @@ pub fn area_loops(area: &Region) -> (Vec<Vec<Pt>>, Vec<Vec<Pt>>) {
     // Inside an even number of others: an outside; an odd number: a hole.
     let depth = |k: usize| {
         (0..loops.len())
-            .filter(|&o| o != k && inside(&loops[o], loops[k][0]))
+            .filter(|&o| o != k && inside_poly(&loops[o], loops[k][0]))
             .count()
     };
     let (mut outsides, mut holes) = (vec![], vec![]);
@@ -237,7 +218,10 @@ pub fn classify(g: &Graph, max: f64) -> ShapeClass {
         return ShapeClass::Wide;
     }
     let rs = radii(g);
-    let len: f64 = g.branches.iter().fold(0.0, |a, b| a + length_of(&b.pts));
+    let len: f64 = g
+        .branches
+        .iter()
+        .fold(0.0, |a, b| a + polyline_length(&b.pts));
     let w = 2.0 * median(&rs);
     // A stroke: narrow enough for satin, much longer than wide.
     let wide = rs.iter().filter(|&&r| 2.0 * r > max).count() as f64 > rs.len() as f64 * 0.05;
@@ -246,23 +230,6 @@ pub fn classify(g: &Graph, max: f64) -> ShapeClass {
     } else {
         ShapeClass::Wide
     }
-}
-
-/// Whether sections are worth offering for an area with this skeleton: a drawing of lines that
-/// branches or closes into a ring (a single line is a satin column as it is).
-pub fn offers_sections(g: &Graph) -> bool {
-    if classify(g, STROKE_MAX) != ShapeClass::Strokes {
-        return false;
-    }
-    let mut degree: HashMap<usize, usize> = HashMap::new();
-    for b in &g.branches {
-        if b.a == b.b {
-            return true;
-        }
-        *degree.entry(b.a).or_default() += 1;
-        *degree.entry(b.b).or_default() += 1;
-    }
-    degree.values().any(|&d| d >= 3)
 }
 
 /// A suggestion for the fill area (None when the area is empty); `max` is the longest stitch of a
@@ -546,7 +513,7 @@ fn plan(g: &Graph, outsides: &[Vec<Pt>], holes: &[Vec<Pt>], apart: bool) -> Plan
     let (cuts, mut lines) = plan_strokes(g, &rings, apart);
     // A dot apart from the rest (its centerline hardly a line): one line across its narrow way.
     for o in outsides {
-        if lines.iter().any(|l| inside(o, half_way(l))) {
+        if lines.iter().any(|l| inside_poly(o, half_way(l))) {
             continue;
         }
         if let Some(line) = across(o) {
@@ -595,7 +562,7 @@ fn columns_of(
             b.as_ref()
                 .is_some_and(|b| b.len() == bad.len() && dist(b[0], bad[0]) < 1e-6)
         };
-        let mine = |l: &Line| inside(&bad, half_way(l));
+        let mine = |l: &Line| inside_poly(&bad, half_way(l));
         let k = (0..lines.len()).find(|&k| {
             mine(&lines[k]) && {
                 let rest: Vec<Line> = lines
@@ -676,7 +643,7 @@ fn across(ring: &[Pt]) -> Option<Line> {
     let a = 0.5 * (2.0 * xy).atan2(xx - yy) + PI / 2.0;
     let d: Pt = [a.js_cos(), a.js_sin()];
     let reach = max_of(ring.iter().map(|&p| dist(p, c))) + 0.5;
-    Some([add(c, d, -reach), add(c, d, reach)])
+    Some([add_scaled(c, d, -reach), add_scaled(c, d, reach)])
 }
 
 /// A branch end at a junction: the branch and whether it leaves from its end b.
@@ -709,7 +676,7 @@ fn point_along(pts: &[Pt], s: f64) -> Pt {
         let l = dist(pts[i - 1], pts[i]);
         if acc + l >= s {
             let k = if l != 0.0 { (s - acc) / l } else { 0.0 };
-            return add(pts[i - 1], sub(pts[i], pts[i - 1]), k);
+            return add_scaled(pts[i - 1], sub(pts[i], pts[i - 1]), k);
         }
         acc += l;
     }
@@ -728,7 +695,7 @@ fn nearest(pts: &[Pt], q: Pt) -> f64 {
         } else {
             0.0
         };
-        let d = dist(add(a, v, t), q);
+        let d = dist(add_scaled(a, v, t), q);
         if d < best {
             best = d;
         }
@@ -796,14 +763,14 @@ pub fn plan_strokes(g: &Graph, rings: &[Vec<Pt>], apart: bool) -> (Vec<Line>, Ve
     }
     let mut inner: HashSet<usize> = HashSet::new();
     for (k, b) in bs.iter().enumerate() {
-        if b.a != b.b && length_of(&b.pts) < 0.75 * (nodes[b.a].r + nodes[b.b].r) {
+        if b.a != b.b && polyline_length(&b.pts) < 0.75 * (nodes[b.a].r + nodes[b.b].r) {
             let i = find(&mut root, b.a);
             let j = find(&mut root, b.b);
             root[i] = j;
             inner.insert(k);
         }
     }
-    let len_of: Vec<f64> = bs.iter().map(|b| length_of(&b.pts)).collect();
+    let len_of: Vec<f64> = bs.iter().map(|b| polyline_length(&b.pts)).collect();
     let half_of: Vec<f64> = bs.iter().map(|b| median(&b.r)).collect();
     // Direction a branch leaves its junction in, over a stretch about as long as the junction is wide.
     let leaving = |e: End| -> Pt {
@@ -958,7 +925,7 @@ pub fn plan_strokes(g: &Graph, rings: &[Vec<Pt>], apart: bool) -> (Vec<Line>, Ve
                 let pts = away(b, e.at_b);
                 let tip = pts[pts.len() - 1];
                 let base = pts[0];
-                lines.push([tip, add(base, norm(sub(base, tip)), r_through * 0.8)]);
+                lines.push([tip, add_scaled(base, norm(sub(base, tip)), r_through * 0.8)]);
                 taken.push(base);
             } else {
                 kept.push(k);
@@ -978,7 +945,7 @@ pub fn plan_strokes(g: &Graph, rings: &[Vec<Pt>], apart: bool) -> (Vec<Line>, Ve
             // toward the end being cut, so the cuts of both ends do not meet in one point).
             if es[x].br == es[y].br {
                 let lp = &bs[es[x].br].pts;
-                if let Some(ri) = rings.iter().position(|r| inside(lp, r[0])) {
+                if let Some(ri) = rings.iter().position(|r| inside_poly(lp, r[0])) {
                     let hole = &rings[ri];
                     let near = min_of(hole.iter().map(|&q| dist(q, center)));
                     let toward = point_along(&away(&bs[es[k].br], es[k].at_b), 1.5);
@@ -1017,7 +984,7 @@ pub fn plan_strokes(g: &Graph, rings: &[Vec<Pt>], apart: bool) -> (Vec<Line>, Ve
             }
             let mut best: Option<RingPt> = None;
             for (ri, r) in rings.iter().enumerate() {
-                if loops.iter().any(|l| inside(l, r[0])) {
+                if loops.iter().any(|l| inside_poly(l, r[0])) {
                     continue;
                 }
                 for (qi, &q) in r.iter().enumerate() {
@@ -1046,8 +1013,8 @@ pub fn plan_strokes(g: &Graph, rings: &[Vec<Pt>], apart: bool) -> (Vec<Line>, Ve
         let within = |p: Pt, q: Pt| {
             let mut t = 0.1;
             while t < 0.95 {
-                let m = add(p, sub(q, p), t);
-                if rings.iter().filter(|r| inside(r, m)).count() % 2 == 0 {
+                let m = add_scaled(p, sub(q, p), t);
+                if rings.iter().filter(|r| inside_poly(r, m)).count() % 2 == 0 {
                     return false;
                 }
                 t += 0.1;
@@ -1107,7 +1074,7 @@ pub fn plan_strokes(g: &Graph, rings: &[Vec<Pt>], apart: bool) -> (Vec<Line>, Ve
                 {
                     let d = norm(sub(q.p, p.p));
                     cornered.set(k, (p, q));
-                    [add(p.p, d, -0.3), add(q.p, d, 0.3)]
+                    [add_scaled(p.p, d, -0.3), add_scaled(q.p, d, 0.3)]
                 }
                 _ => {
                     // No corners found: square across the branch a junction's width out.
@@ -1117,7 +1084,10 @@ pub fn plan_strokes(g: &Graph, rings: &[Vec<Pt>], apart: bool) -> (Vec<Line>, Ve
                     );
                     let d = dirs[k];
                     let w = half_of[e.br] * 1.2 + 0.3;
-                    [add(c, [-d[1], d[0]], -w), add(c, [-d[1], d[0]], w)]
+                    [
+                        add_scaled(c, [-d[1], d[0]], -w),
+                        add_scaled(c, [-d[1], d[0]], w),
+                    ]
                 }
             };
             // Two junctions close together can find the same corners: one cut is enough.
@@ -1159,7 +1129,7 @@ pub fn plan_strokes(g: &Graph, rings: &[Vec<Pt>], apart: bool) -> (Vec<Line>, Ve
             } else {
                 k2
             };
-            let cut: Line = [add(a.p, d, -0.3), add(b.p, d, 0.3)];
+            let cut: Line = [add_scaled(a.p, d, -0.3), add_scaled(b.p, d, 0.3)];
             cuts[mine[&k]] = cut;
             place_cut(&mut trimmed, k, cut);
         }
@@ -1264,7 +1234,9 @@ pub fn plan_strokes(g: &Graph, rings: &[Vec<Pt>], apart: bool) -> (Vec<Line>, Ve
             let deg = (dot(din, dout).clamp(-1.0, 1.0).acos() * 180.0) / PI;
             (deg, din, dout)
         };
-        let across = |p: Pt, d: Pt| -> Line { [add(p, d, -half * 0.6), add(p, d, half * 0.6)] };
+        let across = |p: Pt, d: Pt| -> Line {
+            [add_scaled(p, d, -half * 0.6), add_scaled(p, d, half * 0.6)]
+        };
         let mut placed: Vec<f64> = vec![];
         let free = |placed: &[f64], s: f64, gap: f64| {
             placed.iter().all(|&x| (x - s).abs() >= gap)
@@ -1294,11 +1266,11 @@ pub fn plan_strokes(g: &Graph, rings: &[Vec<Pt>], apart: bool) -> (Vec<Line>, Ve
                 }
             }
             let (_, din, dout) = turn_at(k, 0.6f64.max(w));
-            let d = norm(add(din, dout, 1.0));
+            let d = norm(add_scaled(din, dout, 1.0));
             let nrm: Pt = [-d[1], d[0]];
             cuts.push([
-                add(pts[k], nrm, -(half * 1.2 + 0.3)),
-                add(pts[k], nrm, half * 1.2 + 0.3),
+                add_scaled(pts[k], nrm, -(half * 1.2 + 0.3)),
+                add_scaled(pts[k], nrm, half * 1.2 + 0.3),
             ]);
             // Lines across measured from the opening.
             let mut rot: Vec<Pt> = pts[k..].to_vec();
@@ -1352,11 +1324,14 @@ pub fn plan_strokes(g: &Graph, rings: &[Vec<Pt>], apart: bool) -> (Vec<Line>, Ve
                 (5.0 * half).min((half / 0.3f64.max(((deg * PI) / 360.0).js_cos())) * 1.1 + 0.3);
             if deg >= SHARP
                 && hypot(bis[0], bis[1]) > 0.1
-                && !pinch((add(pts[i], bis, -l), None), (add(pts[i], bis, l), None))
+                && !pinch(
+                    (add_scaled(pts[i], bis, -l), None),
+                    (add_scaled(pts[i], bis, l), None),
+                )
             {
                 // Too sharp to fan (the stitches would pile up in the inner corner): cut along the
                 // bisector, a mitre, with a line across either side.
-                cuts.push([add(pts[i], bis, -l), add(pts[i], bis, l)]);
+                cuts.push([add_scaled(pts[i], bis, -l), add_scaled(pts[i], bis, l)]);
                 placed.push(cum[i]);
             } else if free(&placed, cum[i], w * 0.8) {
                 let d = if hypot(bis[0], bis[1]) > 0.1 {
@@ -1464,7 +1439,7 @@ pub fn plan_strokes(g: &Graph, rings: &[Vec<Pt>], apart: bool) -> (Vec<Line>, Ve
 /// Which ring a cut line reaches first either side of its middle: -1 the outside, else a hole.
 fn cut_ends(cut: &Line, outsides: &[Vec<Pt>], holes: &[Vec<Pt>]) -> [i64; 2] {
     let [a, b] = *cut;
-    let m = add(a, sub(b, a), 0.5);
+    let m = add_scaled(a, sub(b, a), 0.5);
     let d = norm(sub(b, a));
     let hit = |dir: f64| {
         let mut best = (-1i64, f64::INFINITY);
@@ -1556,7 +1531,7 @@ fn open_hole(g: &Graph, hole: &[Pt]) -> Option<Line> {
     ));
     let n: Pt = [-t[1], t[0]];
     let w = b.r[i] * 1.2 + 0.3;
-    Some([add(b.pts[i], n, -w), add(b.pts[i], n, w)])
+    Some([add_scaled(b.pts[i], n, -w), add_scaled(b.pts[i], n, w)])
 }
 
 /// Where a satin that does not know how it was cut (see Rails.split in restitch.ts) gets its area:
@@ -1571,8 +1546,9 @@ pub fn split_of(
     if outsides.is_empty() {
         return None;
     }
-    let within =
-        |q: Pt| outsides.iter().any(|o| inside(o, q)) && !holes.iter().any(|h| inside(h, q));
+    let within = |q: Pt| {
+        outsides.iter().any(|o| inside_poly(o, q)) && !holes.iter().any(|h| inside_poly(h, q))
+    };
     // Between the rails at a share of the way along: a short or twisted column (read from an
     // image) can have its middle just outside its own area, so a quarter or three on is as good.
     let at = |(l, r): &(Vec<Pt>, Vec<Pt>), share: f64| -> Pt {
@@ -1859,7 +1835,6 @@ mod tests {
         let r = region(move |x, y| h(x, y) || v(x, y));
         let g = skeleton(&r);
         assert_eq!(classify(&g, STROKE_MAX), ShapeClass::Strokes);
-        assert!(offers_sections(&g));
         let s = suggest_satin(&r, Some(&g), STROKE_MAX, false, true)
             .unwrap()
             .unwrap();

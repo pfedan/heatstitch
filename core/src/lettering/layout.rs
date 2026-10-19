@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use super::font::Font;
 use crate::geom::Pt;
+use crate::js::math_max;
 use crate::shape::path::{Mat, apply, compose};
 use crate::trig::JsMath;
 
@@ -131,15 +132,6 @@ fn js_min(v: impl Iterator<Item = f64>) -> f64 {
         }
     })
 }
-fn js_max(v: impl Iterator<Item = f64>) -> f64 {
-    v.fold(f64::NEG_INFINITY, |a, x| {
-        if a.is_nan() || x.is_nan() {
-            f64::NAN
-        } else {
-            a.max(x)
-        }
-    })
-}
 
 /// Sets the text: an advance runs from a letter's origin to the next one's; the first letter of a
 /// word starts at its own left edge.
@@ -223,7 +215,7 @@ pub fn layout(font: &Font, l: &Lettering) -> Layout {
         let right = if items.is_empty() {
             0.0
         } else {
-            js_max(items.iter().map(|it| it.u + it.b))
+            math_max(items.iter().map(|it| it.u + it.b))
         };
         set.push(Line {
             items,
@@ -233,7 +225,7 @@ pub fn layout(font: &Font, l: &Lettering) -> Layout {
         });
     }
     // Alignment: each line against the widest one; on an arc or circle around the middle.
-    let widest = js_max(std::iter::once(0.0).chain(set.iter().map(|ln| ln.right - ln.left)));
+    let widest = math_max(std::iter::once(0.0).chain(set.iter().map(|ln| ln.right - ln.left)));
     let centered = l.shape != "line" || l.align == "center";
     for ln in &mut set {
         let w = ln.right - ln.left;
@@ -348,8 +340,8 @@ pub fn layout(font: &Font, l: &Lettering) -> Layout {
         for [x, y] in p.corners {
             min_x = js_min([min_x, x].into_iter());
             min_y = js_min([min_y, y].into_iter());
-            max_x = js_max([max_x, x].into_iter());
-            max_y = js_max([max_y, y].into_iter());
+            max_x = math_max([max_x, x]);
+            max_y = math_max([max_y, y]);
         }
     }
     if placed.is_empty() {

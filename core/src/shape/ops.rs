@@ -22,7 +22,7 @@ use kurbo::{BezPath, PathEl, Point, Shape as _};
 use linesweeper::topology::Topology;
 use serde::{Deserialize, Serialize};
 
-use crate::geom::Pt;
+use crate::geom::{Pt, bounds_of, cross, sub, to_segment, unit};
 use crate::js::{dist, hypot, round};
 use crate::shape::path::{
     Cubic, Form, Node, Path, bezier, insert_node, segment, segments, straight,
@@ -442,12 +442,6 @@ pub fn area_of_form(f: &Form) -> f64 {
 /// A crossing this near a node is that node (curve time).
 const AT_NODE: f64 = 1e-4;
 
-fn sub(a: Pt, b: Pt) -> Pt {
-    [a[0] - b[0], a[1] - b[1]]
-}
-fn cross(a: Pt, b: Pt) -> f64 {
-    a[0] * b[1] - a[1] * b[0]
-}
 fn derivative(c: &Cubic, t: f64) -> Pt {
     let u = 1.0 - t;
     let (a, b, d) = (3.0 * u * u, 6.0 * u * t, 3.0 * t * t);
@@ -740,14 +734,6 @@ const MIN_EDGE: f64 = 0.005;
 const SIMPLE: f64 = 0.002;
 /// Turn at a polygon point that makes a corner of the fitted curves (degrees).
 const CORNER_DEG: f64 = 35.0;
-
-fn unit(a: Pt, b: Pt) -> [f64; 2] {
-    let l = match dist(a, b) {
-        0.0 => 1.0,
-        l => l,
-    };
-    [(b[0] - a[0]) / l, (b[1] - a[1]) / l]
-}
 
 /// Points of a path, at most `tol` from its curves (Wang's bound on the steps per curve).
 pub fn flattened(p: &Path, tol: f64) -> Vec<Pt> {
@@ -1155,28 +1141,6 @@ fn interior_point(pts: &[Pt]) -> Pt {
     } else {
         mid
     }
-}
-
-fn bounds_of(pts: &[Pt]) -> [f64; 4] {
-    let mut b = [
-        f64::INFINITY,
-        f64::INFINITY,
-        f64::NEG_INFINITY,
-        f64::NEG_INFINITY,
-    ];
-    for p in pts {
-        b = [
-            b[0].min(p[0]),
-            b[1].min(p[1]),
-            b[2].max(p[0]),
-            b[3].max(p[1]),
-        ];
-    }
-    b
-}
-
-fn to_segment(q: Pt, a: Pt, b: Pt) -> f64 {
-    crate::shape::vectorize::to_segment(q, a, b)
 }
 
 /// Distance from `q` to a closed outline.
