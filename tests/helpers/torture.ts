@@ -90,8 +90,8 @@ await loadOps();
  *
  * TORTURE_CHAINS and TORTURE_STEPS run more of them (e.g. TORTURE_CHAINS=10000 for a long run).
  *
- * The chains live here; torture.test.ts, tortureChains, tortureSeeds, tortureLong and tortureRead run
- * them, as five files so they run side by side instead of one after another.
+ * The chains live here; torture.test.ts, tortureChains, tortureCases, tortureSeeds, tortureLong and
+ * tortureRead run them, as six files so they run side by side instead of one after another.
  */
 
 /** The stitches of object `o` (0.1 mm), its tie-in left out. */
