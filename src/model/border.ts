@@ -1,4 +1,5 @@
 import type { Region } from '../digitize/region';
+import { settleTravel } from './travel';
 import type { Pt } from '../digitize/skeleton';
 import { tidy, withRecords } from './edit';
 import { rememberObjects, sewObjects, stitchKey, type SewObject } from './objects';
@@ -234,7 +235,8 @@ export function syncBorders(p: Pattern, trimMm: number, drop: ReadonlySet<string
   // A blend made just now lies after its fill's border: the border moves after it (later it stays
   // where it is put).
   const fresh = new Set([...partners(a)].filter((l) => !before.has(l)));
-  return syncShadows(fresh.size ? syncOwnBorders(a, trimMm, drop, fresh) : a, trimMm);
+  // Last: the hidden travel between objects depends on what is sewn after it (see travel.ts).
+  return settleTravel(syncShadows(fresh.size ? syncOwnBorders(a, trimMm, drop, fresh) : a, trimMm), trimMm);
 }
 
 /**

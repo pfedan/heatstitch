@@ -37,6 +37,7 @@
       </a>
       <nav>
         <a class="doc-link" href="videos.html">Videos</a>
+        <a class="doc-link" href="releases.html"><span lang="de">Was ist neu</span><span lang="en">What is new</span></a>
         <a class="doc-open" href="./"><span lang="de">App öffnen</span><span lang="en">Open the app</span></a>
         <select id="lang" aria-label="Language">
           <option value="de">Deutsch</option>
@@ -70,6 +71,7 @@
           <ul>
             <li><a href="#de-sequence">Sehen, wie eine Stickdatei gestickt wird</a>: Farben, Reihenfolge, Sprünge, mit Player.</li>
             <li><a href="#de-check">Prüfen, ob ein Stickmuster auf meinem Stoff klappt</a>, und es <a href="#de-correct">beheben lassen</a>.</li>
+            <li><a href="#de-swatch">Ein Probestück sticken</a>, um die besten Werte für meinen Stoff zu finden.</li>
             <li><a href="#de-objects">Ein Objekt anders sticken</a>: Muster, auch dekorative, Abstand, Unterlage, Umrandung, Satinbreite, Fransen.</li>
             <li><a href="#de-objects">Die Reihenfolge ändern</a>, <a href="#de-cut">eine Füllung zerteilen</a> oder <a href="#de-jumps">Fadenschnitte setzen</a>.</li>
             <li><a href="#de-draw">Eine Form zeichnen</a>, <a href="#de-draw">eine Lücke zwischen Formen füllen</a> oder <a href="#de-lettering">einen Namen sticken</a>; <a href="#de-lines">Linien verzieren</a>: Bohnenstich, Zickzack, Motive, Echo, Schatten.</li>
@@ -141,7 +143,8 @@
           Alles, was heatstitch kann, ist ein <b>Befehl</b>: Er steht als Knopf da, wo du ihn brauchst, im Menü eines
           Objekts, auf einer Taste und in der Befehlssuche (<kbd>Strg</kbd>+<kbd>K</kbd>). Jeder Knopf erklärt sich
           beim Darüberfahren. Die Tasten im Überblick zeigt <kbd>?</kbd> oder das Menü <b>⋯</b> oben rechts unter
-          <i>Tastenkürzel</i>; dort liegen auch diese <i>Anleitung</i> und die <i>Sprache</i>.
+          <i>Tastenkürzel</i>; dort liegen auch diese <i>Anleitung</i>, die Seite <i>Was ist neu</i> mit der
+          Versionsnummer und die <i>Sprache</i>.
         </p>
         <dl>
           <dt>Kopfleiste</dt>
@@ -685,7 +688,7 @@
         </p>
         <figure>
           <img src="/guide/findings-de.jpg" width="1280" height="960" loading="lazy" alt="Der Aufnäher in Prüfen: kritische Zonen in den Satinbuchstaben auf der Füllung, rechts die Ampel Klappt das? und die Befunde" />
-          <figcaption><a href="examples/demos/patch.pes" download>patch.pes</a> in <i>Prüfen</i>: Die Satinbuchstaben liegen auf der vollen Füllung, dort stapelt sich das Garn. Die Ampel steht auf <i>Riskant</i>, die Zeile <i>Dichte</i> nennt die Fläche, und <i>Beheben</i> zeigt, wie viel davon unsichtbar weggeht.</figcaption>
+          <figcaption><a href="examples/demos/patch.pes" download>patch.pes</a> auf leichtem Stoff in <i>Prüfen</i>: Die Satinbuchstaben liegen auf der vollen Füllung, dort stapelt sich das Garn. Die Ampel steht auf <i>Riskant</i>, die Zeile <i>Dichte</i> nennt die Fläche, und <i>Beheben</i> zeigt, wie viel davon unsichtbar weggeht.</figcaption>
         </figure>
         <h3 id="de-findings">Befunde</h3>
         <table>
@@ -757,6 +760,8 @@
           <li><b>Nicht schneiden</b>: Schnitt und Vernähstiche um den Sprung entfallen, die Maschine zieht den Faden mit. Das spart Zeit bei kurzen Sprüngen, die später überstickt werden.</li>
           <li><b>Alle auf einmal nach Länge</b>: <i>Ab Grenze schneiden</i> schneidet jeden ungeschnittenen Sprung ab der gewählten Länge, <i>Darunter nicht schneiden</i> entfernt die Schnitte darunter. Ein Hinweis warnt, wenn lange Sprünge nicht geschnitten werden, denn dann liegt der Faden lose auf dem Stoff.</li>
         </ul>
+        <p>Liegt der Weg zwischen zwei Objekten derselben Farbe ganz unter einer dichten Füllung, die später gestickt wird, läuft der Faden dort als Steppstich hin, statt zu springen und zu schneiden. heatstitch sucht dafür einen Weg, der mindestens 0,5 mm vom Rand der deckenden Füllung bleibt, auch um Ecken herum. Ein Satin ab 2 mm Breite deckt ebenso, als Säule, Satinlinie oder Satinrand; der Weg bleibt auch dort 0,5 mm von den Kanten weg. Offene und lichte Muster (Kreuzschraffur, Mäander, Gitter, Motive, weite Reihen, der helle Teil eines Verlaufs), schmaler, lichter oder E-Stich-Satin, Laufstichlinien und ausgesparte Stellen decken nicht: dort bleibt der Schnitt, weil man den Faden sehen würde. Wird die deckende Fläche verschoben, gelöscht oder offener gestickt, kommt der Schnitt von selbst zurück.</p>
+        <p>Versteckte Verbindungen stehen in der Liste <i>Sprünge und Schnitte</i> mit dem Filter <i>Versteckt</i> und sind auf der Bühne gepunktet in Lila gezeichnet, solange die Sprünge eingeblendet sind. Ein Klick auf die Linie oder den Eintrag wählt sie aus. <i>Schneiden und vernähen</i> setzt dort einen Schnitt mit Vernähstichen, egal wie kurz der Weg ist. Diesen Schnitt merkt sich das Objekt: Er bleibt, wenn du später etwas änderst, rückgängig machst oder speicherst. <i>Verstecken</i> nimmt ihn zurück und sucht den Weg unter dem Späteren wieder; findet sich keiner, bleibt der Schnitt und heatstitch sagt es.</p>
         <p>DST schreibt einen Schnitt als drei Sprünge, PES mit seinem Schnitt-Flag; beide lesen sich gleich zurück. Was JEF daraus macht, steht unter <a href="#de-save">Speichern</a>.</p>
         <figure>
           <img src="/guide/jumps-de.jpg" width="1280" height="800" loading="lazy" alt="Konfetti-Demo in Prüfen: ein 20-mm-Sprung ohne Schnitt ist ausgewählt und hervorgehoben, die Liste bietet Schneiden und vernähen an" />
@@ -803,8 +808,8 @@
           quittierte Zonen bleiben, wie sie sind.
         </p>
         <figure>
-          <img src="/guide/correct-de.jpg" width="1280" height="960" loading="lazy" alt="Die Katze auf Strick mit der Korrekturkarte: Vorschläge je Objekt, keiner angehakt, der unter dem Zeiger vorher und nachher auf der Bühne" />
-          <figcaption>Vorschläge für die Katze auf Strick, der Zeiger auf einer Zeile: Das Objekt wird im Rahmen geteilt gezeigt, links wie es ist, rechts wie es würde.</figcaption>
+          <img src="/guide/correct-de.jpg" width="1280" height="960" loading="lazy" alt="Die Katze auf leichtem Stoff mit der Korrekturkarte: Vorschläge je Objekt, keiner angehakt, der unter dem Zeiger vorher und nachher auf der Bühne" />
+          <figcaption>Vorschläge für die Katze auf leichtem Stoff, der Zeiger auf einer Zeile: Das Objekt wird im Rahmen geteilt gezeigt, links wie es ist, rechts wie es würde.</figcaption>
         </figure>
         <h3>Auf Stoff abstimmen</h3>
         <p>
@@ -816,7 +821,7 @@
           Wählst du einen anderen Stoff, kommt die Karte von selbst. Was in heatstitch entsteht (umgewandelte Bilder, gezeichnete
           Formen, Schrift), bekommt diese Regeln von Anfang an.
         </p>
-        <h3>Probestück für deinen Stoff</h3>
+        <h3 id="de-swatch">Probestück für deinen Stoff</h3>
         <p>
           Die Werte eines Stoffs sind gute Startwerte, aber jeder Stoff, jedes Garn und jede Maschine stickt etwas anders.
           Unter <i>Material</i> erstellt <i>Probestück erstellen</i> ein neues Stickmuster für den gewählten Stoff: ein
@@ -848,7 +853,7 @@
         </p>
         <figure>
           <img src="/guide/compare-de.jpg" width="1280" height="960" loading="lazy" alt="Geteilte Ansicht des Aufnähers, links Original, rechts korrigiert, mit Vergleichstabelle" />
-          <figcaption>Links das Original, rechts die Korrektur: Die kritische Fläche des Aufnähers schrumpft auf gut ein Drittel, die Tabelle zeigt jede Zahl vorher und nachher.</figcaption>
+          <figcaption>Links das Original, rechts die Korrektur: Die kritische Fläche des Aufnähers auf leichtem Stoff schrumpft um ein Viertel, die Tabelle zeigt jede Zahl vorher und nachher.</figcaption>
         </figure>
 
         <h2 id="de-image">Bild umwandeln</h2>
@@ -1030,6 +1035,7 @@
             <tr><td>Doppelklick</td><td>Form oder Stiche öffnen; auf der Ebene Form den ganzen Pfad wählen, mit <kbd>Umschalt</kbd> hinzufügen (mit <kbd>Alt</kbd> einen Knoten setzen); auf der Ebene Stiche einen Einstich setzen</td></tr>
             <tr><td><kbd>C</kbd>, <kbd>Entf</kbd></td><td>Auf der Ebene Form: gewählte Knoten zur Ecke oder rund machen, löschen</td></tr>
             <tr><td><kbd>,</kbd> <kbd>.</kbd>, <kbd>I</kbd>, <kbd>Entf</kbd></td><td>Auf der Ebene Stiche: voriger / nächster Einstich, Stich teilen, löschen</td></tr>
+            <tr><td><kbd>W</kbd></td><td>Bei einer gewählten Füllung: Winkel auf der Fläche ziehen (<kbd>Umschalt</kbd> rastet auf 15°, <kbd>Esc</kbd> bricht ab)</td></tr>
             <tr><td><kbd>W</kbd>, <kbd>Pos1</kbd> <kbd>Ende</kbd></td><td>Auf der Ebene Stiche: Weitersticken (Einstiche per Klick setzen), zum Anfang / Fadenende des Objekts</td></tr>
             <tr><td><kbd>T</kbd></td><td>Im Werkzeug Richtung: Querlinie oder Trennlinie ziehen</td></tr>
             <tr><td><kbd>Esc</kbd></td><td>Werkzeug weglegen, Auswahl oder Zone aufheben, eine Ebene zurück</td></tr>
@@ -1103,6 +1109,7 @@
           <ul>
             <li><a href="#en-sequence">See how an embroidery file is sewn</a>: colors, order, jumps, with a player.</li>
             <li><a href="#en-check">Check whether a design will stitch well on my fabric</a>, and <a href="#en-correct">have it fixed</a>.</li>
+            <li><a href="#en-swatch">Stitch a test swatch</a> to find the best values for my fabric.</li>
             <li><a href="#en-objects">Sew an object differently</a>: pattern, decorative ones too, spacing, underlay, border, satin width, fringe.</li>
             <li><a href="#en-objects">Change the order</a>, <a href="#en-cut">cut a fill apart</a> or <a href="#en-jumps">set trims</a>.</li>
             <li><a href="#en-draw">Draw a shape</a>, <a href="#en-draw">fill a gap between shapes</a> or <a href="#en-lettering">sew a name</a>; <a href="#en-lines">decorate lines</a>: bean stitch, zigzag, motifs, echo, shadow.</li>
@@ -1174,7 +1181,8 @@
           Everything heatstitch can do is a <b>command</b>: it sits as a button where you need it, in an object's
           menu, on a key and in the command search (<kbd>Ctrl</kbd>+<kbd>K</kbd>). Every button explains itself when
           you hover it. <kbd>?</kbd> or the <b>⋯</b> menu at the top right shows the keys under <i>Keyboard
-          shortcuts</i>; this <i>guide</i> and the <i>language</i> live there too.
+          shortcuts</i>; this <i>guide</i>, the page <i>What is new</i> with the version number and the
+          <i>language</i> live there too.
         </p>
         <dl>
           <dt>Header</dt>
@@ -1710,7 +1718,7 @@
         </p>
         <figure>
           <img src="/guide/findings-en.jpg" width="1280" height="960" loading="lazy" alt="The patch in Check: critical zones in the satin letters on the fill, on the right the light Will it stitch? and the findings" />
-          <figcaption><a href="examples/demos/patch.pes" download>patch.pes</a> in <i>Check</i>: the satin letters sit on the full fill, where the thread piles up. The light shows <i>Risky</i>, the <i>Density</i> row names the area, and <i>Fix</i> shows how much of it goes away invisibly.</figcaption>
+          <figcaption><a href="examples/demos/patch.pes" download>patch.pes</a> on light fabric in <i>Check</i>: the satin letters sit on the full fill, where the thread piles up. The light shows <i>Risky</i>, the <i>Density</i> row names the area, and <i>Fix</i> shows how much of it goes away invisibly.</figcaption>
         </figure>
         <h3 id="en-findings">Findings</h3>
         <table>
@@ -1781,6 +1789,8 @@
           <li><b>Don't trim</b>: trim and tie stitches around the jump are dropped, the machine carries the thread. That saves time on short jumps that are sewn over later.</li>
           <li><b>All at once by length</b>: <i>Trim from this length</i> trims every untrimmed jump from the chosen length, <i>Don't trim shorter</i> removes the trims below it. A note warns when long jumps are left untrimmed, because the thread then lies loose on the fabric.</li>
         </ul>
+        <p>Where the way between two objects of one color lies wholly under a dense fill sewn later, the thread runs there as a running stitch instead of jumping and trimming. heatstitch looks for a way that keeps at least 0.5 mm from the edge of the covering fill, also around corners. A satin 2 mm wide or wider covers as well, as a column, satin line or satin border; there too the way keeps 0.5 mm from the edges. Open and light patterns (crosshatch, meander, grid, motifs, wide rows, the light part of a gradient), narrow, open or E-stitch satin, running lines and knocked-out parts do not cover: there the trim stays, because the thread would show. When the covering area is moved, deleted or sewn more openly, the trim comes back by itself.</p>
+        <p>Hidden connections are listed under <i>Jumps and trims</i> with the filter <i>Hidden</i> and drawn dotted in purple on the stage while jumps are shown. A click on the line or the entry selects one. <i>Trim and tie</i> cuts there with lock stitches, however short the way. The object remembers this trim: it stays when you change something later, undo or save. <i>Hide</i> takes it back and looks for the way under what is sewn later again; if there is none, the trim stays and heatstitch says so.</p>
         <p>DST writes a trim as three jumps, PES with its trim flag; both read back the same. What JEF makes of it is under <a href="#en-save">Save</a>.</p>
         <figure>
           <img src="/guide/jumps-en.jpg" width="1280" height="800" loading="lazy" alt="Confetti demo in Check: a 20 mm jump without a trim is selected and highlighted, the list offers Trim and tie" />
@@ -1826,8 +1836,8 @@
           Zones that are normal in practice or acknowledged stay as they are.
         </p>
         <figure>
-          <img src="/guide/correct-en.jpg" width="1280" height="960" loading="lazy" alt="The cat on knit with the correction card: proposals per object, none ticked, the one under the pointer compared before and after on the stage" />
-          <figcaption>Proposals for the cat on knit, the pointer on a row: the object is shown split inside its frame, on the left as it is, on the right as it would be.</figcaption>
+          <img src="/guide/correct-en.jpg" width="1280" height="960" loading="lazy" alt="The cat on light fabric with the correction card: proposals per object, none ticked, the one under the pointer compared before and after on the stage" />
+          <figcaption>Proposals for the cat on light fabric, the pointer on a row: the object is shown split inside its frame, on the left as it is, on the right as it would be.</figcaption>
         </figure>
         <h3>Tune to fabric</h3>
         <p>
@@ -1839,7 +1849,7 @@
           Pick another fabric, and the card comes on its own. Whatever is made in heatstitch (converted pictures, drawn
           shapes, lettering) gets these rules from the start.
         </p>
-        <h3>Test swatch for your fabric</h3>
+        <h3 id="en-swatch">Test swatch for your fabric</h3>
         <p>
           A fabric's values are good starting values, but every fabric, thread and machine stitches a little differently.
           Under <i>Material</i>, <i>Make test swatch</i> makes a new design for the chosen fabric: a labelled grid of fills or
@@ -1871,7 +1881,7 @@
         </p>
         <figure>
           <img src="/guide/compare-en.jpg" width="1280" height="960" loading="lazy" alt="Split view of the patch, original on the left and corrected on the right, with the comparison table" />
-          <figcaption>Original on the left, correction on the right: the critical area of the patch shrinks to about a third, the table shows every number before and after.</figcaption>
+          <figcaption>Original on the left, correction on the right: the critical area of the patch on light fabric shrinks by a quarter, the table shows every number before and after.</figcaption>
         </figure>
 
         <h2 id="en-image">Convert a picture</h2>
@@ -2052,6 +2062,7 @@
             <tr><td>Double click</td><td>Open shape or stitches; on the Shape level select the whole path, with <kbd>Shift</kbd> add it (with <kbd>Alt</kbd> set a node); on the Stitches level set a needle point</td></tr>
             <tr><td><kbd>C</kbd>, <kbd>Del</kbd></td><td>On the Shape level: make the selected nodes corners or smooth, delete them</td></tr>
             <tr><td><kbd>,</kbd> <kbd>.</kbd>, <kbd>I</kbd>, <kbd>Del</kbd></td><td>On the Stitches level: previous / next needle point, split the stitch, delete</td></tr>
+            <tr><td><kbd>W</kbd></td><td>With a fill selected: drag the angle on the area (<kbd>Shift</kbd> snaps to 15°, <kbd>Esc</kbd> cancels)</td></tr>
             <tr><td><kbd>W</kbd>, <kbd>Home</kbd> <kbd>End</kbd></td><td>On the Stitches level: stitch on (set needle points by clicking), to the start / thread end of the object</td></tr>
             <tr><td><kbd>T</kbd></td><td>In the Direction tool: draw a rung or a cut line</td></tr>
             <tr><td><kbd>Esc</kbd></td><td>Put the tool away, clear the selection or zone, one level back</td></tr>

@@ -197,6 +197,34 @@ export function drawJumps(
   ctx.restore();
 }
 
+/** Color of hidden ways under what is sewn later (see travel.ts), apart from jumps (grey) and trims (blue). */
+const HIDDEN_WAY = '#c792ff';
+
+/** Records along a join: the line of a jump, the stitches of a hidden way. */
+function joinPoints(t: Transition): number[] {
+  if (!t.hidden) return [t.from, t.to];
+  const out: number[] = [];
+  for (let i = t.from; i <= t.to; i++) out.push(i);
+  return out;
+}
+
+/** Hidden ways under what is sewn later as dotted lines, while jumps are shown (so they can be picked like them). */
+export function drawHiddenWays(ctx: CanvasRenderingContext2D, vp: Viewport, p: Pattern, list: Transition[], limit: number, alpha?: Float32Array): void {
+  const s = vp.scale / 10;
+  ctx.save();
+  ctx.lineWidth = 1.75;
+  ctx.setLineDash([2, 3]);
+  ctx.strokeStyle = HIDDEN_WAY;
+  ctx.globalAlpha = 0.9;
+  ctx.beginPath();
+  for (const t of list) {
+    if (t.to > limit || (alpha && alpha[t.to] <= 0)) continue;
+    joinPoints(t).forEach((i, k) => (k ? ctx.lineTo(p.x[i] * s + vp.offsetX, p.y[i] * s + vp.offsetY) : ctx.moveTo(p.x[i] * s + vp.offsetX, p.y[i] * s + vp.offsetY)));
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
 /** Needle points are drawn from this zoom on (px per mm), and only while few enough are visible. */
 const POINTS_MIN_SCALE = 5;
 const MAX_POINTS = 30000;
@@ -321,18 +349,18 @@ export function drawTransition(ctx: CanvasRenderingContext2D, vp: Viewport, p: P
   const s = vp.scale / 10;
   const [x0, y0] = [p.x[t.from] * s + vp.offsetX, p.y[t.from] * s + vp.offsetY];
   const [x1, y1] = [p.x[t.to] * s + vp.offsetX, p.y[t.to] * s + vp.offsetY];
-  const color = t.trimmed ? '#6fd3ff' : '#ffb347';
+  const color = t.hidden ? HIDDEN_WAY : t.trimmed ? '#6fd3ff' : '#ffb347';
   ctx.save();
   ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
   ctx.strokeStyle = 'rgba(13, 11, 16, 0.85)';
   ctx.lineWidth = strong ? 7 : 5;
   ctx.beginPath();
-  ctx.moveTo(x0, y0);
-  ctx.lineTo(x1, y1);
+  joinPoints(t).forEach((i, k) => (k ? ctx.lineTo(p.x[i] * s + vp.offsetX, p.y[i] * s + vp.offsetY) : ctx.moveTo(p.x[i] * s + vp.offsetX, p.y[i] * s + vp.offsetY)));
   ctx.stroke();
   ctx.strokeStyle = color;
   ctx.lineWidth = strong ? 3 : 2;
-  ctx.setLineDash(t.trimmed ? [6, 4] : []);
+  ctx.setLineDash(t.trimmed ? [6, 4] : t.hidden ? [2, 4] : []);
   ctx.stroke();
   ctx.setLineDash([]);
   for (const [x, y] of [
@@ -355,6 +383,8 @@ export function drawTransition(ctx: CanvasRenderingContext2D, vp: Viewport, p: P
  * `jumps` are shown. Only lines that can be seen can be clicked.
  */
 export function transitionShown(p: Pattern, t: Transition, jumps: boolean, st: Pick<StitchStyle, 'limit' | 'alpha' | 'carried'>): boolean {
+  // A hidden way: drawn with the jumps once it is sewn.
+  if (t.hidden) return jumps && t.to <= st.limit && (!st.alpha || st.alpha[t.to] > 0);
   if (st.carried && st.carried.from[t.to] === t.from) return t.to <= st.limit && (!st.alpha || st.alpha[t.to] > 0);
   if (!jumps) return false;
   const end = Math.min(t.to, st.limit);
@@ -369,18 +399,21 @@ export function transitionAt(p: Pattern, list: Transition[], vp: Viewport, sx: n
   let bestD = px;
   list.forEach((t, k) => {
     if (shown && !shown(t)) return;
-    const ax = p.x[t.from] * s + vp.offsetX;
-    const ay = p.y[t.from] * s + vp.offsetY;
-    const bx = p.x[t.to] * s + vp.offsetX;
-    const by = p.y[t.to] * s + vp.offsetY;
-    const dx = bx - ax;
-    const dy = by - ay;
-    const l2 = dx * dx + dy * dy;
-    const u = l2 > 0 ? Math.min(1, Math.max(0, ((sx - ax) * dx + (sy - ay) * dy) / l2)) : 0;
-    const d = Math.hypot(ax + u * dx - sx, ay + u * dy - sy);
-    if (d < bestD) {
-      bestD = d;
-      best = k;
+    const pts = joinPoints(t);
+    for (let n = 1; n < pts.length; n++) {
+      const ax = p.x[pts[n - 1]] * s + vp.offsetX;
+      const ay = p.y[pts[n - 1]] * s + vp.offsetY;
+      const bx = p.x[pts[n]] * s + vp.offsetX;
+      const by = p.y[pts[n]] * s + vp.offsetY;
+      const dx = bx - ax;
+      const dy = by - ay;
+      const l2 = dx * dx + dy * dy;
+      const u = l2 > 0 ? Math.min(1, Math.max(0, ((sx - ax) * dx + (sy - ay) * dy) / l2)) : 0;
+      const d = Math.hypot(ax + u * dx - sx, ay + u * dy - sy);
+      if (d < bestD) {
+        bestD = d;
+        best = k;
+      }
     }
   });
   return best;
