@@ -8,13 +8,14 @@ const dist = (p: Pt, q: Pt) => Math.hypot(p[0] - q[0], p[1] - q[1]);
  * the cut does not show.
  */
 export const TOLERANCE = 0.15;
+/** Stitches shortened for a curve stay at least this long (mm); shorter ones are short-stitch findings. */
+export const MIN_CURVE_STITCH = 1;
 /**
- * Stitches shortened for a curve stay at least this long (mm); shorter ones are short-stitch
- * findings (from 1 mm). A little above that: needle points are rounded to 0.1 mm in the file,
+ * The same for the rows of a fill, a little above: needle points are rounded to 0.1 mm in the file,
  * which made a stitch of exactly 1 mm as often 0.9 mm, and rows 0.2 mm apart around the eye of a
  * swirl clustered them.
  */
-export const MIN_CURVE_STITCH = 1.15;
+export const MIN_ROW_STITCH = 1.15;
 
 /** Douglas-Peucker simplification with tolerance `tol` (mm). */
 export function simplify(pts: Pt[], tol: number): Pt[] {
