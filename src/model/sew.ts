@@ -486,7 +486,10 @@ export function sewList(p: Pattern, list: Entry[], trimMm: number, opts: ListOpt
       // a way there.
       const start = sewn ? sewn.runs[0][0] : mm(recOf(k, o.first));
       const there: Pt = [Math.round(start[0] * 10) / 10, Math.round(start[1] * 10) / 10];
-      if (here && known[k] && !known[k]!.cutIn && !color && !stop && !apart?.has(k) && (!cut || far) && !linked(p, prev) && !linked(p, o) && Math.hypot(there[0] - here[0], there[1] - here[1]) > 1) {
+      // Too far for a jump, measured to where it starts now (its start in `p` may lie elsewhere),
+      // so the next sewing finds the same.
+      const gap = here ? Math.hypot(there[0] - here[0], there[1] - here[1]) : 0;
+      if (here && known[k] && !known[k]!.cutIn && !color && !stop && !apart?.has(k) && (!cut || gap > trimMm) && !linked(p, prev) && !linked(p, o) && gap > 1) {
         travel = hiddenWay(here, there, hidingFrom(k));
         if (travel) cut = false;
       }
