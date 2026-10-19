@@ -1276,6 +1276,19 @@ pub fn parts_of(lp: &[Pt], cuts: &[Cut], holes: &[Vec<Pt>]) -> Parts {
     p
 }
 
+/// The parts cut further by one more cut line (it opens a hole or cuts a part in two), the parts
+/// given left as they were; None when it does neither (satin_ease tries cuts on parts it keeps).
+pub fn cut_parts(p: &Parts, cut: &[Pt]) -> Option<Parts> {
+    let mut next = Parts {
+        parts: p.parts.clone(),
+        edges: p.edges.clone(),
+        open: p.open.clone(),
+        which: p.which.clone(),
+    };
+    let line = cut_line(cut);
+    (open_hole(&mut next, &line) || cut_part(&mut next, &line)).then_some(next)
+}
+
 /// Satin columns of an outline cut into parts (see strips_of_outline).
 #[derive(Clone, Debug, Default, Serialize)]
 pub struct Sections {

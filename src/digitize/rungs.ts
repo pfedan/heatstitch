@@ -14,8 +14,7 @@ import type { Pt } from './skeleton';
  * The ends of the rails are rungs too, without being listed.
  *
  * The work on whole rails and outlines is done by the core (core/src/digitize/rungs.rs). The helpers
- * the interface calls per rung or point stay here, and so do partsOf, cutParts and stripsOfParts,
- * which satinEase keeps between calls.
+ * the interface calls per rung or point stay here, and so does partsOf.
  */
 export type Rung = [number, number];
 
@@ -259,108 +258,7 @@ export type Arc = [number, number];
  * `ratio` is how much longer the longer rail is; null when the rungs make no strip.
  */
 export function stripOfLoop(ring: Pt[], chords: [number, number][], caps: Arc[], far = false): { left: Pt[]; right: Pt[]; rungs: Rung[]; ratio: number } | null {
-  return core().stripOfLoop(flatPts(ring), flatPts(chords), flatPts(caps), far) as ReturnType<typeof loopStrip>;
-}
-
-/** stripOfLoop as the TypeScript does it, for stripsOfParts (satinEase keeps its parts between calls). */
-function loopStrip(ring: Pt[], chords: [number, number][], caps: Arc[], far = false): { left: Pt[]; right: Pt[]; rungs: Rung[]; ratio: number } | null {
-  const n = chords.length;
-  if (!n || ring.length < 4) return null;
-  const cum = cumulative(ring);
-  const total = cum[cum.length - 1];
-  if (total <= 0) return null;
-  const fwd = (u0: number, u1: number) => (((u1 - u0) % total) + total) % total;
-  const ends: { u: number; rung: number }[] = [];
-  chords.forEach(([a, b], k) => ends.push({ u: fwd(0, a), rung: k }, { u: fwd(0, b), rung: k }));
-  ends.sort((x, y) => x.u - y.u);
-  const m = ends.length;
-  let start = -1;
-  for (let r = 0; r < m && start < 0; r++) {
-    let ok = true;
-    for (let i = 0; i < n && ok; i++) ok = ends[(r + i) % m].rung === ends[(r + m - 1 - i) % m].rung && ends[(r + i) % m] !== ends[(r + m - 1 - i) % m];
-    if (ok) start = r;
-  }
-  if (start < 0) return null;
-  const at = (i: number) => ends[(start + i) % m].u;
-  // The far ends as they are sewn, by the cap they were chosen as.
-  const tight = new Map<Arc, Arc>();
-  // The caps that fit beyond a rung: in the stretch of outline from u0 on for len mm.
-  const fitting = (u0: number, len: number): Arc[] => {
-    const out = caps.filter(([c0, c1]) => {
-      let x0 = fwd(u0, c0);
-      if (x0 > total - 1e-6) x0 = 0;
-      const x1 = x0 + fwd(c0, c1);
-      return x1 <= len + 1e-6;
-    });
-    // On a part of a fill the edge farthest out competes with the cut lines: a cut line along the
-    // side of a part (into a hole, say) is no end of it.
-    if (out.length && !far) return out;
-    const a = pointAt(ring, cum, u0);
-    const b = pointAt(ring, cum, (u0 + len) % total);
-    if (!far && len > 4 * dist(a, b) + 2) return out;
-    // The end is the stretch farthest beyond the rung: a square end its edge, a round or pointed one its tip.
-    const n = Math.max(2, Math.ceil(len / 0.05));
-    const t = norm(sub(b, a));
-    const beyond = (u: number) => {
-      const q = sub(pointAt(ring, cum, (u0 + u) % total), a);
-      return Math.abs(q[0] * t[1] - q[1] * t[0]);
-    };
-    const d = Array.from({ length: n + 1 }, (_, k) => beyond((len * k) / n));
-    const most = Math.max(...d);
-    // The stretch round the farthest point that stays this far out (not beyond a dip, such as a
-    // cut line into a hole on the way).
-    const top = d.indexOf(most);
-    const stretch = (near: number): Arc => {
-      let first = top;
-      let last = top;
-      while (first > 0 && d[first - 1] >= near) first--;
-      while (last < n && d[last + 1] >= near) last++;
-      return [(u0 + (len * first) / n) % total, (u0 + (len * last) / n) % total];
-    };
-    // Chosen among the caps as wide as an edge drawn slightly askew, sewn as narrow as a few tenths:
-    // on a long part 5 % eats into its sides round the corners, the rails would stop short of its end.
-    const wide = stretch(most - Math.max(0.1, most * 0.05));
-    // Only where it bends round a corner into the sides: a straight edge stays as it is.
-    const along = fwd(wide[0], wide[1]);
-    // A cut line right at the end (into a hole, say) keeps it as it is, the satin turns there.
-    const close = (x: number, y: number) => Math.min(fwd(x, y), fwd(y, x)) < 0.6;
-    const byCut = caps.some(([c0, c1]) => [c0, c1].some((c) => close(c, wide[0]) || close(c, wide[1])));
-    if (!byCut && along > dist(pointAt(ring, cum, wide[0]), pointAt(ring, cum, wide[1])) * 1.05 + 0.05) tight.set(wide, stretch(most - Math.min(0.15, Math.max(0.1, most * 0.05))));
-    return [...out, wide];
-  };
-  const capsA = fitting(at(m - 1), fwd(at(m - 1), at(0)));
-  const capsB = fitting(at(n - 1), fwd(at(n - 1), at(n)));
-  let best: { ca: Arc; cb: Arc; l: number; r: number; ratio: number } | null = null;
-  for (const ca of capsA) {
-    for (const cb of capsB) {
-      const l = fwd(ca[1], cb[0]);
-      const r = fwd(cb[1], ca[0]);
-      if (l <= 1e-6 || r <= 1e-6) continue;
-      const ratio = Math.max(l, r) / Math.min(l, r);
-      if (!best || ratio < best.ratio) best = { ca, cb, l, r, ratio };
-    }
-  }
-  if (!best) return null;
-  const walk = (u0: number, len: number): Pt[] => {
-    const inner: { u: number; p: Pt }[] = [];
-    for (let i = 0; i + 1 < ring.length; i++) {
-      const u = fwd(u0, cum[i]);
-      if (u > 1e-6 && u < len - 1e-6) inner.push({ u, p: ring[i] });
-    }
-    inner.sort((x, y) => x.u - y.u);
-    const out = [pointAt(ring, cum, u0), ...inner.map((x) => x.p), pointAt(ring, cum, (u0 + len) % total)];
-    return out.filter((p, i) => !i || dist(p, out[i - 1]) > 1e-6);
-  };
-  const ca = tight.get(best.ca) ?? best.ca;
-  const cb = tight.get(best.cb) ?? best.cb;
-  const l = fwd(ca[1], cb[0]);
-  const r = fwd(cb[1], ca[0]);
-  const left = walk(ca[1], l);
-  const right = walk(cb[1], r).reverse();
-  if (left.length < 2 || right.length < 2) return null;
-  const rungs: Rung[] = [];
-  for (let i = 0; i < n; i++) rungs.push([fwd(ca[1], at(i)), fwd(at(m - 1 - i), ca[0])]);
-  return { left, right, rungs: tidyRungs(rungs, cumulative(left).pop()!, cumulative(right).pop()!), ratio: best.ratio };
+  return core().stripOfLoop(flatPts(ring), flatPts(chords), flatPts(caps), far) as { left: Pt[]; right: Pt[]; rungs: Rung[]; ratio: number } | null;
 }
 
 /** Whether q lies inside the closed outline. */
@@ -580,41 +478,25 @@ function splitRing(ring: Pt[], u: number, v: number, cum = cumulative(ring), inn
 
 type Strip = { left: Pt[]; right: Pt[]; rungs: Rung[] };
 
-/** Lengths along outlines, tests for points inside them and the strips made of them, found once per outline (outlines not changed meanwhile). */
+/** Lengths along outlines and tests for points inside them, found once per outline (outlines not changed meanwhile). */
 interface Known {
   cum: (ring: Pt[]) => number[];
   inside: (ring: Pt[]) => (q: Pt) => boolean;
-  /** The strip a part makes along `lines`, ending on `caps` (see stripOfLoop), as found before for the same. */
-  strip: (ring: Pt[], lines: [Pt, Pt][], caps: Arc[]) => ReturnType<typeof loopStrip>;
 }
 
 function knownOf(): Known {
   const cums = new Map<Pt[], number[]>();
-  const strips = new Map<Pt[], { lines: [Pt, Pt][]; caps: Arc[]; made: ReturnType<typeof loopStrip> }>();
-  const known: Known = {
+  return {
     cum: (ring) => {
       let c = cums.get(ring);
       if (!c) cums.set(ring, (c = cumulative(ring)));
       return c;
     },
     inside: insideOf,
-    strip: (ring, lines, caps) => {
-      const was = strips.get(ring);
-      if (was && was.lines === lines && was.caps.length === caps.length && was.caps.every((c, i) => c[0] === caps[i][0] && c[1] === caps[i][1])) return was.made;
-      const chords = lines.map(([a, b]) => chordOf(ring, a, b, known)).filter((c): c is [number, number] => !!c);
-      const made = loopStrip(ring, chords, caps, true);
-      strips.set(ring, { lines, caps, made });
-      return made;
-    },
   };
-  return known;
 }
 
-/**
- * A closed outline cut into parts by cut lines (see partsOf): what stripsOfOutline works from. A
- * cut line more cuts one part further (cutParts), the rest stay as they are, so a cut tried costs
- * only its own part.
- */
+/** A closed outline cut into parts by cut lines (see partsOf): what stripsOfOutline works from. */
 export interface Parts {
   /** The outlines of the parts (closed). */
   parts: Pt[][];
@@ -676,12 +558,8 @@ export function partsOf(loop: Pt[], cuts: Cut[], holes: Pt[][] = []): Parts {
   return p;
 }
 
-/** The parts with one cut line more (the parts as they were left as they are); null when it cuts none of them. */
-export function cutParts(p: Parts, cut: Cut): Parts | null {
-  const next: Parts = { parts: p.parts.slice(), edges: p.edges.slice(), open: p.open.slice(), which: p.which.slice(), known: p.known };
-  const line = cutLine(cut);
-  return openHole(next, line) || cutPart(next, line) ? next : null;
-}
+/** What stripsOfOutline makes (see there). */
+type Sections = { strips: Strip[]; parts: Pt[][]; bad: number; hole: number; made?: (Strip | null)[]; open?: number[] };
 
 /**
  * Satin columns for a closed outline cut into parts by `cuts` (lines drawn across it, Trennlinien):
@@ -692,91 +570,10 @@ export function cutParts(p: Parts, cut: Cut): Parts | null {
  * all do). `holes` are the outlines of holes in the area: each needs a cut line from the edge into
  * it (see bridgeOf); `hole` is one that has none (-1 when all are opened).
  */
-export function stripsOfOutline(loop: Pt[], lines: [Pt, Pt][], cuts: Cut[], holes: Pt[][] = []): { strips: Strip[]; parts: Pt[][]; bad: number; hole: number; made?: (Strip | null)[]; open?: number[] } {
+export function stripsOfOutline(loop: Pt[], lines: [Pt, Pt][], cuts: Cut[], holes: Pt[][] = []): Sections {
   const c = flatLines(cuts);
   const h = flatLines(holes);
-  return core().stripsOfOutline(flatPts(loop), segsFlat(lines), c.flat, c.lens, h.flat, h.lens) as ReturnType<typeof stripsOfParts>;
-}
-
-/** The satin columns of an outline cut into parts (see stripsOfOutline), along `lines`. */
-export function stripsOfParts(p: Parts, lines: [Pt, Pt][]): { strips: Strip[]; parts: Pt[][]; bad: number; hole: number; made?: (Strip | null)[]; open?: number[] } {
-  const { known, edges, open, which } = p;
-  if (open.length) return { strips: [], parts: p.parts, bad: -1, hole: which[0], open: which };
-  const parts = p.parts.filter((r) => r.length >= 4);
-  // Near in both directions first: most points are far apart, and that is quick to tell.
-  const same = (p: Pt, q: Pt) => Math.abs(p[0] - q[0]) < 1e-6 && Math.abs(p[1] - q[1]) < 1e-6 && dist(p, q) < 1e-6;
-  // The cut lines each part has as an edge (by index in `edges`), as stretches of its outline.
-  // A bent cut line is a run of the outline's points, in its order or the other way round.
-  const runs = (ring: Pt[], i: number, e: Pt[]) => {
-    const n = e.length;
-    if (i + n > ring.length) return false;
-    let fwd = true;
-    let back = true;
-    for (let j = 0; j < n && (fwd || back); j++) {
-      fwd &&= same(ring[i + j], e[j]);
-      back &&= same(ring[i + j], e[n - 1 - j]);
-    }
-    return fwd || back;
-  };
-  const capsOf = parts.map((ring) => {
-    const cum = known.cum(ring);
-    const out: { arc: Arc; edge: number }[] = [];
-    for (let i = 0; i + 1 < ring.length; i++) {
-      const e = edges.findIndex((x) => runs(ring, i, x));
-      if (e >= 0) out.push({ arc: [cum[i], cum[i + edges[e].length - 1]], edge: e });
-    }
-    return out;
-  });
-  const made = parts.map((ring, k) => known.strip(ring, lines, capsOf[k].map((c) => c.arc)));
-  const bad = made.findIndex((m) => !m);
-  if (bad >= 0) return { strips: [], parts, bad, hole: -1, made };
-  // The parts as a tree joined at the cut lines they share, from a part at an end (one neighbour).
-  const shared = (k: number, j: number) => capsOf[k].find((c) => capsOf[j].some((d) => d.edge === c.edge))?.edge;
-  const root = Math.max(0, parts.findIndex((_, k) => parts.filter((_, j) => j !== k && shared(k, j) !== undefined).length <= 1));
-  const parent = new Map<number, number>([[root, -1]]);
-  const queue = [root];
-  while (queue.length) {
-    const k = queue.shift()!;
-    parts.forEach((_, j) => {
-      if (!parent.has(j) && shared(k, j) !== undefined) {
-        parent.set(j, k);
-        queue.push(j);
-      }
-    });
-  }
-  // Each part starts at the cut line to its parent (the root away from its first child): sewn
-  // after the parts beyond it, it ends there, back where the way came in.
-  const mid = (e: number) => midOf(edges[e])!;
-  const startOf = (s: Strip) => lerp(s.left[0], s.right[0], 0.5);
-  const endOf = (s: Strip) => lerp(s.left[s.left.length - 1], s.right[s.right.length - 1], 0.5);
-  const flip = (s: Strip): Strip => ({
-    left: s.right.slice().reverse(),
-    right: s.left.slice().reverse(),
-    rungs: reversedRungs(s.rungs, cumulative(s.left).pop()!, cumulative(s.right).pop()!),
-  });
-  const oriented = (k: number): Strip => {
-    const s: Strip = { left: made[k]!.left, right: made[k]!.right, rungs: made[k]!.rungs };
-    const up = parent.get(k)!;
-    const child = up < 0 ? parts.findIndex((_, j) => parent.get(j) === k) : -1;
-    const at = up >= 0 ? mid(shared(k, up)!) : child >= 0 ? mid(shared(k, child)!) : null;
-    if (!at) return s;
-    const nearStart = dist(startOf(s), at) < dist(endOf(s), at);
-    return nearStart === up >= 0 ? s : flip(s);
-  };
-  // Children before their parent (each subtree in the order its cut lines come along the parent).
-  const strips: Strip[] = [];
-  // How far along the parent from where it starts (its entry) a child hangs on.
-  const along = (k: number, j: number) => dist(startOf(oriented(k)), mid(shared(k, j)!));
-  const visit = (k: number) => {
-    const kids = parts.map((_, j) => j).filter((j) => parent.get(j) === k);
-    kids.sort((x, y) => along(k, x) - along(k, y));
-    for (const j of kids) visit(j);
-    strips.push(oriented(k));
-  };
-  visit(root);
-  // Parts that join no other (cannot happen for cut lines across one outline): after the rest.
-  parts.forEach((_, k) => !parent.has(k) && strips.push(oriented(k)));
-  return { strips, parts, bad: -1, hole: -1 };
+  return core().stripsOfOutline(flatPts(loop), segsFlat(lines), c.flat, c.lens, h.flat, h.lens) as Sections;
 }
 
 /**

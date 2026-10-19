@@ -1570,6 +1570,26 @@ pub struct Step {
     pub w: usize,
 }
 
+/// The columns of a chain as best_chain orders them (bestChain in restitch.ts): each turned round
+/// or mirrored as its step says.
+pub fn chained(cols: &[Rails], s: &SatinSettings) -> Vec<Rails> {
+    best_chain(cols, s)
+        .iter()
+        .map(|st| {
+            let c = &cols[st.c];
+            let mut r = if st.w & 1 != 0 {
+                reversed_rails(c)
+            } else {
+                c.clone()
+            };
+            if st.w & 2 != 0 {
+                r.mirror = !c.mirror;
+            }
+            r
+        })
+        .collect()
+}
+
 /// The columns of a chain in the order, directions and sides that show the least of the way
 /// between them (see bestChain in restitch.ts): which column at each place, and sewn which of the
 /// four ways (as given, turned round, mirrored, both).
