@@ -46,7 +46,7 @@ describe('font catalog', () => {
   it('lists only fonts that may be shipped, each with its file and license', () => {
     expect(catalog.fonts.length).toBeGreaterThan(30);
     for (const f of catalog.fonts) {
-      expect(['OFL-1.1', 'Public Domain', 'CC-BY-4.0']).toContain(f.license);
+      expect(['OFL-1.1', 'Public Domain', 'CC-BY-4.0', 'Hershey']).toContain(f.license);
       expect(text(new URL(`../public/fonts/licenses/${f.id}.txt`, import.meta.url)).length).toBeGreaterThan(50);
       expect(f.good[0]).toBeLessThan(f.good[1]);
     }
@@ -67,6 +67,44 @@ describe('font catalog', () => {
       for (const ch of 'i.') for (const e of f.glyphs[ch]?.e ?? []) if (e.k === 's' && cross(e.l, e.r)) crossed.push(`${entry.id} ${ch}`);
     }
     expect(crossed).toEqual([]);
+  });
+});
+
+describe('single line font', () => {
+  const f = font('hershey_sans');
+  const ends = (e: { d: number[] }) => [
+    [e.d[0], e.d[1]],
+    [e.d[e.d.length - 2], e.d[e.d.length - 1]],
+  ];
+  /** Jumps inside a letter: where one element does not start where the one before ended. */
+  const jumps = (ch: string) => {
+    const e = f.glyphs[ch].e as { d: number[] }[];
+    return e.slice(1).filter((x, k) => Math.hypot(ends(x)[0][0] - ends(e[k])[1][0], ends(x)[0][1] - ends(e[k])[1][1]) > 0.05).length;
+  };
+
+  it('sews every letter as triple stitch and dots, its strokes in one route where they touch', () => {
+    for (const g of Object.values(f.glyphs)) {
+      expect(g.e.every((e) => e.k === 'r')).toBe(true);
+      expect(g.e.some((e) => e.k === 'r' && (e.p.tr || e.p.m))).toBe(true);
+    }
+    // Hershey's two-unit dots are satin dots, big enough to see in thread.
+    const dot = f.glyphs['.'].e[0] as { d: number[] };
+    const xs = dot.d.filter((_, k) => k % 2 === 0);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeGreaterThan(0.7);
+    // Strokes that meet or cross go back under the triple stitch instead of jumping.
+    for (const ch of 'AEFHKMNTXY4+*#') expect(jumps(ch), ch).toBe(0);
+    // Only strokes apart from each other jump: the dot on the i, the two strokes of the quote.
+    expect(jumps('i')).toBe(1);
+    expect(jumps('"')).toBe(1);
+  });
+
+  it('keeps the comma of a small label', () => {
+    const l = { ...LETTERING_DEFAULTS, id: 'L', text: '0,29', font: 'hershey_sans', height: 4.5, x: 0, y: 0, color: { r: 0, g: 0, b: 0 } };
+    const lay = layout(f, l);
+    const comma = lay.letters.find((p) => p.ch === ',')!;
+    const [x0, x1] = [Math.min(...comma.box.map((q) => q[0])), Math.max(...comma.box.map((q) => q[0]))];
+    const inComma = sewLettering(f, l, 3).recs.filter((r) => r.cmd === STITCH && r.x / 10 > x0 && r.x / 10 < x1 && r.y / 10 > -1.5);
+    expect(inComma.length).toBeGreaterThan(5);
   });
 });
 

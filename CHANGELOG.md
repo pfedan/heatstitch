@@ -19,12 +19,14 @@ How it is kept (see [CONTRIBUTING.md](CONTRIBUTING.md#releases)):
 ### Deutsch
 
 - **Winkel auf der Fläche ziehen:** Den Winkel einer Füllung stellst du jetzt auch direkt auf dem Stickmuster ein: Knopf neben dem Winkel-Regler oder Taste W, dann eine Linie über die Fläche ziehen. Die Reihen laufen schon beim Ziehen quer dazu, so wie sie nacheinander gestickt werden, Umschalt rastet auf 15°, Esc bricht ab.
-- **Probestück für deinen Stoff:** Unter Material erstellt ein Klick ein beschriftetes Raster aus Füllungen oder Satinringen, Zeilen nach Stichabstand, Spalten nach Zugausgleich, mit einer Sollkante zum Vergleichen. Stick es auf deinem Stoff, wähle in der App das Feld, das am besten aussieht, und neue Objekte auf diesem Stoff bekommen diese Werte.
+- **Probestück für deinen Stoff:** Unter Material erstellt ein Klick ein beschriftetes Raster aus Füllungen oder Satinringen, Zeilen nach Stichabstand, Spalten nach Zugausgleich, mit einer Sollkante zum Vergleichen. Stick es auf deinem Stoff, wähle in der App das Feld, das am besten aussieht, und neue Objekte auf diesem Stoff bekommen diese Werte. Die Zahlen sind in dreifachem Laufstich gestickt und bleiben so auch auf Frottee lesbar.
+- **Schrift für kleine Texte:** Hershey Sans ist eine Schrift aus einer einzigen Linie, gestickt als dreifacher Laufstich. Sie bleibt schon ab 3 mm Höhe lesbar, wo eine Satinschrift zu schmal wird.
 
 ### English
 
 - **Drag the angle on the area:** You can now set a fill's angle right on the design: the button beside the angle slider or the W key, then drag a line over the area. The rows run across it while you drag, the way they are sewn one after the other, Shift snaps to 15°, Esc cancels.
-- **Test swatch for your fabric:** Under Material one click makes a labelled grid of fills or satin rings, rows by stitch spacing, columns by pull compensation, with a nominal edge to compare against. Stitch it on your fabric, pick the cell that looks best in the app, and new objects on that fabric get those values.
+- **Test swatch for your fabric:** Under Material one click makes a labelled grid of fills or satin rings, rows by stitch spacing, columns by pull compensation, with a nominal edge to compare against. Stitch it on your fabric, pick the cell that looks best in the app, and new objects on that fabric get those values. The numbers are sewn in triple running stitch, so they stay readable on terry too.
+- **A font for small text:** Hershey Sans is a font of a single line, sewn as triple running stitch. It stays readable from 3 mm, where a satin font gets too narrow.
 
 ## [1.0.0] - 2026-10-16
 

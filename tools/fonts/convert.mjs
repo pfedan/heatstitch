@@ -10,6 +10,7 @@
 
 import { mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { convertHershey } from './hershey.mjs';
 import { apply, compose, IDENTITY, lengthMm, parsePath, parseTransform, parseXml, shapeToPath, styleOf, walk } from './svg.mjs';
 
 const [src, commit = ''] = process.argv.slice(2);
@@ -546,6 +547,8 @@ for (const id of readdirSync(src).sort()) {
   });
   report.push([id, `ok ${names.length} glyphs, cap ${capHeight} mm (font.json size ${meta.size}), ${Math.round(json.length / 1024)} KB`]);
 }
+// The single line font for small text, from its own source (see hershey.mjs).
+catalog.push(convertHershey(OUT));
 catalog.sort((a, b) => a.name.localeCompare(b.name));
 writeFileSync(join(OUT, 'index.json'), JSON.stringify({ source: 'https://github.com/inkstitch/embroidery-fonts', commit, fonts: catalog }, null, 1));
 for (const [id, r] of report) console.log(`${id.padEnd(32)} ${r}`);

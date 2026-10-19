@@ -1467,6 +1467,7 @@ const enBase: Record<keyof typeof deBase, string> = {
   'lettering.font': 'Font',
   'lettering.font.hint': 'Choose a font. Arrow keys try them right away.',
   'lettering.font.from': 'From Ink/Stitch,',
+  'lettering.font.fromHershey': 'Hershey font by A. V. Hershey,',
   'lettering.style.sans': 'Sans serif',
   'lettering.style.serif': 'Serif',
   'lettering.style.script': 'Script',
@@ -1519,6 +1520,7 @@ const enBase: Record<keyof typeof deBase, string> = {
   'lettering.release': 'Split into objects',
   'lettering.release.hint': 'Each letter becomes an object. The text is fixed afterwards.',
   'lettering.publicDomain': 'public domain',
+  'lettering.hersheyLicense': 'free with credit',
   'canvas.hint.lettering': 'Drag: move · Corner: size · Circle: turn · Double-click: edit text · Enter: single letters · Esc: done',
   'canvas.hint.letters': 'Drag letters: move · Arrow keys: nudge · Esc: back to the lettering',
 };

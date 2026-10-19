@@ -326,6 +326,22 @@
    "kb": 173
   },
   {
+   "id": "hershey_sans",
+   "name": "Hershey Sans 1-stroke",
+   "style": "sans",
+   "small": true,
+   "cap": 5,
+   "good": [
+    3,
+    15
+   ],
+   "license": "Hershey",
+   "source": "Hershey Sans 1-stroke (Evil Mad Scientist)",
+   "chars": "!\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~¡¢£¥¦¨©ª«®°±²³´·¸¹º»¼½¾¿ÀÁÂÃÄÅÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝßàáâãäåçèéêëìíîïñòóôõö÷øùúûüýÿŸ–—“”‹›€",
+   "cases": "Aa",
+   "kb": 58
+  },
+  {
    "id": "magnolia_KOR",
    "name": "Magnolia KOR",
    "style": "script",
