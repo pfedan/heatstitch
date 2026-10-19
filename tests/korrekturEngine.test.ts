@@ -62,7 +62,7 @@ describe('correction engine', () => {
     // The rays (object 2) wider than recommended (rows 0.25 mm apart), so a gap opens between them.
     const kinds = stitchKinds(p);
     const objs = sewObjects(p, kinds);
-    const wide = takeOver(restitch(p, objs, [2], { kind: 'fill', s: { ...remembered(p, objs[2])!.fill!, spacing: 0.35 } }, kinds, 3))!;
+    const wide = takeOver(restitch(p, objs, [2], { kind: 'fill', s: { ...remembered(p, objs[2])!.fill!, spacing: 0.5 } }, kinds, 3))!;
     const f = (await directFix(wide, WOVEN, 'gaps', { trimMm: 3 }))!;
     expect(f).toBeTruthy();
     const q = applyFix(wide, f)!;
