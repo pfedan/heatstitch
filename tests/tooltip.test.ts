@@ -116,8 +116,6 @@ describe.skipIf(!on)('the tooltip', () => {
     const page = await ctx.newPage();
     try {
       await page.goto(url);
-      // The interface is set up once the core has loaded, which can be after the load event.
-      await page.waitForFunction(() => [...document.querySelectorAll<HTMLButtonElement>('button[data-tip]')].some((b) => b.offsetParent && !b.disabled));
       const target = await page.evaluate(() => {
         const el = [...document.querySelectorAll<HTMLButtonElement>('button[data-tip]')].find((b) => b.offsetParent && !b.disabled)!;
         el.id ||= 'tip-target';

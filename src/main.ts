@@ -2082,3 +2082,6 @@ void loadCatalogs()
   .catch((err) => console.warn('No thread catalogs', err));
 
 $('fabric-tune').addEventListener('click', () => void tuneToFabric());
+
+// Set up: the core loads first (top-level await), which can end after the page's load event.
+document.documentElement.dataset.ready = '';
