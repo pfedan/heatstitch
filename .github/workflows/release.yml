@@ -60,7 +60,10 @@ jobs:
             exit 1
           fi
 
+      # One job alone: it builds the core itself.
       - uses: ./.github/actions/setup
+        with:
+          core: build
       - run: npm run build
         env:
           CHANNEL: ${{ github.event.release.prerelease && 'beta' || 'release' }}

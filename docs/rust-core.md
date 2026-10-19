@@ -34,9 +34,11 @@ src/wasm/pkg/         Built by `npm run wasm` (wasm-pack), not in git
 - The module is built for speed (`opt-level = 3`), not size: the stitches matter more than the
   extra download on the first visit. The size is still watched (each stage PR states it) and must
   not get in the way: what shrinks it without costing speed is taken (`strip`, `panic = "abort"`).
-- `npm test`, `npm run build`, `npm run dev` and `npm run typecheck` build the module first. CI does
-  the same in `.github/actions/setup`, and runs `cargo fmt`, `cargo clippy` and `cargo test` on the
-  crate in the `core` job.
+- `npm test`, `npm run build`, `npm run dev` and `npm run typecheck` build the module first
+  (`scripts/wasm.mjs`). CI builds it once per run in the `wasm` job (`.github/actions/core`, kept per
+  content of `core/`) and hands it to the other jobs as an artifact (`.github/actions/setup`, which
+  sets `CORE_PREBUILT` so it is not built again), and runs `cargo fmt`, `cargo clippy` and
+  `cargo test` on the crate in the `core` job.
 
 Shared pieces of the crate: `geom` (points), `pattern` (records and colors), `shape::path` (forms,
 curves, flattening), and `js`: arithmetic as JavaScript does it (`Math.hypot` as V8 computes it,
