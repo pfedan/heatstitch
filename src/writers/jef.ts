@@ -3,9 +3,6 @@ import type { Pattern } from '../model/pattern';
 import type { Hoop } from '../model/hoop';
 import { writeWithCore } from './bytes';
 
-/** Largest move per JEF record and axis (signed byte). */
-export const JEF_MAX_DELTA = 127;
-
 /** Janome code of a chosen sewing field (mm), or null when Janome has no such hoop. */
 export function jefHoopCode(hoop: Hoop): number | null {
   const code = core().jefHoopCode(hoop.w, hoop.h);

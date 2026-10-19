@@ -62,7 +62,6 @@ export const RUNNING = 1;
 export const SATIN = 2;
 export const FILL = 3;
 export const TIE_STITCH = 4;
-export type StitchKind = typeof RUNNING | typeof SATIN | typeof FILL | typeof TIE_STITCH;
 
 /**
  * Kind of the stitch ending at each record (0 where no stitch ends): satin columns, fill rows,

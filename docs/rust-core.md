@@ -1,84 +1,52 @@
 # The compute core in Rust
 
-heatstitch moves its compute core (stitches, shapes, checks, file formats) from TypeScript to Rust,
-built to WebAssembly for the browser. The interface (`ui`, `areas`, `render`, `shell`, `i18n`,
-`app`) stays TypeScript, and so does the state of a design: pattern versions, what each object
-remembers (the `WeakMap`s in `model/objects.ts`) and undo. Rust gets plain data in and gives plain
-data out.
+heatstitch moved its compute core (stitches, shapes, checks, corrections, lettering, file formats)
+from TypeScript to Rust, built to WebAssembly for the browser (`core/`). The interface (`ui`,
+`areas`, `render`, `shell`, `i18n`, `app`) stayed TypeScript, and so did the state of a design:
+pattern versions, what each object remembers (the `WeakMap`s in `model/objects.ts`) and undo. Rust
+gets plain data in and gives plain data out. How the parts fit together now is described in
+[ARCHITECTURE.md](../ARCHITECTURE.md#the-compute-core-core).
 
 Why: geometry and search are most of the code, and Rust gives them a type system that holds the
 invariants at compile time, real libraries for curves and polygons instead of paper.js and Clipper
-loaded per worker, and one core that a native build could use later. The stitches do not have to
-stay identical to the TypeScript ones; they have to be at least as good, judged by the tests and by
+loaded per worker, and one core that a native build could use later. The stitches did not have to
+stay identical to the TypeScript ones; they had to be at least as good, judged by the tests and by
 realistic pictures.
 
-## How it fits together
+## How it was done
 
-```
-core/                 The Rust crate heatstitch-core
-  src/<area>/*.rs     Pure Rust, one module per TypeScript module it replaces, with its unit tests
-  src/bind/*.rs       The WebAssembly exports (wasm-bindgen), thin: typed arrays in, typed arrays out
-src/wasm/core.ts      Loads the module: loadCore() in the app and each worker, on its own in Node
-src/wasm/pkg/         Built by `npm run wasm` (wasm-pack), not in git
-```
+Each stage was its own pull request into a collecting branch, which went to `develop` as one pull
+request. While a module existed twice, a Vitest test ran the old TypeScript (copied into the tests)
+and the Rust on the same inputs and compared them: equal where the algorithm was the same, within a
+stated tolerance where Rust used a different library. For that, `core/src/js.rs` does arithmetic as
+JavaScript does (`Math.hypot`, `Math.round`) and `core/src/trig.rs` has `Math.sin`, `cos` and `pow`
+bit for bit as V8 computes them. Where a test had pinned a number only the old code gave, it was
+changed to the property it checks.
 
-- The exported functions are synchronous, like the TypeScript they replace. The app awaits
-  `loadCore()` before its first computation (`main.ts`), each worker before its first message.
-  Tests and tools in Node need nothing: `core()` instantiates the module from the file on first use.
-- A TypeScript module that moved keeps its name and exports and calls `core()` (see
-  `src/image/edt.ts`), so its callers do not change. When a whole layer has moved, its callers
-  call the coarse entry point instead and the wrapper goes.
-- Data crosses the boundary as typed arrays (`Uint8Array`, `Float32Array`, `Float64Array` for
-  points as x, y pairs). Structured settings cross as plain objects (serde). The boundary is crossed
-  per object or per design, never per point: a fine-grained export is only a step on the way.
-- The module is built for speed (`opt-level = 3`), not size: the stitches matter more than the
-  extra download on the first visit. The size is still watched (each stage PR states it) and must
-  not get in the way: what shrinks it without costing speed is taken (`strip`, `panic = "abort"`).
-- `npm test`, `npm run build`, `npm run dev` and `npm run typecheck` build the module first
-  (`scripts/wasm.mjs`). CI builds it once per run in the `wasm` job (`.github/actions/core`, kept per
-  content of `core/`) and hands it to the other jobs as an artifact (`.github/actions/setup`, which
-  sets `CORE_PREBUILT` so it is not built again), and runs `cargo fmt`, `cargo clippy` and
-  `cargo test` on the crate in the `core` job.
-
-Shared pieces of the crate: `geom` (points, vector and polyline helpers), `pattern` (records and
-colors), `shape::path` (forms, curves, flattening, `inside_poly`), `image::color` (Lab, CIEDE2000),
-and `js`: arithmetic as JavaScript does it (`Math.hypot` as V8 computes it, `Math.round`,
-`Math.max`, ToInt32, the sort comparator and median the TypeScript uses, mulberry32) and `trig` (`Math.sin`, `Math.cos`, `Math.pow` bit for bit as Node has them, through
-`JsMath`: `a.js_sin()`). While a TypeScript twin exists, a ported module uses `js` wherever the last bit can
-tip a threshold, so the comparison tests can demand equality.
-
-## Testing
-
-1. Each Rust module has unit tests of its own (`cargo test`), natively.
-2. While both implementations exist, a Vitest test runs the TypeScript and the Rust version on the
-   same inputs (synthetic shapes, the example designs, the torture corpus) and compares: equal where
-   the algorithm is the same, within a stated tolerance where Rust uses a different library.
-3. Once a module is switched over, the existing Vitest suite (the torture test, the correction
-   benchmark, the pystitch oracle, the load test) runs against Rust. Where a test pinned an exact
-   number that only the old implementation gives, it is changed to the property it was meant to
-   check, with the reason in the pull request.
-4. Stitch results that change visibly are shown as realistic renderings, before and after.
+When all stages were in, the copies and the comparison tests went (stage 6a). What stays as a
+regression test is `tests/sewHashes.test.ts`: the example designs sewn anew give the stitches
+recorded with the TypeScript (`tests/fixtures/sew-hashes.json`). They are computed by the core
+alone, with its own trigonometry, so they are the same on every platform. `js.rs` and `trig.rs`
+stay because changing them moves stitches; a change that does so on purpose records the hashes
+anew.
 
 ## Stages
 
-The order follows the imports: a module moves after everything it uses. Stages in one row of the
-table can run in parallel.
+The order followed the imports: a module moved after everything it used.
 
-| Stage | What moves | TypeScript (lines) |
+| Stage | What moved | Status |
 |---|---|---|
-| 0 | Crate, build, loading in app and workers, CI; the distance transform (`image/edt`) as the first module | 75 |
-| 1a | Pixel work: `image/color`, `raster`, `filters`, `quantize`, `labels`, `orientation`, `threadMatch`, `crop`, `prepare` | 1 800 |
-| 1b | Triangulation and medial axis: `shape/cdt` (or the `spade` crate), `digitize/medial`, `satinInner` | 1 100 |
-| 1c | Regions and centerlines: `digitize/region`, `skeleton`, `run`, `measure` | 1 000 |
-| 1d | File formats: `parsers`, `writers` | 2 300 |
-| 1e | Checks: `validation`, `density` | 1 600 |
-| 2 | Shapes: `shape/path`, `svgPath`, `join`, `simplify`, `vectorize`, `rasterize`, `parts`, `nodeOps`, `band`, and `ops` on Rust polygon booleans and offsets instead of paper.js and Clipper | 3 300 |
-| 3a | Fills: `fill`, `tour`, `border`, `deco`, `flow`, `rings`, `spiral`, `echo`, `motif`, `redwork` | 6 400 |
-| 3b | Satin: `satin`, `rungs`, `satinForms`, `satinShapes`, `satinJoins` | 2 950 |
-| 3c | The image assistant: `digitize/digitize`, `smart`, `image/svg` (the browser still reads SVG: `usvg` cost 18 % of the core's size and cannot draw the regions or text the assistant needs) | 2 300 |
-| 4 | Sewing in the model: `sewOne` and what it calls (`along`, `line`, `travel`, `knockout`, `covers`, `jumps`, `order`, `bestOrder`, and `satinEase`, `satinSuggest`, which build on `restitch`) behind one call per object | 8 100 |
-| 5 | Correction engine, lettering, live preview (`correct`, `lettering`, `resew`) | 7 300 |
-| 6 | The TypeScript twins and the fine-grained exports go; ARCHITECTURE.md describes the new layout | |
-
-Every stage is its own pull request into the collecting branch, which goes to `develop` as one
-pull request when all stages are in.
+| 0 | Crate, build, loading in app and workers, CI; the distance transform (`image/edt`) | done |
+| 1a | Pixel work: `image/color`, `raster`, `filters`, `quantize`, `labels`, `orientation`, `threadMatch`, `crop`, `prepare` | done |
+| 1b | Triangulation and medial axis: `shape/cdt`, `digitize/medial`, `satinInner` | done |
+| 1c | Regions and centerlines: `digitize/region`, `skeleton`, `run`, `measure` | done |
+| 1d | File formats: `parsers`, `writers` | done |
+| 1e | Checks: `validation`, `density` | done |
+| 2 | Shapes: `shape/path`, `svgPath`, `simplify`, `vectorize`, `rasterize`, `parts`, `band`, and `ops` on `linesweeper` and `clipper2-rust` instead of paper.js and Clipper | done |
+| 3a | Fills: `fill`, `tour`, `border`, `deco`, `flow`, `rings`, `spiral`, `echo`, `motif`, `redwork` | done |
+| 3b | Satin: `satin`, `rungs`, `satinForms`, `satinShapes`, `satinJoins` | done |
+| 3c | The image assistant: `digitize/digitize`, `smart` (the browser still reads SVG: it draws the regions and text the assistant needs) | done |
+| 4a to 4c | Sewing in the model: `sewOne` and what it calls (`along`, `line`, `travel`, `knockout`, `covers`, `jumps`, `order`, `bestOrder`, `satinEase`, `satinSuggest`), one call per object | done |
+| 5a, 5b | Correction engine (`correct`), lettering | done |
+| 6a | The TypeScript copies, the comparison tests, the twins nothing calls and the unused exports go; paper.js and Clipper2 leave the dependencies | done |
+| 6b | Inside the crate: one CIEDE2000, one set of stitch kinds, one trigonometry | its own pull request |

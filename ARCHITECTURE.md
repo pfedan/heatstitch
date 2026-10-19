@@ -8,8 +8,10 @@ conventions see [CONTRIBUTING.md](CONTRIBUTING.md); for what the app does see th
 ## The big picture
 
 heatstitch is a static web app. There is no backend: everything (reading files, sewing new
-stitches, checking, correcting, writing files) runs as TypeScript in the browser. There is no UI
-framework either; the interface is plain DOM and canvas, built by small modules.
+stitches, checking, correcting, writing files) runs in the browser. The interface and the state of
+a design are TypeScript; the computing is a Rust crate built to WebAssembly (`core/`, see
+[The compute core](#the-compute-core-core) below). There is no UI framework; the interface is
+plain DOM and canvas, built by small modules.
 
 ```mermaid
 flowchart LR
@@ -38,9 +40,54 @@ The code falls into three layers:
 Core modules never import from `ui`, `areas`, `app`, `render` or `shell`. Keep it that way: it is
 what lets the torture test and the workers use the same code as the app.
 
-The core is moving to Rust (`core/`, built to WebAssembly and loaded by `src/wasm/core.ts`), one
-module at a time; [docs/rust-core.md](docs/rust-core.md) has the plan and the rules. A module that
-moved keeps its TypeScript name and exports and calls the Rust code.
+Most of the core layer is a thin TypeScript face on the Rust crate: the modules keep their names
+and exports, hand plain data to the crate and turn what comes back into the app's types. What
+stays TypeScript is listed in the next section.
+
+## The compute core (`core/`)
+
+```
+core/Cargo.toml        The crate heatstitch-core (rust-toolchain.toml pins the Rust it is built with)
+core/src/<area>/*.rs   Pure Rust, one module per TypeScript module it replaced, with its unit tests:
+                       image, shape, digitize, model, density, validation, correct, lettering,
+                       parsers, writers, material
+core/src/bind/*.rs     The WebAssembly exports (wasm-bindgen), one file per area, thin
+core/src/js.rs         Arithmetic as JavaScript does it (Math.hypot, Math.round, ToInt32, mulberry32)
+core/src/trig.rs       sin, cos and pow bit for bit as V8 has them, on every platform
+src/wasm/core.ts       Loads the module: loadCore() in the app and each worker, on its own in Node
+src/wasm/pkg/          Built by `npm run wasm` (wasm-pack), ignored by version control
+```
+
+- **Loading.** The exports are synchronous. The app awaits `loadCore()` before its first
+  computation (`main.ts`), each worker before its first message. In Node (tests, tools) `core()`
+  instantiates the module from the file on first use.
+- **Data across the boundary.** Records cross as typed arrays (`Int32Array` x and y,
+  `Uint8Array` commands), points as `Float64Array` x, y pairs with a lengths array per run,
+  regions as their pixel fields (`regionIn` in `digitize/region.ts`). Settings, forms and
+  results with structure cross as plain objects (serde). Results that hold several arrays are
+  wasm-bindgen objects that the caller takes apart and frees (`take*()`, `free()`). The boundary
+  is crossed per object, per region or per design, never per point.
+- **Coarse entry points.** One call sews an object (`sewOne`), a lettering, a picture's regions or
+  a fill; one call measures a design (`measurePattern`), builds its density grid, reads or writes
+  a file, or runs a correction step.
+- **What stays TypeScript.** The interface (`ui`, `areas`, `render`, `shell`, `i18n`, `app`), the
+  state of a design (pattern versions, the object table and what objects remember in
+  `model/objects.ts`, undo), the caches, the workers and their clients, the SVG reader
+  (`image/svg.ts` lets the browser draw the file), node editing (`shape/join.ts`,
+  `shape/nodeOps.ts` and the node helpers of `shape/path.ts`), loading and placing fonts, storage,
+  and small helpers the interface calls per point (`sample` in `digitize/region.ts`, the color
+  conversions in `image/color.ts`, the cross stitch grid in `digitize/deco.ts`).
+- **Shared pieces of the crate**: `geom` (points, vector and polyline helpers), `pattern` (records
+  and colors), `shape::path` (forms, curves, flattening, `inside_poly`), `image::color` (Lab,
+  CIEDE2000), `js` and `trig`. Use and extend them instead of writing a helper again.
+- **Where to put new computing.** In the crate, with unit tests (`cargo test`); export it from
+  `bind/` only when TypeScript needs it, as a coarse call, and keep the TypeScript side a wrapper.
+  The crate builds for speed (`opt-level = 3`), with `strip` and `panic = "abort"` for size.
+
+`npm test`, `npm run build`, `npm run dev` and `npm run typecheck` build the module first
+(`scripts/wasm.mjs`). CI builds it once per run (`.github/actions/core`) and hands it to the other
+jobs (`CORE_PREBUILT`), and runs `cargo fmt`, `cargo clippy` and `cargo test` on the crate. How the
+TypeScript was moved over, stage by stage, is in [docs/rust-core.md](docs/rust-core.md).
 
 ## Repository layout
 
@@ -182,10 +229,12 @@ whose objects remember what they were made as.
 
 ## Reading and writing files
 
-- **`src/parsers/`**: one module per format (DST, PES/PEC, JEF, VP3, EXP, XXX, SEW) plus thread
-  palettes; `index.ts` (`parsePattern`) picks the parser by content (PES, PEC, VP3) or file name. Parsed designs are marked with
+- **`src/parsers/`**: `index.ts` (`parsePattern`) reads a file with the core
+  (`core/src/parsers/`: DST, PES/PEC, JEF, VP3, EXP, XXX, SEW and their thread palettes), which
+  picks the format by content (PES, PEC, VP3) or file name. Parsed designs are marked with
   `readFromFile`, so their objects are recognized from stitches.
-- **`src/writers/`**: own writers for DST, PES/PEC, JEF, VP3, EXP and XXX (no pyembroidery).
+- **`src/writers/`**: own writers for DST, PES/PEC, JEF, VP3, EXP and XXX (no pyembroidery), in
+  `core/src/writers/`; `index.ts` (`writePattern`) picks one.
   Round trips read, write, read must stay record-equal (`tests/writers.test.ts`), and CI checks
   the output against pystitch as an independent reader (`tests/oracle.test.ts`).
 - **`src/storage/`**: `fileStore.ts` and `imageStore.ts` keep loaded files, edits and the picture
@@ -288,6 +337,10 @@ preview at its own address; see CONTRIBUTING.
 
 - **Unit tests** run in Node with Vitest, on synthetic fixtures from `tests/helpers/` (encoded
   files, shapes, designs, images). Only a few tests open a real browser (`BROWSER_TESTS=1`).
+  The Rust crate has unit tests of its own per module (`cargo test` in `core/`).
+- **Whole designs** (`tests/sewHashes.test.ts`): the example designs sewn anew, as they are and
+  scaled, must give the stitches recorded in `tests/fixtures/sew-hashes.json`. A change that
+  moves stitches on purpose records them anew (see the test).
 - **The torture test** (`tests/helpers/torture.ts`, run by `torture*.test.ts`) plays random chains
   of the operations the app offers (add, duplicate, mirror, scale, cut out, knock out, recolor,
   border, lettering, motifs, undo, redo, save and open, export, ...) the way the app does them, and
@@ -350,8 +403,8 @@ comment at the top or above their main export; read it before changing the modul
 
 | You want to ... | Look at |
 |---|---|
-| support a new file format | `src/parsers/`, `src/writers/`, `tests/writers.test.ts` |
-| add a fill pattern or stitch type | `src/digitize/`, settings in `src/model/restitch.ts`, UI in `src/areas/stitches/` and `src/ui/stitchPanel.ts` |
+| support a new file format | `core/src/parsers/`, `core/src/writers/`, `tests/writers.test.ts` |
+| add a fill pattern or stitch type | `core/src/digitize/` and `core/src/model/`, settings in `src/model/restitch.ts`, UI in `src/areas/stitches/` and `src/ui/stitchPanel.ts` |
 | add an object operation | `src/model/shapeOps.ts`, a command in the matching `src/areas/`, a step in `tests/helpers/torture.ts` |
 | change a check or a threshold | `src/validation/`, `src/material/`, the README section *Validation* |
 | change the correction | `src/correct/plan.ts`, `src/correct/engine/` |

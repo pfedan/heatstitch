@@ -39,9 +39,6 @@ export function quantize(img: LabImage, o: QuantizeOptions): Quantized {
   return q;
 }
 
-/** Most colors a graphic can have of its own; with more it is quantized like a photo. */
-export const MAX_OWN_COLORS = 16;
-
 /**
  * The colors a flat graphic (a logo, clip art, a drawing; not a photo) is drawn in, exactly, or
  * null for a photo: every color that fills areas of its own, and each finer one that is not the

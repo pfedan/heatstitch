@@ -3,7 +3,6 @@ import { COLOR_CHANGE, JUMP, PatternBuilder, STITCH, TRIM, type Pattern, type Th
 import { parseDst } from '../src/parsers/dst';
 import { parsePes } from '../src/parsers/pes';
 import { parseSew } from '../src/parsers/sew';
-import { sewColor } from '../src/parsers/sewPalette';
 import { parseXxx } from '../src/parsers/xxx';
 import { pecColor, pecThreads } from '../src/parsers/pecPalette';
 import { splitMove } from '../src/writers/bytes';
@@ -366,7 +365,7 @@ describe('SEW reader', () => {
     const p = parseSew(encodeSew(sewOps, [12, 10, 6 + 79]));
     expect(p.colors.map((c) => [c.r, c.g, c.b])).toEqual([[0, 0, 240], [255, 0, 0], [64, 192, 48]]);
     expect(p.colors[0].name).toBe('Blue');
-    expect(sewColor(0).name).toBe('Unknown');
+    expect(parseSew(encodeSew(sewOps, [0])).colors[0].name).toBe('Unknown');
   });
 
   it('gives every color block a color when the header lists fewer', () => {

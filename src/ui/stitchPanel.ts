@@ -1546,7 +1546,7 @@ export class StitchPanel {
 
   /**
    * The needle points of a tatami draw a pattern: none, a texture (all points shifted, see
-   * texturePoints) or an embossed motif (points added on its lines), as small pictures in one
+   * texture_points in core/src/digitize/deco.rs) or an embossed motif (points added on its lines), as small pictures in one
    * field; the textures in the first line, the motifs in the second. Then the size of the one set
    * and, for a motif, its strength.
    */
@@ -1712,7 +1712,7 @@ export class StitchPanel {
     // Turned half round a grid, cross stitch, meander or maze is the same kind again; figures need the whole turn.
     if (pat !== 'echo') out.push(this.dial({ label: 'stitch.openAngle', hint: 'stitch.openAngle.hint', ...this.angleField(s)!, drag: true, fmt: (v) => `${Math.round(v)}°` }));
     if (pat !== 'cross') out.push(this.slider({ label: 'stitch.length', hint: 'stitch.openLength.hint', min: 1, max: 3, step: 0.1, get: () => Math.min(3, s.stitch), set: (v) => (s.stitch = v), fmt: (v) => `${formatNumber(v, 1)} mm` }));
-    // Whole crosses lay each diagonal as often as their size needs (crossPasses).
+    // Whole crosses lay each diagonal as often as their size needs (cross_passes in core/src/digitize/deco.rs).
     if (pat !== 'cross' || d.cross === 'half' || d.cross === 'double') out.push(this.check('stitch.triple', 'stitch.openTriple.hint', () => !!d.triple, (v) => (d.triple = v)));
     if (pat === 'cross') out.push(this.check('stitch.crossGrid', 'stitch.crossGrid.hint', () => !d.ownGrid, (v) => (v ? delete d.ownGrid : (d.ownGrid = true))));
     if (pat === 'meander' || pat === 'maze') out.push(this.rerollRow());

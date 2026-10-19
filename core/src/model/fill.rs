@@ -289,7 +289,7 @@ pub fn union_region(rs: &[&Region]) -> Option<Region> {
     })
 }
 
-/// A repeatable number from 0 to 1 for point `i` and `seed` (roughHash in restitch.ts).
+/// A repeatable number from 0 to 1 for point `i` and `seed`.
 fn rough_hash(i: usize, seed: f64) -> f64 {
     let imul = |a: i32, b: i32| a.wrapping_mul(b);
     let mut h = imul(
@@ -302,7 +302,8 @@ fn rough_hash(i: usize, seed: f64) -> f64 {
 }
 
 /// Moves the needle points of the runs, from point `from` on, along their row by a random share of
-/// the shorter stitch beside them (roughenRuns in restitch.ts).
+/// the shorter stitch beside them, up to `k` · ROUGH_FILL. Row ends, corners and short steps
+/// keep their place, so the edge and the density stay.
 pub fn roughen_runs(runs: &mut [Vec<Pt>], from: usize, k: f64, seed: f64, long: f64) {
     let straight = (20.0f64 * std::f64::consts::PI / 180.0).cos();
     let mut n = 0;
@@ -779,5 +780,56 @@ pub(crate) mod tests {
         let h = rough_hash(7, 3.0);
         assert!((0.0..1.0).contains(&h));
         assert_ne!(h, rough_hash(8, 3.0));
+    }
+
+    fn square_rows(underlay: bool) -> FillResult {
+        let r = region_of(400, 0.1, |x, y| x > 5.0 && x < 35.0 && y > 5.0 && y < 35.0);
+        let p = FillParams {
+            spacing: 0.4,
+            stitch: 4.0,
+            angle: Some(90.0),
+            underlay,
+            ..Default::default()
+        };
+        fill_region(&r, &p, [5.0, 5.0], &[]).unwrap()
+    }
+
+    #[test]
+    fn irregular_rows_move_along_themselves_the_same_each_time() {
+        let plain = square_rows(false);
+        let mut a = plain.runs.clone();
+        let mut b = plain.runs.clone();
+        roughen_runs(&mut a, 0, 1.0, 7.0, 4.0 * ROUGH_LONG);
+        roughen_runs(&mut b, 0, 1.0, 7.0, 4.0 * ROUGH_LONG);
+        assert_eq!(a, b);
+        let mut moved = 0;
+        let mut count = 0;
+        for (run, was) in a.iter().zip(&plain.runs) {
+            assert_eq!(run.len(), was.len());
+            // Row ends stay where they were: the outline is the same.
+            assert_eq!((run[0], run[run.len() - 1]), (was[0], was[was.len() - 1]));
+            for (q, p) in run.iter().zip(was) {
+                // Rows run up and down (90 degrees): a point moves along y only.
+                assert!((q[0] - p[0]).abs() < 0.05);
+                if (q[1] - p[1]).abs() > 0.1 {
+                    moved += 1;
+                }
+                count += 1;
+            }
+            for w in run.windows(2) {
+                let l = (w[1][0] - w[0][0]).hypot(w[1][1] - w[0][1]);
+                assert!(l > 0.39 && l <= 4.0 * ROUGH_LONG + 1e-6, "{l}");
+            }
+        }
+        assert!(moved * 3 > count, "{moved} of {count}");
+    }
+
+    #[test]
+    fn irregular_rows_keep_the_underlay() {
+        let plain = square_rows(true);
+        let mut a = plain.runs.clone();
+        roughen_runs(&mut a, plain.under, 1.0, 3.0, 4.0 * ROUGH_LONG);
+        let flat = |r: &[Vec<Pt>]| r.concat()[..plain.under].to_vec();
+        assert_eq!(flat(&a), flat(&plain.runs));
     }
 }

@@ -11,7 +11,7 @@ import type { RegionData, RegionIn } from '../wasm/pkg/heatstitch_core';
  * steps (Ink/Stitch smooths traced outlines for the same reason).
  *
  * Fields, outlines and grown or shrunk regions are computed by the Rust core
- * (core/src/digitize/region.rs); `sample` and `pixelMm`, called per point, stay here.
+ * (core/src/digitize/region.rs); `sample`, called per point, stays here.
  */
 export interface Region {
   label: number;
@@ -139,9 +139,6 @@ export function sample(r: Region, field: Float32Array, xMm: number, yMm: number)
   const d = field[j1 * r.w + i1];
   return (a * (1 - fu) + b * fu) * (1 - fv) + (c * (1 - fu) + d * fu) * fv;
 }
-
-/** Image mm coordinates of the center of window pixel (x, y). */
-export const pixelMm = (r: Region, x: number, y: number): [number, number] => [(x + r.x0 + 0.5) * r.pxMm, (y + r.y0 + 0.5) * r.pxMm];
 
 /**
  * Outline of a region: the zero level of its own signed distance, as closed polylines in mm

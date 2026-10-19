@@ -2020,4 +2020,116 @@ mod tests {
         assert!(t.windows(2).all(|w| w[0] <= w[1]));
         assert!(motif_inside(Motif::Diamonds, 5.0, [2.5, 4.7], 0.0));
     }
+
+    // The tests below came from the Vitest suite when the TypeScript twins went (stage 6a).
+
+    #[test]
+    fn emboss_puts_a_needle_point_on_every_crossing_and_keeps_stitches_short() {
+        let cr = motif_crossings(
+            Motif::Diamonds,
+            10.0,
+            [0.0, 7.3],
+            [1.0, 0.0],
+            0.0,
+            40.0,
+            0.0,
+        );
+        assert!(cr.len() > 4);
+        let regular: Vec<f64> = (0..=10).map(|i| i as f64 * 4.0).collect();
+        let pts = emboss_points(&cr, &regular, 4.0, 0.0, 40.0);
+        for c in &cr {
+            assert!(pts.iter().any(|u| (u - c).abs() < 0.6), "{c}");
+        }
+        let all: Vec<f64> = [0.0]
+            .into_iter()
+            .chain(pts.iter().copied())
+            .chain([40.0])
+            .collect();
+        assert!(all.windows(2).all(|w| w[1] - w[0] <= 4.0 * 1.4 + 1e-9));
+        assert!(pts.windows(2).all(|w| w[1] > w[0]));
+    }
+
+    #[test]
+    fn motifs_stay_upright_whatever_the_row_direction() {
+        // A row at 0 and one at 180 degrees through the same line cross the motif at the same points.
+        let a = motif_crossings(Motif::Stars, 8.0, [0.0, 5.0], [1.0, 0.0], 0.0, 40.0, 0.0);
+        let mut b = motif_crossings(Motif::Stars, 8.0, [40.0, 5.0], [-1.0, 0.0], 0.0, 40.0, 0.0);
+        b = b.iter().rev().map(|u| 40.0 - u).collect();
+        assert!(a.len() > 2);
+        assert_eq!(a.len(), b.len());
+        assert!(a.iter().zip(&b).all(|(u, v)| (u - v).abs() < 1e-6));
+    }
+
+    #[test]
+    fn a_turned_motif_is_crossed_as_the_row_turned_back_crosses_the_upright_one() {
+        let a = 30f64.to_radians();
+        let back_o = [5.0 * a.sin(), 5.0 * a.cos()];
+        let back_e = [a.cos(), -a.sin()];
+        let upright = motif_crossings(Motif::Hearts, 8.0, back_o, back_e, 0.0, 40.0, 0.0);
+        let turned = motif_crossings(Motif::Hearts, 8.0, [0.0, 5.0], [1.0, 0.0], 0.0, 40.0, 30.0);
+        assert_eq!(turned.len(), upright.len());
+        assert!(
+            turned
+                .iter()
+                .zip(&upright)
+                .all(|(u, v)| (u - v).abs() < 1e-6)
+        );
+    }
+
+    #[test]
+    fn knows_what_lies_inside_a_motif() {
+        // Size 10: a diamond per 10 x 18.8 mm tile, stars and hearts at a quarter and three quarters.
+        let inside = |m, at| motif_inside(m, 10.0, at, 0.0);
+        assert!(inside(Motif::Diamonds, [5.0, 9.4]));
+        assert!(!inside(Motif::Diamonds, [1.0, 1.0]));
+        assert!(inside(Motif::Diamonds, [25.0, 9.4 + 18.8]));
+        assert!(inside(Motif::Stars, [2.5, 4.75]));
+        assert!(!inside(Motif::Stars, [7.5, 4.75]));
+        assert!(inside(Motif::Hearts, [7.5, 14.25]));
+        assert!(inside(Motif::Waves, [5.0, 3.0]));
+        assert!(!inside(Motif::Waves, [0.0, 3.0]));
+        assert!(inside(Motif::Waves, [-5.0, 3.0]));
+    }
+
+    #[test]
+    fn textures_keep_stitches_between_a_third_and_1_4_stitch_lengths() {
+        for t in [
+            Texture::Zigzag,
+            Texture::Swell,
+            Texture::Steps,
+            Texture::Herringbone,
+        ] {
+            for v in [0.0, 1.3, 5.9, 17.2] {
+                let pts = texture_points(t, 12.0, 4.0, v, 0.0, 30.0, 0.6);
+                let all: Vec<f64> = [0.0].into_iter().chain(pts).chain([30.0]).collect();
+                for i in 1..all.len() {
+                    let g = all[i] - all[i - 1];
+                    let min = if i == 1 || i == all.len() - 1 {
+                        0.6
+                    } else {
+                        4.0 * 0.3
+                    };
+                    assert!(
+                        g >= min - 1e-9 && g <= 4.0 * 1.4 + 1e-9,
+                        "{t:?} at v {v}: {g}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn textures_shift_the_needle_points_from_row_to_row() {
+        // Zigzag: from v = 0 to a quarter of the size the points move by half the size along the row.
+        let a = texture_points(Texture::Zigzag, 12.0, 4.0, 0.0, 0.0, 30.0, 0.6);
+        let b = texture_points(Texture::Zigzag, 12.0, 4.0, 3.0, 0.0, 30.0, 0.6);
+        let shift = ((b[0] - a[0]) % 4.0 + 4.0) % 4.0;
+        assert!((shift - 3.0).abs() < 1e-6, "{shift}");
+    }
+
+    #[test]
+    fn coarse_crosses_are_laid_twice_as_often() {
+        assert_eq!(cross_passes(2.3), 2);
+        assert_eq!(cross_passes(3.0), 4);
+    }
 }

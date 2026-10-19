@@ -7,7 +7,7 @@ use wasm_bindgen::prelude::*;
 
 use super::digitize::{RegionData, lines_from};
 use crate::digitize::border;
-use crate::digitize::deco::{self, CrossKind, Figure, GridKind, OpenParams, ZigzagRows};
+use crate::digitize::deco::{self, CrossKind, Figure, GridKind, OpenParams};
 use crate::digitize::echo::{EchoSpec, echo_lines};
 use crate::digitize::fill::{self, FillParams, FillResult, Under};
 use crate::digitize::flow::{self, DirField, OrientLook};
@@ -329,41 +329,9 @@ pub fn contour_field(r: RegionIn) -> FieldOut {
     field_out(flow::contour_field(&r.r))
 }
 
-/// `lines`: x0, y0, x1, y1 per stitch.
-#[wasm_bindgen(js_name = stitchField)]
-pub fn stitch_field(r: RegionIn, lines: &[f64]) -> FieldOut {
-    let l: Vec<[Pt; 2]> = lines
-        .chunks_exact(4)
-        .map(|c| [[c[0], c[1]], [c[2], c[3]]])
-        .collect();
-    field_out(flow::stitch_field(&r.r, &l))
-}
-
 #[wasm_bindgen(js_name = guideField)]
 pub fn guide_field(r: RegionIn, flat: &[f64], lens: &[u32]) -> FieldOut {
     field_out(flow::guide_field(&r.r, &lines_from(flat, lens)))
-}
-
-#[wasm_bindgen(js_name = grainField)]
-pub fn grain_field(r: RegionIn, angle: f64, strength: f64, seed: f64, scale: f64) -> FieldOut {
-    field_out(deco::grain_field(&r.r, angle, strength, seed, scale))
-}
-
-#[wasm_bindgen(js_name = rayField)]
-pub fn ray_field(r: RegionIn, fx: f64, fy: f64) -> FieldOut {
-    field_out(deco::ray_field(&r.r, [fx, fy]))
-}
-
-#[wasm_bindgen(js_name = circleField)]
-pub fn circle_field(r: RegionIn, fx: f64, fy: f64) -> FieldOut {
-    field_out(deco::circle_field(&r.r, [fx, fy]))
-}
-
-/// `centers`: x, y of each center; None places them by the seed.
-#[wasm_bindgen(js_name = swirlField)]
-pub fn swirl_field(r: RegionIn, seed: f64, centers: Option<Vec<f64>>) -> FieldOut {
-    let c = centers.map(|c| pts_from_flat(&c));
-    field_out(deco::swirl_field(&r.r, seed, c.as_deref()))
 }
 
 /// Fill along a field made by one of the field functions for the same region.
@@ -436,23 +404,6 @@ pub fn ring_fill(
         RingMode::Contour
     };
     Ok(out(rings::ring_fill(&r.r, &p, [sx, sy], mode, angle)))
-}
-
-#[wasm_bindgen(js_name = zigzagFill)]
-#[allow(clippy::too_many_arguments)]
-pub fn zigzag_fill(
-    r: RegionIn,
-    p: JsValue,
-    z: JsValue,
-    sx: f64,
-    sy: f64,
-    under_area: Option<RegionIn>,
-    travel: Option<RegionIn>,
-    whole: Option<RegionIn>,
-) -> Result<Option<FillOut>, JsError> {
-    let p = params(p, under_area, travel, whole)?;
-    let z: ZigzagRows = from_js(z)?;
-    Ok(out(deco::zigzag_fill(&r.r, &p, &z, [sx, sy])))
 }
 
 /// The open patterns: `kind` names the pattern (meander, maze, echo, grid, motif, cross) and
@@ -577,9 +528,4 @@ pub fn border_rails(r: RegionIn, lp: &[f64], w: f64, level: f64, center: bool) -
 pub fn line_rails(line: &[f64], closed: bool, w: f64) -> LinesOut {
     let rails = border::line_rails(&pts_from_flat(line), closed, w);
     lines_out(&[rails.left, rails.right])
-}
-
-#[wasm_bindgen(js_name = borderRun)]
-pub fn border_run(lp: &[f64], times: u32, tol: f64, len: f64) -> Vec<f64> {
-    pts_to_flat(&border::border_run(&pts_from_flat(lp), times, tol, len))
 }

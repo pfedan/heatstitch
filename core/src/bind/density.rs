@@ -65,11 +65,6 @@ pub fn compute_density(
     )))
 }
 
-#[wasm_bindgen(js_name = gaussianKernel)]
-pub fn gaussian_kernel(sigma: f64) -> Vec<f32> {
-    blur::gaussian_kernel(sigma)
-}
-
 #[wasm_bindgen(js_name = gaussianBlur)]
 pub fn gaussian_blur(src: &[f32], cols: usize, rows: usize, sigma: f64) -> Vec<f32> {
     blur::gaussian_blur(src, cols, rows, sigma)

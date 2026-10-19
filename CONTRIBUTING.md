@@ -21,11 +21,12 @@ in the browser console, then save the project); see [docs/aufzeichnung.md](docs/
 
 ## Setup
 
-You need Node.js 22 (the version CI uses) and npm, and for the compute core Rust with its
-WebAssembly target and wasm-pack ([docs/rust-core.md](docs/rust-core.md)):
+You need Node.js 22 (the version CI uses) and npm, and for the compute core (`core/`, in Rust)
+[rustup](https://rustup.rs) and wasm-pack. `rust-toolchain.toml` names the Rust version with
+clippy, rustfmt and the WebAssembly target; rustup installs them on the first `cargo` or
+`npm run wasm` in the repository.
 
 ```sh
-rustup target add wasm32-unknown-unknown
 cargo install wasm-pack   # or a prebuilt binary from its releases
 ```
 
@@ -51,7 +52,8 @@ For a map of the codebase (layers, data model, data flow, workers, tests) read
 1. Fork the repository (or create a branch if you have write access) and branch off `develop`, the
    default branch. `main` only follows the releases.
 2. Keep a pull request to one topic. Refactorings that are not needed for the change go in their own PR.
-3. Run `npm test` and `npm run build` before pushing. CI runs exactly these two.
+3. Run `npm test` and `npm run build` before pushing, and after a change in `core/` the three
+   `cargo` commands above. CI runs these.
 4. Open the pull request against `develop`. Start its title with its type (see below), describe what a
    user sees before and after, and add a screenshot for visible changes. A change a user notices also
    gets a line in both languages under `[Unreleased]` in [CHANGELOG.md](CHANGELOG.md).
@@ -62,6 +64,8 @@ For a map of the codebase (layers, data model, data flow, workers, tests) read
 
 - TypeScript, ES modules, no framework. Follow the style of the surrounding code: small modules,
   named exports, two-space indentation, single quotes.
+- Computing (stitches, shapes, checks, file formats) goes in the Rust crate in `core/`, with unit
+  tests; the TypeScript side stays a thin wrapper (see [ARCHITECTURE.md](ARCHITECTURE.md#the-compute-core-core)).
 - Comments explain *why*, not *what*. Keep them short.
 - No new runtime dependencies without discussing it in an issue first. The app is meant to stay
   small and work offline.

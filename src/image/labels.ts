@@ -41,20 +41,10 @@ export function components(labels: Uint8Array | Uint16Array, w: number, h: numbe
 }
 
 /**
- * 3 x 3 majority filter: a pixel takes the label most of its neighbourhood has, if that is a clear
- * majority (5 of 9). Removes single-pixel specks and smooths stair steps; lines of 2 pixels survive.
- */
-export const modeFilter = (labels: Uint8Array, w: number, h: number): Uint8Array => core().modeFilter(labels, w, h);
-
-/**
  * Narrow details that are not specks: a band at least this many times as long as it is wide
- * (length to width, as for a region kept as a line or a satin column) ...
+ * (length to width, as for a region kept as a line or a satin column).
  */
 export const BAND_RATIO = 4;
-/** ... at least this wide (mm, about a thread: narrower is a speck) ... */
-export const BAND_MIN_WIDTH = 0.3;
-/** ... and this long (mm). */
-export const BAND_MIN_LENGTH = 2;
 
 /**
  * Which components of `labels` (as `components` numbers them) are bands (see BAND_RATIO): long and

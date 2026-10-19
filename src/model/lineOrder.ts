@@ -97,12 +97,6 @@ export function ordersOf(form: Form, st: PathStitch, columns: Rails[]): (LineOrd
   return out.some((o) => o) ? out : undefined;
 }
 
-/** `o` turned round: sewn from the other end of its path. */
-export function turnedOrder(o: LineOrder): LineOrder {
-  const { turned, ...rest } = o;
-  return turned ? rest : { ...rest, turned: true };
-}
-
 /**
  * The orders of a satin line mirrored with it: what was on the left rail is now on the right (the
  * line goes the same way, its sides swapped), so each rung's ends change rails and the satin

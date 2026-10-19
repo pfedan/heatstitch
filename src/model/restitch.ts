@@ -76,13 +76,13 @@ export interface DecoSettings {
   emboss?: Motif;
   /** Size of one motif (mm). */
   embossSize?: number;
-  /** Embossing that shows clearly: shorter stitches inside the motif as well (see motifInside). */
+  /** Embossing that shows clearly: shorter stitches inside the motif as well (see motif_inside in core/src/digitize/deco.rs). */
   embossStrong?: boolean;
   /** The embossed motif turned by this many degrees, clockwise on screen; upright when not set. */
   embossAngle?: number;
   /**
-   * Tatami: needle points shifted into a texture (see texturePoints), in place of the offset; not
-   * with `emboss`, which wins when both are set.
+   * Tatami: needle points shifted into a texture (see texture_points in core/src/digitize/deco.rs),
+   * in place of the offset; not with `emboss`, which wins when both are set.
    */
   texture?: Texture;
   /** Size of the texture (mm); TEXTURE_SIZE when not set. */
@@ -201,8 +201,8 @@ export interface FillSettings {
   deco?: DecoSettings;
   /**
    * Irregular rows (a hand-sewn look), 0 to 1: the needle points of covering fills move along
-   * their rows by up to ROUGH_FILL of a stitch, each a different way (see roughenRuns); none when
-   * not set.
+   * their rows by up to ROUGH_FILL of a stitch, each a different way (roughen_runs in
+   * core/src/model/fill.rs); none when not set.
    */
   rough?: number;
   /** Which irregular fill: set once when it is turned on, kept by copies and the project file. */
@@ -1497,7 +1497,7 @@ export function openOnPurpose(p: Pattern, objs: SewObject[]): Uint8Array | null 
   let out: Uint8Array | null = null;
   for (const o of objs) {
     // An appliqué: its placement line (up to the first stop) encloses the fabric, which covers;
-    // a piece cut before, its tack-down (what it remembers as sewn under the cover, see appliqueRuns).
+    // a piece cut before, its tack-down (what it remembers as sewn under the cover, see core/src/model/applique.rs).
     const m = remembered(p, o);
     if (m?.applique) {
       const stop = m.applique.place === false ? (m.under ? underlayRanges(p, o, new Uint8Array(0))[0]?.[1] : undefined) : stopsIn(p, o.first, o.last)[0];
@@ -2455,60 +2455,6 @@ export function fillRuns(area: Region, s: FillSettings, way: FillWay): NewFill |
   } finally {
     out.free();
   }
-}
-
-/**
- * Irregular fill at full strength: a needle point moves along its row by up to this share of the
- * shorter stitch beside it, each way (Ember's hand stitch, Ink/Stitch's random stitch length).
- */
-export const ROUGH_FILL = 0.3;
-/** Only points where the row runs on nearly straight move: corners and row ends stay (cos of 20 degrees). */
-const ROUGH_STRAIGHT = Math.cos((20 * Math.PI) / 180);
-/** Only points between stitches at least this long move (mm): short steps between rows stay. */
-const ROUGH_MIN = 0.8;
-/** No stitch of an irregular fill gets longer than this many stitch lengths. */
-export const ROUGH_LONG = 1.5;
-
-/**
- * Moves the needle points of the runs, from point `from` on (the underlay before stays), along
- * their row by a random share of the shorter stitch beside them, up to `k` · ROUGH_FILL. Uniform
- * and independent from point to point, from a hash of its number and the seed, so it comes out
- * the same each time. Row ends, corners and short steps keep their place, so the edge and the
- * density stay; no stitch gets shorter than ROUGH_MIN / 2 nor longer than `long` (mm) or than it was.
- */
-export function roughenRuns(runs: Pt[][], from: number, k: number, seed: number, long: number): void {
-  let n = 0;
-  for (const run of runs) {
-    for (let i = 1; i < run.length - 1; i++) {
-      const no = n + i;
-      if (no < from) continue;
-      // The point before has moved already: the stitch to it is measured as it is now.
-      const a = run[i - 1];
-      const q = run[i];
-      const b = run[i + 1];
-      const la = Math.hypot(q[0] - a[0], q[1] - a[1]);
-      const lb = Math.hypot(b[0] - q[0], b[1] - q[1]);
-      if (la < ROUGH_MIN || lb < ROUGH_MIN) continue;
-      const cos = ((q[0] - a[0]) * (b[0] - q[0]) + (q[1] - a[1]) * (b[1] - q[1])) / (la * lb);
-      if (cos < ROUGH_STRAIGHT) continue;
-      const top = Math.max(long, la, lb);
-      const lo = Math.max(ROUGH_MIN / 2 - la, lb - top);
-      const hi = Math.min(lb - ROUGH_MIN / 2, top - la);
-      const d = Math.min(hi, Math.max(lo, k * ROUGH_FILL * Math.min(la, lb) * (2 * roughHash(no, seed) - 1)));
-      const ex = (b[0] - a[0]) / Math.hypot(b[0] - a[0], b[1] - a[1]);
-      const ey = (b[1] - a[1]) / Math.hypot(b[0] - a[0], b[1] - a[1]);
-      run[i] = [q[0] + ex * d, q[1] + ey * d];
-    }
-    n += run.length;
-  }
-}
-
-/** A repeatable number from 0 to 1 for point `i` and `seed`. */
-function roughHash(i: number, seed: number): number {
-  let h = Math.imul(i ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul(seed + 0x27d4eb2f, 0xc2b2ae35);
-  h = Math.imul(h ^ (h >>> 16), 0x7feb352d);
-  h = Math.imul(h ^ (h >>> 15), 0x846ca68b);
-  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 }
 
 /**

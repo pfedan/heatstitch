@@ -10,7 +10,7 @@ use crate::correct::engine::levels::Thresholds;
 use crate::correct::engine::mip::mip_program;
 use crate::correct::engine::search::Search;
 use crate::correct::{
-    crop, hidden, nudge, pullback, respace, satin_short, shorts, structure, thin, thin_hand,
+    crop, hidden, nudge, pullback, respace, satin_short, shorts, thin, thin_hand,
 };
 use crate::pattern::{Bounds, Records};
 
@@ -211,17 +211,6 @@ pub fn respace_satins(
         min_share,
         &cols,
     ))
-}
-
-/// The satin columns of the records for a satin mask: start, end, run per column.
-#[wasm_bindgen(js_name = satinColumns)]
-pub fn satin_columns(x: Vec<i32>, y: Vec<i32>, cmd: Vec<u8>, mask: &[u8]) -> Vec<u32> {
-    let p = records(x, y, cmd);
-    let runs = structure::stitch_runs(&p);
-    structure::satin_columns(&runs, mask)
-        .iter()
-        .flat_map(|c| [c.start as u32, c.end as u32, c.run as u32])
-        .collect()
 }
 
 /// New positions, `a` penetrations moved.

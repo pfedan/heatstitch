@@ -3,7 +3,7 @@
 
 use wasm_bindgen::prelude::*;
 
-use crate::parsers::{dst, read};
+use crate::parsers::read;
 
 /// A design read by the core. The arrays are copied out on each access, so read each once.
 #[wasm_bindgen]
@@ -68,14 +68,4 @@ pub fn read_format(format: &str, data: &[u8], name: &str) -> Result<ReadDesign, 
     read::read_format(format, data, name)
         .map(|inner| ReadDesign { inner })
         .map_err(|e| JsError::new(&e))
-}
-
-#[wasm_bindgen(js_name = dstDecodeDx)]
-pub fn dst_decode_dx(b0: u8, b1: u8, b2: u8) -> i32 {
-    dst::decode_dx(b0, b1, b2) as i32
-}
-
-#[wasm_bindgen(js_name = dstDecodeDy)]
-pub fn dst_decode_dy(b0: u8, b1: u8, b2: u8) -> i32 {
-    dst::decode_dy(b0, b1, b2) as i32
 }

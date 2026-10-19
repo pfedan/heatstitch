@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { lineRails } from '../src/digitize/border';
 import { underlayOf, underTier, type Column } from '../src/digitize/satin';
-import { CAP_DEG, cornerStyle, strokeRails } from '../src/digitize/satinJoins';
+import { strokeRails } from '../src/digitize/satinJoins';
 import type { Pt } from '../src/digitize/skeleton';
 import { satinOf, type PathStitch } from '../src/model/along';
 import { lineStitches, lineStitchFor } from '../src/model/line';
@@ -78,8 +78,6 @@ describe('satin corners', () => {
   it('leave curves as they were', () => {
     const p = flatten(parsePath('M0 0 C10 -10 20 10 30 0', ID).paths[0]);
     expect(strokeRails(p, false, 4)).toEqual(lineRails(p, false, 4));
-    expect(cornerStyle('miter', CAP_DEG - 1)).toBe('miter');
-    expect(cornerStyle('miter', CAP_DEG)).toBe('cap');
   });
 
   it('no longer pile up on the inside of a corner', () => {

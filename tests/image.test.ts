@@ -257,4 +257,21 @@ describe('prepare', () => {
     const at = p.labels[Math.round(p.height * 0.25) * p.width + Math.round(p.width * 0.75)];
     expect(p.palette[at].thread).toEqual(other);
   });
+
+  it('keeps the orientation when only the smallest area changes', () => {
+    // A photo-like picture: gradients, noise and soft-edged blobs.
+    const r = rng(7);
+    const img = raster(300, 220, (x, y) => {
+      const blob = Math.max(0, 1 - Math.hypot(x - 100, y - 90) / 70);
+      const blob2 = Math.max(0, 1 - Math.hypot(x - 210, y - 140) / 50);
+      const n = (r() - 0.5) * 24;
+      return [60 + (x / 300) * 120 + blob * 120 + n, 90 + (y / 220) * 80 - blob * 40 + blob2 * 100 + n, 150 - (x / 300) * 60 + blob2 * 60 + n, 255];
+    });
+    const prep = new Preparer(img);
+    const o = { ...DEFAULT_PREPARE, widthMm: 30 };
+    const a = prep.run(o);
+    const b = prep.run({ ...o, minAreaMm2: 6 });
+    expect(b.orient).toBe(a.orient);
+    expect(new Set(b.labels).size).toBeLessThanOrEqual(new Set(a.labels).size);
+  });
 });

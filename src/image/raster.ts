@@ -19,17 +19,6 @@ export interface LabImage {
   opaque: Uint8Array;
 }
 
-/** Pixels with less alpha are transparent: never sewn. */
-export const ALPHA_MIN = 128;
-
-/**
- * Resampling to w x h: area average for shrinking, Mitchell-Netravali cubic for enlarging. Color is
- * weighted by alpha, so transparent pixels do not darken the edges.
- */
-export function resizeArea(src: Raster, w: number, h: number): Raster {
-  return { width: w, height: h, data: core().resizeArea(src.data, src.width, src.height, w, h) };
-}
-
 /** Converts to Lab. */
 export function toLab(src: Raster): LabImage {
   const out = core().toLab(src.data, src.width, src.height);

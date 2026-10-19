@@ -13,10 +13,10 @@ import { DEFAULT_PROFILE } from '../../src/validation/profiles';
 
 /**
  * The designs of public/examples as the app opens them, for comparing whole designs sewn anew
- * before and after a stage: the demo project's designs (every object knows its shape and how it is
- * sewn), the files from elsewhere (shapes guessed from their stitches), and the SVG examples
- * digitized from their path data (tests/rust/fixtures/stage2-svg-shapes.json.gz), areas filled and
- * lines sewn as satin or running stitch in turn.
+ * before and after a change: the demo project's designs (every object knows its shape and how it
+ * is sewn), the files from elsewhere (shapes guessed from their stitches), and the SVG examples
+ * digitized from their path data (tests/fixtures/svg-shapes.json.gz), areas filled and lines sewn
+ * as satin or running stitch in turn.
  */
 
 export interface Design {
@@ -47,7 +47,7 @@ export async function designs(only: (name: string) => boolean = () => true): Pro
     if (!only(name)) continue;
     out.push({ name, pattern: parsePattern(new Uint8Array(readFileSync(`public/examples/${name}`)), name.split('/').pop()!) });
   }
-  const svg = JSON.parse(unzip(readFileSync('tests/rust/fixtures/stage2-svg-shapes.json.gz'))) as { design: string; fill: boolean; d: string; m: Mat }[];
+  const svg = JSON.parse(unzip(readFileSync('tests/fixtures/svg-shapes.json.gz'))) as { design: string; fill: boolean; d: string; m: Mat }[];
   const options = digitizeDefaults(DEFAULT_PROFILE);
   for (const name of [...new Set(svg.map((s) => s.design))]) {
     if (!only(`svg ${name}`)) continue;
