@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { v8Math } from './v8math';
 import * as rsFill from '../../src/digitize/fill';
 import * as rsFlow from '../../src/digitize/flow';
 import * as rsSpiral from '../../src/digitize/spiral';
@@ -125,7 +126,7 @@ const FILLS: [string, Partial<tsFill.FillParams>][] = [
 ];
 const OPEN: rsDeco.OpenParams = { size: 2.5, stitch: 2.5, seed: 7, triple: false, angle: 20 };
 
-describe('stage 3a: TypeScript and Rust agree', () => {
+describe.runIf(v8Math)('stage 3a: TypeScript and Rust agree', () => {
   for (const [name, f] of AREAS) {
     describe(name, () => {
       const r = comp(f);
