@@ -16,6 +16,8 @@ How it is kept (see [CONTRIBUTING.md](CONTRIBUTING.md#releases)):
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-19
+
 ### Deutsch
 
 - **Realistische Fäden per Taste:** Umschalt+R schaltet die realistische Ansicht ein oder aus, ohne das Ansicht-Menü zu öffnen.
