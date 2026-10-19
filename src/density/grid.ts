@@ -1,5 +1,5 @@
-import { forEachThreadSegment, STITCH, type Pattern } from '../model/pattern';
-import { gaussianBlur } from './blur';
+import { STITCH, type Pattern } from '../model/pattern';
+import { core } from '../wasm/core';
 
 export type Metric = 'thread' | 'penetrations';
 
@@ -29,7 +29,10 @@ export interface DensityGrid {
   max: number;
 }
 
-/** Adds `length` to every cell the segment a->b (cell units) passes, split exactly by crossing points. */
+/**
+ * Adds `length` to every cell the segment a->b (cell units) passes, split exactly by crossing points.
+ * The grid itself is built in Rust; this per-segment helper stays for callers that add one piece.
+ */
 export function addSegment(
   data: Float32Array,
   cols: number,
@@ -69,45 +72,22 @@ export function addSegment(
 }
 
 /**
- * Builds the density grid. `filter` receives a record index and can exclude it: for the thread
- * metric the record a thread piece ends at (e.g. to measure satin thread separately), for
- * penetrations the stitch record itself.
+ * Builds the density grid, in the Rust core (core/src/density/grid.rs). `filter` receives a record
+ * index and can exclude it: for the thread metric the record a thread piece ends at (e.g. to
+ * measure satin thread separately), for penetrations the stitch record itself. It is asked once per
+ * stitch record here, so the core gets the design in one call.
  */
 export function computeDensity(p: Pattern, opt: DensityOptions, filter?: (index: number) => boolean): DensityGrid {
-  const cell = opt.cellMm;
-  const sigmaCells = opt.blurMm > 0 ? opt.blurMm / cell : 0;
-  const pad = Math.ceil(3 * sigmaCells) + 1;
-  const b = p.bounds;
-  const align = opt.alignMm ?? cell;
-  const padMm = Math.ceil((pad * cell) / align - 1e-9) * align;
-  const originX = Math.floor(b.minX / 10 / align) * align - padMm + (opt.shiftMm ?? 0);
-  const originY = Math.floor(b.minY / 10 / align) * align - padMm + (opt.shiftMm ?? 0);
-  const cols = Math.floor((b.maxX / 10 - originX) / cell) + 1 + pad;
-  const rows = Math.floor((b.maxY / 10 - originY) / cell) + 1 + pad;
-  let data: Float32Array = new Float32Array(cols * rows);
-  const toCell = (v: number, o: number) => (v / 10 - o) / cell;
-
-  if (opt.metric === 'thread') {
-    forEachThreadSegment(p, opt.includeJumps, (x0, y0, x1, y1, end) => {
-      if (filter && !filter(end)) return;
-      const len = Math.hypot(x1 - x0, y1 - y0) / 10;
-      if (len === 0) return;
-      addSegment(data, cols, rows, toCell(x0, originX), toCell(y0, originY), toCell(x1, originX), toCell(y1, originY), len);
-    });
-  } else {
-    for (let i = 0; i < p.cmd.length; i++) {
-      if (p.cmd[i] !== STITCH || (filter && !filter(i))) continue;
-      const cx = Math.floor(toCell(p.x[i], originX));
-      const cy = Math.floor(toCell(p.y[i], originY));
-      if (cx >= 0 && cy >= 0 && cx < cols && cy < rows) data[cy * cols + cx] += 1;
-    }
+  let keep: Uint8Array | undefined;
+  if (filter) {
+    keep = new Uint8Array(p.cmd.length);
+    for (let i = 0; i < p.cmd.length; i++) if (p.cmd[i] === STITCH && filter(i)) keep[i] = 1;
   }
-
-  const area = cell * cell;
-  for (let i = 0; i < data.length; i++) data[i] /= area;
-  if (sigmaCells > 0) data = gaussianBlur(data, cols, rows, sigmaCells);
-
-  let max = 0;
-  for (let i = 0; i < data.length; i++) if (data[i] > max) max = data[i];
-  return { data, cols, rows, originX, originY, cellMm: cell, max };
+  const b = p.bounds;
+  const r = core().computeDensity(p.x, p.y, p.cmd, Float64Array.of(b.minX, b.minY, b.maxX, b.maxY), opt, keep);
+  try {
+    return { data: r.takeData(), cols: r.cols, rows: r.rows, originX: r.originX, originY: r.originY, cellMm: opt.cellMm, max: r.max };
+  } finally {
+    r.free();
+  }
 }

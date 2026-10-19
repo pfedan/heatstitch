@@ -189,8 +189,11 @@ flowchart LR
   M --> C["classify<br/>(main thread, per profile)"] --> Z["zones, findings"] --> K[correct]
 ```
 
-- **`src/density/`**: the density grid (thread length or needle points per mm²) and its blur.
-- **`src/validation/`**: `measure.ts` measures once per design; `validate.ts` classifies the
+- **`src/density/`**: the density grid (thread length or needle points per mm²) and its blur,
+  computed in Rust (`core/src/density/`).
+- **`src/validation/`**: `measure.ts` measures once per design, in one call to Rust
+  (`core/src/validation/`: density, satin, short stitches, penetrations, coverage and gaps, with
+  the stitch kinds they need); `validate.ts` classifies the
   measurement with a material profile (`profiles.ts`, `thresholds.ts`) cheaply on the main thread,
   so changing fabric or thread reruns instantly. Rules for short stitches, satin, coverage, zones,
   practice rules and acknowledgements live next to it.
