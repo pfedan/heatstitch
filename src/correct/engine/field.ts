@@ -3,7 +3,7 @@ import { STITCH, type Pattern } from '../../model/pattern';
 import { BLUR_MM, HOLE_RADIUS_MM, VALIDATION_CELL_MM } from '../../validation/measure';
 import { satinMask } from '../../validation/satin';
 import { SHORT, tagShortStitches, TIE } from '../../validation/shortStitches';
-import { CAUTION, classifyDensity, classifyHoles, CRITICAL, SAFE, SHORT_STITCH_COUNT, type Thresholds } from '../../validation/thresholds';
+import { CAUTION, classifyDensity, classifyHoles, densityLimits, CRITICAL, SAFE, SHORT_STITCH_COUNT, type Thresholds } from '../../validation/thresholds';
 
 /**
  * The fast measure behind the search: thread density, satin share, short stitches and
@@ -351,7 +351,7 @@ export class Field {
     if (this.base[c] === CRITICAL) return 0;
     if (level === CRITICAL) return 1;
     const { peak, share } = this.densityOf(c);
-    const crit = this.th.critical + share * (this.th.satinCritical - this.th.critical);
+    const crit = densityLimits(this.th, share)[1];
     return peak >= crit * (1 - RISK) && peak > this.basePeak[c] + 0.05 ? 1 : 0;
   }
 

@@ -87,6 +87,8 @@ export interface FixOptions {
 export const DIRECT_MAX = 0.6;
 /** An object takes part in a cell when it carries this share of the thread at the cell's peak. */
 const SHARE = 0.15;
+/** At most this many objects the search re-spaced are tried without it, for the fine stage (see planFix). */
+const KEEP_TRIES = 4;
 /** Later thread (mm/mm²) from which an object's thread counts as covered. */
 const HIDDEN = 2.2;
 const MAX_ROUNDS = 3;
@@ -210,18 +212,36 @@ export async function planFix(p: Pattern, profile: Profile, kind: FixTarget, opt
   let objects: ObjectFix[] = [];
   const upper = kinds.filter((k) => !CAUTION_KINDS.has(k));
   if (upper.length) {
-    const r = await upperFix(p, v, counting, profile, upper, opt);
-    pattern = r.pattern;
-    objects = r.objects;
-    opt.log?.(`upper done t=${Math.round(performance.now() - t0)}`);
-    // Stitches that cannot be set here: invisible stitch work on them.
-    const fine = fineFix(pattern, v, profile, upper, { checks, acks: opt.acks, objects: fineObjects(pattern, new Set(objects.map((x) => x.index))) });
-    opt.log?.(`fine: ${fine.steps.join(',') || 'nothing'} on ${fine.objects.join(',')} t=${Math.round(performance.now() - t0)}`);
-    if (fine.objects.length) {
+    /** The search, then invisible stitch work on the objects it may touch that the search left alone. */
+    const both = async (keep?: Set<number>) => {
+      const r = await upperFix(p, v, counting, profile, upper, opt, keep);
+      opt.log?.(`upper done t=${Math.round(performance.now() - t0)}`);
+      const fine = fineFix(r.pattern, v, profile, upper, { checks, acks: opt.acks, objects: fineObjects(r.pattern, new Set(r.objects.map((x) => x.index))) });
+      opt.log?.(`fine: ${fine.steps.join(',') || 'nothing'} on ${fine.objects.join(',')} t=${Math.round(performance.now() - t0)}`);
       const objs = objectsOf(fine.pattern);
-      pattern = fine.pattern;
-      objects = [...objects, ...fine.objects.map((i) => ({ index: i, kind: objs[i].kind, tools: [...new Set(fine.steps)].map((x) => `fine.${x}`), changes: [], knockout: false, visibility: 0, visible: false, hand: 0 }))].sort((a, b) => a.index - b.index);
+      const fixes = fine.objects.map((i): ObjectFix => ({ index: i, kind: objs[i].kind, tools: [...new Set(fine.steps)].map((x) => `fine.${x}`), changes: [], knockout: false, visibility: 0, visible: false, hand: 0 }));
+      return { pattern: fine.pattern, objects: [...r.objects, ...fixes].sort((a, b) => a.index - b.index), searched: r.objects };
+    };
+    let best = await both();
+    // Where that leaves cells open, the search again without objects it re-spaced that the fine stage
+    // may work on, lowest first, each kept out when that leaves fewer cells open: fills stacked several
+    // deep are fixed best by taking out what lies hidden under the top ones, which re-spacing them by
+    // a little first rules out.
+    const fineOk = fineObjects(p, new Set());
+    let open = openCount(validateDesign(best.pattern, profile, checks));
+    const keep = new Set<number>();
+    for (const i of best.searched.map((x) => x.index).filter((i) => fineOk.has(i)).slice(0, KEEP_TRIES)) {
+      if (!open || opt.stale?.()) break;
+      const alt = await both(new Set([...keep, i]));
+      const n = openCount(validateDesign(alt.pattern, profile, checks));
+      opt.log?.(`without ${[...keep, i].join(',')}: open ${n} (was ${open})`);
+      if (n >= open) continue;
+      keep.add(i);
+      best = alt;
+      open = n;
     }
+    pattern = best.pattern;
+    objects = best.objects;
   }
   const lower = kinds.filter((k) => CAUTION_KINDS.has(k));
   if (lower.length) {
@@ -235,8 +255,8 @@ export async function planFix(p: Pattern, profile: Profile, kind: FixTarget, opt
   return done(pattern, objects, cellDiff(v, after, opt.acks), openCount(after));
 }
 
-/** Density and penetrations: search on the additive field, check for real. */
-async function upperFix(p: Pattern, v: ValidationResult, counting: Uint8Array, profile: Profile, kinds: FixKind[], opt: FixOptions): Promise<{ pattern: Pattern; objects: ObjectFix[] }> {
+/** Density and penetrations: search on the additive field, check for real. Objects in `keep` are not searched. */
+async function upperFix(p: Pattern, v: ValidationResult, counting: Uint8Array, profile: Profile, kinds: FixKind[], opt: FixOptions, keep?: Set<number>): Promise<{ pattern: Pattern; objects: ObjectFix[]; hidden: number[] }> {
   const tStart = performance.now();
   cacheDesign(p);
   const th = thresholdsFor(profile);
@@ -276,7 +296,7 @@ async function upperFix(p: Pattern, v: ValidationResult, counting: Uint8Array, p
   for (const idx of new Set([...carriers.values()].flat())) {
     if (opt.stale?.()) break;
     const u = unitOf(p, objs, objs[idx], kindsArr, opt.hand);
-    if (!('kind' in u)) continue;
+    if (!('kind' in u) || u.objects.some((i) => keep?.has(i))) continue;
     const key = unitKey(u);
     const had = unitCand.get(key);
     if (had) {
@@ -310,7 +330,7 @@ async function upperFix(p: Pattern, v: ValidationResult, counting: Uint8Array, p
     await Promise.resolve();
   }
   opt.log?.(`targets ${targets.length} carriers ${[...new Set([...carriers.values()].flat())].join(',')} units ${[...unitCand.values()].map((c) => `${unitKey(c.unit)}:${c.variants.length}v`).join(' ')} t=${Math.round(performance.now() - tStart)}`);
-  if (!cands.size) return { pattern: p, objects: [] };
+  if (!cands.size) return { pattern: p, objects: [], hidden };
   // Groups: units sharing an open cell.
   const parent = new Map<Candidate, Candidate>([...unitCand.values()].map((c) => [c, c]));
   const find = (x: Candidate): Candidate => (parent.get(x) === x ? x : (parent.set(x, find(parent.get(x)!)), parent.get(x)!));
@@ -494,7 +514,7 @@ async function upperFix(p: Pattern, v: ValidationResult, counting: Uint8Array, p
       const x = c.variants[c.chosen];
       return { index: c.o.index, kind: c.o.kind, tools: x.tools.map((t) => t.id), changes: x.changes, knockout: x.knockout, visibility: c.visibility[c.chosen], visible: x.visible || c.visibility[c.chosen] > (opt.directMax ?? DIRECT_MAX), hand: handOf(p, c.unit, objs) };
     });
-  return { pattern, objects };
+  return { pattern, objects, hidden };
 }
 
 /** Indices in `g` of the objects sharing open cells with g[k], g[k] first. */

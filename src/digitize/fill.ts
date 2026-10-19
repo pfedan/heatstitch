@@ -1,5 +1,5 @@
 import { expandRegion, sample, signedField, type Region } from './region';
-import { MIN_CURVE_STITCH, runStitch, simplify, TOLERANCE } from './run';
+import { MIN_ROW_STITCH, runStitch, simplify, TOLERANCE } from './run';
 import type { Pt } from './skeleton';
 import { borderLoops, orderLoops } from './border';
 import { tour, type Touch } from './tour';
@@ -484,7 +484,7 @@ function rowStitches(f: Frame, k: number, v: number, from: number, to: number, l
 /**
  * Needle points of a wave row at v on the given u: where a stitch would cut the curve by more than
  * `tol`, it is divided into shorter ones until each keeps within `tol` (not shorter than
- * MIN_CURVE_STITCH), as on other curved rows.
+ * MIN_ROW_STITCH), as on other curved rows.
  */
 function waveStitches(f: Frame, tol: number, v: number, us: number[]): Pt[] {
   const out: Pt[] = [f.at(us[0], v)];
@@ -506,7 +506,7 @@ function waveStitches(f: Frame, tol: number, v: number, us: number[]): Pt[] {
       for (let q = 0; q < n; q++) if (off(u0 + ((u1 - u0) * q) / n, u0 + ((u1 - u0) * (q + 1)) / n) > tol) return false;
       return true;
     };
-    while (!fits(n) && Math.abs(u1 - u0) / (n + 1) >= MIN_CURVE_STITCH) n++;
+    while (!fits(n) && Math.abs(u1 - u0) / (n + 1) >= MIN_ROW_STITCH) n++;
     for (let q = 1; q <= n; q++) out.push(f.at(u0 + ((u1 - u0) * q) / n, v));
   }
   return out;
@@ -541,21 +541,32 @@ function sewSection(f: Frame, s: Section, len: number, pull: number, reversed: b
     const fwd = (i % 2 === 0) !== flip;
     const a = fwd ? seg.u0 - pull : seg.u1 + pull;
     const b = fwd ? seg.u1 + pull : seg.u0 - pull;
-    const row = shortened(rowStitches(f, seg.k, f.v(seg.k), a, b, len));
+    let row = shortened(rowStitches(f, seg.k, f.v(seg.k), a, b, len));
     // The step to the next row: in short stitches where the rows lie far apart (a fading fill),
     // along the outline with row ends on the edge. Its ends stay: they are where the rows end.
     const prev = out[out.length - 1];
-    if (prev) out.push(...merged([prev, ...turn(f, prev, row[0], fwd ? -1 : 1, pull, len), row[0]], SHORTEST).slice(1, -1));
+    if (prev && row.length > 1 && f.rowEnds !== 'edge' && dist(prev, row[0]) <= SHARED_TURN + 1e-3) {
+      // Rows this close: the row ends share their hole, as common embroidery software sews tatami.
+      // The next row starts at its second needle point, so the turn is a slanted stitch instead of
+      // one as short as the rows lie apart; each edge gets one hole per turn.
+      row = row.slice(1);
+    } else if (prev) out.push(...merged([prev, ...turn(f, prev, row[0], fwd ? -1 : 1, pull, len), row[0]], SHORTEST).slice(1, -1));
     out.push(...row);
   });
   return out;
 }
 
 /**
+ * Turns up to this long (mm) share the hole of the row ends (see sewSection): the row ends left on
+ * the edge then lie twice as far apart, at most 0.5 mm, which the thread (0.4 mm for 40 wt) still
+ * closes. Rows further apart each reach the edge, or the fabric shows between them there (#346).
+ */
+export const SHARED_TURN = 0.25;
+
+/**
  * The needle points of one row without stitches shorter than SHORTEST. Both ends stay, so every
- * row reaches the edge: the turn to the next row is as long as the rows lie apart, and leaving out
- * a row's end there would leave the fabric showing between the rows. A row shorter than that
- * (at a narrow tip) is a single point in its middle.
+ * row reaches the edge (where rows turn within SHARED_TURN, sewSection lets a row start at its
+ * second point instead). A row shorter than that (at a narrow tip) is a single point in its middle.
  */
 function shortened(row: Pt[]): Pt[] {
   const [a, b] = [row[0], row[row.length - 1]];
@@ -594,7 +605,7 @@ function turn(f: Frame, a: Pt, b: Pt, out: 1 | -1, pull: number, len: number): P
  * Shortest stitch of a fill (mm) within its rows: a shorter one only sets the needle again beside
  * its last hole (rows cut short by a narrow tip, staggered points near a row's end), which punches
  * the fabric without adding to the look. Turns between rows are exempt: they are as long as the
- * rows lie apart, and the row ends they join are what covers the fabric at the edge.
+ * rows lie apart, unless the rows lie so close that they share the hole there (SHARED_TURN).
  */
 export const SHORTEST = 0.4;
 

@@ -5,7 +5,7 @@ import { hoopFit } from '../../model/hoop';
 import type { Pattern } from '../../model/pattern';
 import type { Viewport } from '../../render/viewport';
 import type { Settings } from '../../settings';
-import { canRun, command, commandTitle, getCommand } from '../../shell/commands';
+import { canRun, command, commandTitle, getCommand, keyLabel } from '../../shell/commands';
 import { popover } from '../../shell/popover';
 import { section, showMenu } from '../../shell/ui';
 import { BACKGROUNDS } from '../../ui/controls';
@@ -132,7 +132,7 @@ export function initDesign(app: DesignApp): { render: () => void } {
   };
 
   command({ id: 'view.menu', label: 'design.cmd.viewMenu', group: V, icon: 'eye', run: () => viewPop.open() });
-  command({ id: 'view.realistic', label: 'design.cmd.realistic', group: V, run: click('#realistic') });
+  command({ id: 'view.realistic', label: 'design.cmd.realistic', group: V, keys: ['Shift+R'], run: click('#realistic') });
   command({ id: 'view.liveLight', label: 'design.cmd.liveLight', group: V, when: enabled('#live-light'), run: click('#live-light') });
   command({ id: 'view.shapes', label: 'design.cmd.shapes', group: V, icon: 'view-shapes', keys: ['S'], bind: false, when: flow, run: click('#shapes-seg [aria-pressed="false"]') });
   for (const by of ['thread', 'order', 'kind', 'length'] as const) {
@@ -241,6 +241,7 @@ export function initDesign(app: DesignApp): { render: () => void } {
 
   const titles = () => {
     $('fit').title = commandTitle(getCommand('view.fit')!);
+    $('realistic-check').title = `${t('controls.realistic.hint')} (${keyLabel('Shift+R')})`;
   };
   onLangChange(titles);
   titles();

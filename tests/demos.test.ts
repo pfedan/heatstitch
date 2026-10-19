@@ -39,13 +39,13 @@ describe('demo files', () => {
     const overlap = overlapDesign();
     expect(worst(overlap, WOVEN)).toBe(CRITICAL);
     expect(worst(autoCorrect(overlap, WOVEN, DEFAULT_CORRECTION).pattern, WOVEN)).toBeLessThan(CRITICAL);
-    // Fill under satin: caution on woven (a satin over one fill is normal practice), critical on
-    // caps and knits, cleared on caps by pulling the fill back.
+    // Fill under satin: caution on woven and caps (a satin over one fill is normal practice),
+    // critical on knits, cleared there by pulling the fill back.
     const letters = satinOverlapDesign();
     expect(worst(letters, WOVEN)).toBe(CAUTION);
+    expect(worst(letters, CAP)).toBe(CAUTION);
     expect(worst(letters, KNIT)).toBe(CRITICAL);
-    expect(worst(letters, CAP)).toBe(CRITICAL);
-    expect(worst(autoCorrect(letters, CAP, DEFAULT_CORRECTION).pattern, CAP)).toBeLessThan(CRITICAL);
+    expect(worst(autoCorrect(letters, KNIT, DEFAULT_CORRECTION).pattern, KNIT)).toBeLessThan(CRITICAL);
     // Tiny spiral: normal on woven, critical on knits.
     const sun = shortStitchDesign();
     expect(worst(sun, WOVEN)).toBe(SAFE);

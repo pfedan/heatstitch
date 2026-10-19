@@ -8,11 +8,13 @@ import { fromStored } from '../src/storage/fileStore';
 import { decodeProject } from '../src/storage/project';
 import { measurePattern } from '../src/validation/measure';
 import { parsePattern } from '../src/parsers';
-import type { Profile } from '../src/validation/profiles';
+import { recommendedSpacing, type Profile } from '../src/validation/profiles';
 import { ALL_CHECKS, classify, validatePattern } from '../src/validation/validate';
 
 const load = (f: string) => parsePattern(readFileSync(new URL(`../public/examples/${f}`, import.meta.url)), f);
 const KNIT: Profile = { fabric: 'knit', thread: '40' };
+/** Knit with 12 wt: the spacing and limits of 40 wt on knit before spacing was counted across two rows (rows 0.36 to 0.4 mm apart), what the older example files were made with. */
+const OLD_KNIT: Profile = { fabric: 'knit', thread: '12' };
 const OPT = { goal: 'critical', focus: 'both', trimMm: 2 } as const;
 
 describe('cropping a pattern', () => {
@@ -109,7 +111,7 @@ describe('tuning to the fabric', () => {
     expect(list.length).toBeGreaterThan(0);
     for (const x of list) {
       const sp = x.changes.find((c) => c.field === 'spacing');
-      if (sp) expect(Number(sp.to)).toBeGreaterThanOrEqual(0.55 - 1e-9);
+      if (sp) expect(Number(sp.to)).toBeGreaterThanOrEqual(recommendedSpacing(loose)[0] - 1e-9);
     }
     const objs = sewObjects(p);
     for (const o of objs) remember(p, o, { region: null, lock: true });
@@ -129,10 +131,10 @@ describe('tuning to the fabric', () => {
   ])('never makes the check of %s worse, and says what it left out', async (_, open) => {
     const { planFabric } = await import('../src/correct/plan');
     const p = await open();
-    const plan = await planFabric(p, KNIT, ALL_CHECKS, { trimMm: 2 });
+    const plan = await planFabric(p, OLD_KNIT, ALL_CHECKS, { trimMm: 2 });
     const done = applyProposals(p, plan.proposals, 2)!.pattern;
-    const before = checked(p);
-    const after = checked(done);
+    const before = checked(p, OLD_KNIT);
+    const after = checked(done, OLD_KNIT);
     expect(after.criticalCells).toBeLessThanOrEqual(before.criticalCells);
     expect(after.cautionCells + after.criticalCells).toBeLessThanOrEqual(before.cautionCells + before.criticalCells);
     expect(Object.keys(plan.held).length).toBeGreaterThan(0);
@@ -150,8 +152,8 @@ describe('tuning to the fabric', () => {
 });
 
 /** The check as the app runs it: fills light on purpose are not counted as gaps. */
-function checked(p: Pattern) {
-  return classify(measurePattern(p, openOnPurpose(p, sewObjects(p)) ?? undefined), KNIT, ALL_CHECKS);
+function checked(p: Pattern, profile = KNIT) {
+  return classify(measurePattern(p, openOnPurpose(p, sewObjects(p)) ?? undefined), profile, ALL_CHECKS);
 }
 
 /** A design of the project with wild stitches (tests/fixtures), with what its objects remember. */

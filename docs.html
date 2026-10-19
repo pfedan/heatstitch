@@ -275,7 +275,7 @@
         </figure>
         <dl>
           <dt>Abstand, Winkel, Stichlänge, Kanten</dt>
-          <dd>Unter <i>Gestaltung</i>: <i>Abstand</i> benachbarter Reihen (kleiner ist dichter; die Karte rechnet ihn in Garn pro mm² um), <i>Winkel</i> der Reihen (0 bis 179° in Grad-Schritten, am Rad oder Regler; oder direkt auf der Bühne: Der Knopf neben dem Regler oder <kbd>W</kbd>, dann eine Linie über die Fläche ziehen: Sie zeigt, in welche Richtung die Reihen nacheinander gestickt werden, die Reihen laufen also quer zu ihr, schon beim Ziehen, Loslassen übernimmt, <kbd>Umschalt</kbd> rastet auf 15°, <kbd>Esc</kbd> bricht ab; so auch bei Kreuzschraffur und den offenen Mustern), <i>Stichlänge</i> entlang einer Reihe. <i>Kanten</i> unter <i>Stoff und Halt</i> lässt die Reihen an beiden Enden weiter (+) oder weniger weit (−) reichen: Zugausgleich, weil der Faden den Stoff zusammenzieht. <i>Auto</i> setzt ihn aus Stoff und Größe der Füllung, ein eigener Wert schaltet das ab.</dd>
+          <dd>Unter <i>Gestaltung</i>: <i>Abstand</i> über zwei Reihen, hin und zurück, wie in gängiger Sticksoftware: 0,4 mm heißt Reihen 0,2 mm auseinander (kleiner ist dichter; die Karte rechnet ihn in Garn pro mm² um), <i>Winkel</i> der Reihen (0 bis 179° in Grad-Schritten, am Rad oder Regler; oder direkt auf der Bühne: Der Knopf neben dem Regler oder <kbd>W</kbd>, dann eine Linie über die Fläche ziehen: Sie zeigt, in welche Richtung die Reihen nacheinander gestickt werden, die Reihen laufen also quer zu ihr, schon beim Ziehen, Loslassen übernimmt, <kbd>Umschalt</kbd> rastet auf 15°, <kbd>Esc</kbd> bricht ab; so auch bei Kreuzschraffur und den offenen Mustern), <i>Stichlänge</i> entlang einer Reihe. <i>Kanten</i> unter <i>Stoff und Halt</i> lässt die Reihen an beiden Enden weiter (+) oder weniger weit (−) reichen: Zugausgleich, weil der Faden den Stoff zusammenzieht. <i>Auto</i> setzt ihn aus Stoff und Größe der Füllung, ein eigener Wert schaltet das ab.</dd>
           <dt>In einem Zug</dt>
           <dd>Tatami und Verlauf werden ohne Fadenschnitt gestickt, auch um Löcher, Arme und Spitzen herum. heatstitch plant die Abschnitte als eine Tour: Die Nadel läuft verdeckt unter Reihen, die noch kommen, bis ans Ende eines Zweigs und stickt von dort zurück, so dass kein Weg auf schon gestickten Reihen liegt. Stiche kürzer als 0,4 mm, etwa an der Wende dichter Reihen oder in einer schmalen Spitze, gehen im nächsten Stich auf; sie würden nur ein Loch neben das letzte setzen. Das geschieht von selbst, ohne Einstellung.</dd>
           <dt>Reihenenden</dt>
@@ -691,7 +691,7 @@
         <table>
           <thead><tr><th>Prüfung</th><th>Erkennt</th><th>Vorsicht / Kritisch (Webware, 40 wt)</th></tr></thead>
           <tbody>
-            <tr><td>Garndichte</td><td>Zu viele übereinanderliegende Lagen, die Hauptprüfung</td><td>7 / 12 mm/mm² bei Füllstich, bis 15 / 17,5 bei reinem Satin</td></tr>
+            <tr><td>Garndichte</td><td>Zu viele übereinanderliegende Lagen, die Hauptprüfung</td><td>14 / 24 mm/mm² bei Füllstich, 15 / 17,5 bei reinem Satin</td></tr>
             <tr><td>Kurzstich-Häufung</td><td>Garnknäuel, Knoten</td><td>8 Stiche unter 1 mm in einer Zelle: Vorsicht auf Webware und Kappen, Kritisch auf anderen Stoffen</td></tr>
             <tr><td>Perforation (nur Leder)</td><td>Löcher so dicht, dass sie das Material schwächen</td><td>6 / 9 Löcher im Umkreis von 1 mm</td></tr>
             <tr><td>Deckung und Lücken</td><td>Stoff scheint durch eine zu lockere Lage; zwischen zwei Objekten öffnet sich eine Lücke, wenn der Faden den Stoff zusammenzieht</td><td>nur Vorsicht</td></tr>
@@ -727,7 +727,7 @@
         <h3 id="de-density">Heatmap</h3>
         <dl>
           <dt>Garnlänge (mm/mm²)</dt>
-          <dd>Jeder Stich wird exakt auf die Rasterzellen verteilt, die er durchläuft. Zu viel davon macht Stickereien steif, wellig oder brettartig. Eine Füllstichlage mit 0,4 mm Abstand hat 2,5 mm/mm².</dd>
+          <dd>Jeder Stich wird exakt auf die Rasterzellen verteilt, die er durchläuft. Zu viel davon macht Stickereien steif, wellig oder brettartig. Eine Füllstichlage mit 0,4 mm Abstand (Reihen 0,2 mm auseinander) hat 5 mm/mm².</dd>
           <dt>Einstiche (1/mm²)</dt>
           <dd>Nadellöcher pro Fläche. Wichtig bei Leder, Kunstleder und empfindlichen Stoffen.</dd>
           <dt>Rasterzelle, Glättung, Skala-Maximum</dt>
@@ -824,13 +824,14 @@
           Werten des Stoffs in der Mitte (in der App mit einem Punkt markiert). Zuletzt stickt es in einer zweiten Farbe eine
           <i>Sollkante</i> um jedes Feld: Bleibt zwischen Feld und Sollkante ein Spalt, braucht es mehr Zugausgleich; reicht das
           Feld deutlich darüber hinaus, weniger. Stick das Probestück auf deinem Stoff, mit Vlies und Garn wie später, und wähle
-          dann in der App das Feld, das am besten aussieht. Neue Objekte auf diesem Stoff mit diesem Garn bekommen ab sofort
-          diese Werte, bestehende Stickmuster passt <i>Auf Stoff abstimmen</i> an. Die Werte bleiben in deinem Browser;
-          <i>Werte des Stoffs nehmen</i> vergisst sie wieder.
+          dann in der App das Feld, das am besten aussieht. Das offene Stickmuster und neue auf diesem Stoff mit diesem Garn
+          bekommen ab sofort diese Werte, bestehende Objekte passt <i>Auf Stoff abstimmen</i> an. Jedes Stickmuster speichert
+          seine Werte mit, ein anderer Browser oder eine spätere Messung ändert es nicht still; unter <i>Material</i> steht,
+          ob die Werte vom Stoff kommen oder eingemessen sind. <i>Werte des Stoffs nehmen</i> vergisst sie wieder.
         </p>
         <figure>
           <img src="/guide/swatch-de.jpg" width="1280" height="800" loading="lazy" alt="Ein Probestück für Frottee mit Füllungen in fünf Abständen und vier Zugausgleichen, rechts das gewählte Feld im Material" />
-          <figcaption>Probestück für Frottee, realistisch: Zeilen von 0,44 bis 0,69 mm Abstand, Spalten von 0 bis 0,6 mm Zugausgleich, rot die Sollkante. Rechts ist das Feld 0,49 und +0,2 gewählt.</figcaption>
+          <figcaption>Probestück für Frottee, realistisch: Zeilen von 0,32 bis 0,50 mm Abstand, Spalten von 0 bis 0,6 mm Zugausgleich, rot die Sollkante, die Zahlen in dreifachem Laufstich. Rechts ist das Feld 0,36 und +0,2 gewählt.</figcaption>
         </figure>
         <h3>Von Hand</h3>
         <p>
@@ -893,7 +894,7 @@
         <p>Das Auge unten rechts auf der Bühne öffnet das <i>Ansicht</i>-Menü. Es gilt in <i>Gestalten</i> und <i>Prüfen</i>.</p>
         <dl>
           <dt>Realistische Fäden</dt>
-          <dd>Runde, gezwirnte Fäden mit Schatten (WebGL2), so breit wie die <i>Fadenbreite</i>, die der Garnstärke des Materials folgt. Echtes Garn glänzt quer zu seinen Fasern: Mit <i>Licht folgt Maus und Neigung</i> kommt das Licht aus der Richtung des Zeigers oder der Neigung des Handys, und Satinsäulen und Füllreihen leuchten je nach Stichrichtung auf, wie beim Drehen eines Aufnähers in der Hand. Beim Bild umwandeln läuft das Licht beim ersten Ergebnis einmal herum; <i>Wie gestickt</i> holt das zurück.</dd>
+          <dd><kbd>Umschalt</kbd>+<kbd>R</kbd> schaltet sie ein oder aus. Runde, gezwirnte Fäden mit Schatten (WebGL2), so breit wie die <i>Fadenbreite</i>, die der Garnstärke des Materials folgt. Echtes Garn glänzt quer zu seinen Fasern: Mit <i>Licht folgt Maus und Neigung</i> kommt das Licht aus der Richtung des Zeigers oder der Neigung des Handys, und Satinsäulen und Füllreihen leuchten je nach Stichrichtung auf, wie beim Drehen eines Aufnähers in der Hand. Beim Bild umwandeln läuft das Licht beim ersten Ergebnis einmal herum; <i>Wie gestickt</i> holt das zurück.</dd>
           <dt>Stiche färben nach</dt>
           <dd><i>Garnfarbe</i>, <i>Reihenfolge</i>, <i>Stichart</i> oder <i>Stichlänge</i>, siehe <a href="#de-sequence">Ablauf und Farben</a>.</dd>
           <dt>Hintergrund und Stoff</dt>
@@ -1011,6 +1012,7 @@
             <tr><td>Objekt ziehen</td><td>Objekt wählen und verschieben</td></tr>
             <tr><td><kbd>F</kbd> oder Doppelklick, <kbd>+</kbd> <kbd>-</kbd> <kbd>0</kbd></td><td>Einpassen; vergrößern, verkleinern, Originalgröße</td></tr>
             <tr><td><kbd>H</kbd>, <kbd>S</kbd>, <kbd>A</kbd></td><td>Alle Markierungen ein oder aus; Stiche oder Formen zeigen; Auto-Hervorheben ein oder aus</td></tr>
+            <tr><td><kbd>Umschalt</kbd>+<kbd>R</kbd></td><td>Realistische Fäden ein oder aus</td></tr>
             <tr><td><kbd>Umschalt</kbd>+<kbd>B</kbd></td><td>Vorlage zum Abpausen ein- oder ausblenden</td></tr>
             <tr><td><kbd>L</kbd></td><td>Messen: Abstand zwischen zwei Punkten</td></tr>
             <tr><td><kbd>J</kbd> <kbd>K</kbd> oder <kbd>↓</kbd> <kbd>↑</kbd></td><td>Nächstes / voriges Stickmuster</td></tr>
@@ -1305,7 +1307,7 @@
         </figure>
         <dl>
           <dt>Spacing, angle, stitch length, edges</dt>
-          <dd>Under <i>Styling</i>: <i>Spacing</i> between neighboring rows (smaller is denser; the card converts it to thread per mm²), <i>Angle</i> of the rows (0 to 179° in steps of one degree, at the dial or slider; or right on the stage: the button beside the slider or <kbd>W</kbd>, then drag a line over the area: it shows the way the rows are sewn one after the other, so the rows run across it, already while you drag, letting go takes it over, <kbd>Shift</kbd> snaps to 15°, <kbd>Esc</kbd> cancels; the same for crosshatch and the open patterns), <i>Stitch length</i> along a row. <i>Edges</i> under <i>Fabric and hold</i> lets the rows reach further (+) or less far (−) at both ends: pull compensation, because the thread pulls the fabric together. <i>Auto</i> sets it from the fabric and the size of the fill; an own value turns that off.</dd>
+          <dd>Under <i>Styling</i>: <i>Spacing</i> across two rows, there and back, as common embroidery software counts it: 0.4 mm means rows 0.2 mm apart (smaller is denser; the card converts it to thread per mm²), <i>Angle</i> of the rows (0 to 179° in steps of one degree, at the dial or slider; or right on the stage: the button beside the slider or <kbd>W</kbd>, then drag a line over the area: it shows the way the rows are sewn one after the other, so the rows run across it, already while you drag, letting go takes it over, <kbd>Shift</kbd> snaps to 15°, <kbd>Esc</kbd> cancels; the same for crosshatch and the open patterns), <i>Stitch length</i> along a row. <i>Edges</i> under <i>Fabric and hold</i> lets the rows reach further (+) or less far (−) at both ends: pull compensation, because the thread pulls the fabric together. <i>Auto</i> sets it from the fabric and the size of the fill; an own value turns that off.</dd>
           <dt>In one go</dt>
           <dd>Tatami and gradient fills are sewn without a trim, also around holes, arms and points. heatstitch plans the sections as one tour: the needle runs hidden under rows still to come to the far end of a branch and sews back from there, so no way lies on top of rows sewn already. Stitches shorter than 0.4 mm, as where dense rows turn or in a narrow point, go into the next stitch; they would only set a hole beside the last one. This happens by itself, without a setting.</dd>
           <dt>Row ends</dt>
@@ -1714,7 +1716,7 @@
         <table>
           <thead><tr><th>Check</th><th>Finds</th><th>Caution / Critical (woven, 40 wt)</th></tr></thead>
           <tbody>
-            <tr><td>Thread density</td><td>Too many layers on top of each other, the main check</td><td>7 / 12 mm/mm² for fill stitch, up to 15 / 17.5 for pure satin</td></tr>
+            <tr><td>Thread density</td><td>Too many layers on top of each other, the main check</td><td>14 / 24 mm/mm² for fill stitch, 15 / 17.5 for pure satin</td></tr>
             <tr><td>Short-stitch cluster</td><td>Thread lumps, knots</td><td>8 stitches under 1 mm in one cell: caution on woven fabric and caps, critical on other fabrics</td></tr>
             <tr><td>Perforation (leather only)</td><td>Holes so dense that they weaken the material</td><td>6 / 9 holes within 1 mm</td></tr>
             <tr><td>Coverage and gaps</td><td>Fabric shows through a layer that is too loose; a gap opens between two objects when the thread pulls the fabric together</td><td>caution only</td></tr>
@@ -1749,7 +1751,7 @@
         <h3 id="en-density">Heatmap</h3>
         <dl>
           <dt>Thread length (mm/mm²)</dt>
-          <dd>Every stitch is distributed exactly over the grid cells it crosses. Too much of it makes embroidery stiff, wavy or board-like. One fill layer at 0.4 mm spacing has 2.5 mm/mm².</dd>
+          <dd>Every stitch is distributed exactly over the grid cells it crosses. Too much of it makes embroidery stiff, wavy or board-like. One fill layer at 0.4 mm spacing (rows 0.2 mm apart) has 5 mm/mm².</dd>
           <dt>Needle points (1/mm²)</dt>
           <dd>Needle holes per area. Important on leather, faux leather and delicate fabrics.</dd>
           <dt>Grid cell, smoothing, scale maximum</dt>
@@ -1845,12 +1847,14 @@
           a dot in the app). Last, in a second color, it sews a <i>nominal edge</i> around each cell: a gap between cell and
           nominal edge means it needs more pull compensation; a cell reaching well past it, less. Stitch the swatch on your
           fabric, with stabilizer and thread as later, then pick the cell that looks best in the app. From then on, new objects
-          on this fabric with this thread get these values, and <i>Tune to fabric</i> adjusts existing designs. The values stay
-          in your browser; <i>Use the fabric's values</i> forgets them again.
+          on this fabric with this thread, and the open design, get these values, and <i>Tune to fabric</i> adjusts existing
+          objects. Every design saves its values with it, so another browser or a later measurement does not change it silently;
+          <i>Material</i> shows whether they come from the fabric or were measured. <i>Use the fabric's values</i> forgets
+          them again.
         </p>
         <figure>
           <img src="/guide/swatch-en.jpg" width="1280" height="800" loading="lazy" alt="A test swatch for terry with fills at five spacings and four pull compensations, the picked cell in Material on the right" />
-          <figcaption>Test swatch for terry, realistic: rows from 0.44 to 0.69 mm spacing, columns from 0 to 0.6 mm pull compensation, the nominal edge in red. On the right the cell 0.49 and +0.2 is picked.</figcaption>
+          <figcaption>Test swatch for terry, realistic: rows from 0.32 to 0.50 mm spacing, columns from 0 to 0.6 mm pull compensation, the nominal edge in red, the numbers in triple running stitch. On the right the cell 0.36 and +0.2 is picked.</figcaption>
         </figure>
         <h3>By hand</h3>
         <p>
@@ -1912,7 +1916,7 @@
         <p>The eye at the bottom right of the stage opens the <i>View</i> menu. It applies in <i>Design</i> and <i>Check</i>.</p>
         <dl>
           <dt>Realistic threads</dt>
-          <dd>Round, twisted threads with shadows (WebGL2), as wide as the <i>Thread width</i>, which follows the thread weight of the material. Real thread shines across its fibers: with <i>Light follows pointer and tilt</i> the light comes from the direction of the pointer or the tilt of a phone, and satin columns and fill rows light up by their stitch direction, like turning a patch in your hand. When converting a picture the light sweeps around once at the first result; <i>As sewn</i> brings that back.</dd>
+          <dd><kbd>Shift</kbd>+<kbd>R</kbd> turns them on or off. Round, twisted threads with shadows (WebGL2), as wide as the <i>Thread width</i>, which follows the thread weight of the material. Real thread shines across its fibers: with <i>Light follows pointer and tilt</i> the light comes from the direction of the pointer or the tilt of a phone, and satin columns and fill rows light up by their stitch direction, like turning a patch in your hand. When converting a picture the light sweeps around once at the first result; <i>As sewn</i> brings that back.</dd>
           <dt>Color stitches by</dt>
           <dd><i>Thread color</i>, <i>Order</i>, <i>Stitch type</i> or <i>Stitch length</i>, see <a href="#en-sequence">Sequence and colors</a>.</dd>
           <dt>Background and fabric</dt>
@@ -2030,6 +2034,7 @@
             <tr><td>Drag an object</td><td>Select and move it</td></tr>
             <tr><td><kbd>F</kbd> or double click, <kbd>+</kbd> <kbd>-</kbd> <kbd>0</kbd></td><td>Fit; zoom in, zoom out, actual size</td></tr>
             <tr><td><kbd>H</kbd>, <kbd>S</kbd>, <kbd>A</kbd></td><td>All markers on or off; show stitches or shapes; auto highlight on or off</td></tr>
+            <tr><td><kbd>Shift</kbd>+<kbd>R</kbd></td><td>Realistic threads on or off</td></tr>
             <tr><td><kbd>Shift</kbd>+<kbd>B</kbd></td><td>Show or hide the tracing image</td></tr>
             <tr><td><kbd>L</kbd></td><td>Measure the distance between two points</td></tr>
             <tr><td><kbd>J</kbd> <kbd>K</kbd> or <kbd>↓</kbd> <kbd>↑</kbd></td><td>Next / previous design</td></tr>

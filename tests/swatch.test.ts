@@ -6,9 +6,10 @@ import { STITCH } from '../src/model/pattern';
 import { remembered } from '../src/model/restitch';
 import { SWATCH_CELL, SWATCH_FONT, cellAt, swatchGrid, testSwatch } from '../src/model/swatch';
 import { digitizeDefaults, pullFor } from '../src/digitize/digitize';
-import { recommendedSpacing, type Profile } from '../src/validation/profiles';
+import { normalizeProfile, recommendedSpacing, type Profile } from '../src/validation/profiles';
+import { decodeProject, encodeProject, projectSettings } from '../src/storage/project';
 import { chain } from './helpers/torture';
-import { setOwn, setProfile, withOwn, applyMaterial, materialOf, DEFAULTS } from '../src/settings';
+import { setOwn, setProfile, withOwn, applyMaterial, materialOf, normalizeMaterial, DEFAULTS } from '../src/settings';
 
 const font = JSON.parse(readFileSync(new URL(`../public/fonts/${SWATCH_FONT}.json`, import.meta.url), 'utf8')) as Font;
 const fmt = (v: number, d: number) => v.toFixed(d).replace('.', ',');
@@ -17,7 +18,8 @@ const terry: Profile = { fabric: 'terry', thread: '40' };
 describe('test swatch', () => {
   it('centres the spacing on the fabric default and steps the pull from none', () => {
     const g = swatchGrid({ fabric: 'woven', thread: '40' }, 'fill');
-    expect(g.spacings[2]).toBe(0.36);
+    // Rows 0.2 mm apart: woven's 0.4 counted across two rows.
+    expect(g.spacings[2]).toBe(0.2);
     expect(g.spacings[0]).toBeLessThan(g.spacings[1]);
     expect(g.pulls).toEqual([0, 0.1, 0.2, 0.3]);
     expect(swatchGrid(terry, 'fill').pulls).toEqual([0, 0.2, 0.4, 0.6]);
@@ -74,15 +76,38 @@ describe('test swatch', () => {
     expect(s.profile.own).toBeUndefined();
     setProfile(s, terry);
     expect(s.profile.own?.fill?.spacing).toBe(0.45);
-    // They belong to the browser: a design's material leaves them out, applying it puts them back.
+    // A design keeps them with its material: what the browser measures later does not change it.
     const m = materialOf(s);
-    expect(m.profile.own).toBeUndefined();
+    expect(m.profile.own?.fill?.pull).toBe(0.6);
+    setOwn(s, { fill: { spacing: 0.4, pull: 0.4 } });
     applyMaterial(s, m);
     expect(s.profile.own?.fill?.pull).toBe(0.6);
+    // A design without measured values keeps the fabric's, measured ones in the browser or not.
+    applyMaterial(s, { ...m, profile: terry });
+    expect(s.profile.own).toBeUndefined();
+    // Taking the browser's again (the panel's offer) is setProfile.
+    setProfile(s, s.profile);
+    expect(s.profile.own?.fill?.pull).toBe(0.4);
     // Forgetting them goes back to the fabric's values.
     setOwn(s, undefined);
     expect(digitizeDefaults(s.profile)).toEqual(before);
     expect(withOwn(terry, {})).toEqual(terry);
+  });
+});
+
+describe('measured values in a project', () => {
+  it('are saved with the project and its designs and read back, broken ones dropped', async () => {
+    const s = structuredClone(DEFAULTS);
+    setProfile(s, terry);
+    setOwn(s, { fill: { spacing: 0.32, pull: 0.2 } });
+    const material = materialOf(s);
+    const data = readFileSync(new URL('../public/examples/cat-60mm.pes', import.meta.url));
+    const bytes = await encodeProject({ files: [{ name: 'cat.pes', data: new Uint8Array(data), acks: [], objects: [], material }], active: 0, image: null, settings: projectSettings(s) });
+    const back = await decodeProject(bytes);
+    const own = { ...terry, own: { fill: { spacing: 0.32, pull: 0.2 } } };
+    expect(back.settings.profile).toEqual(own);
+    expect(normalizeMaterial(back.files[0].material, materialOf(DEFAULTS)).profile).toEqual(own);
+    expect(normalizeProfile({ ...terry, own: { fill: { spacing: 9, pull: 0.2 } } })).toEqual(terry);
   });
 });
 
