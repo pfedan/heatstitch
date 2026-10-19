@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { v8Math } from './v8math';
 import * as rsSatin from '../../src/digitize/satin';
 import * as rsRungs from '../../src/digitize/rungs';
 import * as rsForms from '../../src/digitize/satinForms';
@@ -279,7 +280,7 @@ describe('stage 3b: satin forms and shapes', () => {
   });
 });
 
-describe('stage 3b: satin along a line', () => {
+describe.runIf(v8Math)('stage 3b: satin along a line', () => {
   it('turns the same corners and ends', () => {
     const lines: { line: Pt[]; closed: boolean }[] = [
       ...COLS.flatMap((c) => [{ line: c.left, closed: false }, { line: c.right, closed: false }]),
