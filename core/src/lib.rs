@@ -10,6 +10,7 @@ pub mod digitize;
 pub mod geom;
 pub mod image;
 pub mod parsers;
+pub mod pattern;
 pub mod shape;
 pub mod validation;
 pub mod writers;
