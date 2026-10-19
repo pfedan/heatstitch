@@ -4,6 +4,7 @@ import type { Pattern } from '../model/pattern';
 import type { Profile } from '../validation/profiles';
 import type { Checks } from '../validation/validate';
 import { measurePattern, measurementBuffers, type Measurement } from '../validation/measure';
+import { loadCore } from '../wasm/core';
 import { computeDensity, type DensityGrid, type DensityOptions } from './grid';
 
 export type WorkerRequest =
@@ -22,8 +23,11 @@ export interface WorkerResponse {
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
 
-ctx.onmessage = (e: MessageEvent<WorkerRequest>) => {
+const ready = loadCore();
+
+ctx.onmessage = async (e: MessageEvent<WorkerRequest>) => {
   const req = e.data;
+  await ready;
   try {
     if (req.type === 'density') {
       const grid = computeDensity(req.pattern, req.options);

@@ -21,7 +21,13 @@ in the browser console, then save the project); see [docs/aufzeichnung.md](docs/
 
 ## Setup
 
-You need Node.js 22 (the version CI uses) and npm.
+You need Node.js 22 (the version CI uses) and npm, and for the compute core Rust with its
+WebAssembly target and wasm-pack ([docs/rust-core.md](docs/rust-core.md)):
+
+```sh
+rustup target add wasm32-unknown-unknown
+cargo install wasm-pack   # or a prebuilt binary from its releases
+```
 
 ```sh
 npm install
@@ -29,10 +35,13 @@ npm run dev        # dev server with hot reload
 npm test           # unit tests (Vitest)
 npm run typecheck  # TypeScript only
 npm run build      # typecheck + production build into dist/
+npm run wasm       # only the Rust core into src/wasm/pkg (the commands above do it first)
 npm run preview    # serve the build: http://localhost:4173/
 ```
 
-There is no backend and no separate lint step; `tsc` in strict mode is the gate.
+There is no backend and no separate lint step; `tsc` in strict mode is the gate. In `core/`,
+`cargo fmt --check`, `cargo clippy --all-targets -- -D warnings` and `cargo test` are the gate for
+the Rust code.
 
 For a map of the codebase (layers, data model, data flow, workers, tests) read
 [ARCHITECTURE.md](ARCHITECTURE.md) first.

@@ -1,0 +1,23 @@
+[package]
+name = "heatstitch-core"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+description = "The compute core of heatstitch: stitches, shapes, checks and file formats, for the browser as WebAssembly"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+wasm-bindgen = "0.2"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+
+# wasm-opt (binaryen) is not needed: LTO already gives a small module, and leaving it out keeps
+# the build free of a second downloaded tool.
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
