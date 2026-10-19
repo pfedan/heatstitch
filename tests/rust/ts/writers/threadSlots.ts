@@ -1,5 +1,5 @@
 import { deltaE2000, rgbToLab } from '../image/color';
-import type { ThreadColor } from '../model/pattern';
+import type { ThreadColor } from '../../../../src/model/pattern';
 
 const key = (c: ThreadColor) => `${c.r},${c.g},${c.b},${c.pecIndex ?? ''}`;
 const lab = (c: ThreadColor) => rgbToLab(c.r, c.g, c.b);

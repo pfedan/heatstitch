@@ -37,6 +37,13 @@ pub struct Bounds {
     pub max_y: i32,
 }
 
+/// A sewing field in mm, as `Hoop` in src/model/hoop.ts (read from a file header or chosen).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Hoop {
+    pub w: f64,
+    pub h: f64,
+}
+
 /// The records of a design and one color per color block.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Records {

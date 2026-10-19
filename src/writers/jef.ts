@@ -1,133 +1,27 @@
-import { COLOR_CHANGE, END, JUMP, STITCH, TRIM, type Pattern } from '../model/pattern';
-import { jefColor, JEF_SLOTS } from '../parsers/jefPalette';
+import { core } from '../wasm/core';
+import type { Pattern } from '../model/pattern';
 import type { Hoop } from '../model/hoop';
-import { ByteWriter, extents, splitMove } from './bytes';
-import { uniqueSlots } from './threadSlots';
+import { writeWithCore } from './bytes';
 
 /** Largest move per JEF record and axis (signed byte). */
 export const JEF_MAX_DELTA = 127;
 
-/** Janome hoop codes. */
-const HOOP_110X110 = 0;
-const HOOP_50X50 = 1;
-const HOOP_140X200 = 2;
-const HOOP_126X110 = 3;
-const HOOP_200X200 = 4;
-
-/** Smallest standard Janome hoop the design fits (0.1 mm), as pyembroidery picks it. */
-export function jefHoop(width: number, height: number): number {
-  if (width < 500 && height < 500) return HOOP_50X50;
-  if (width < 1260 && height < 1100) return HOOP_126X110;
-  if (width < 1400 && height < 2000) return HOOP_140X200;
-  if (width < 2000 && height < 2000) return HOOP_200X200;
-  return HOOP_110X110;
-}
-
 /** Janome code of a chosen sewing field (mm), or null when Janome has no such hoop. */
 export function jefHoopCode(hoop: Hoop): number | null {
-  const codes: Record<string, number> = {
-    '50x50': HOOP_50X50,
-    '100x100': HOOP_110X110,
-    '110x110': HOOP_110X110,
-    '126x110': HOOP_126X110,
-    '140x200': HOOP_140X200,
-    '200x200': HOOP_200X200,
-  };
-  return codes[`${hoop.w}x${hoop.h}`] ?? null;
+  const code = core().jefHoopCode(hoop.w, hoop.h);
+  return code < 0 ? null : code;
 }
 
-/** Janome palette slot per color block: each distinct color its own. */
-function palette(p: Pattern, blocks: number): number[] {
-  const colors = Array.from({ length: blocks }, (_, k) => p.colors[k] ?? p.colors[p.colors.length - 1] ?? { r: 0, g: 0, b: 0 });
-  return uniqueSlots(colors, JEF_SLOTS, jefColor);
-}
-
+/** The date as JEF stores it, in local time: YYYYMMDDhhmmss. */
 const stamp = (d: Date) =>
   [d.getFullYear(), d.getMonth() + 1, d.getDate(), d.getHours(), d.getMinutes(), d.getSeconds()]
     .map((v, k) => String(v).padStart(k ? 2 : 4, '0'))
     .join('');
 
 /**
- * Writes a Janome JEF file. JEF has no trim command: a cut is written as three zero-length jumps, as
- * pyembroidery and Ink/Stitch write it (Janome machines cut on three in a row, readers on one), so
- * it holds however short the move after it is. A zero-length jump is therefore never written for
- * anything else. Long stitches are split into equal stitches, since long jumps would read as cuts;
- * after a cut the way to the next stitch is jumps. Colors are rounded to the Janome palette.
+ * Writes a Janome JEF file (core/src/writers/jef.rs). JEF has no trim command: a cut is written as
+ * three zero-length jumps, so a zero-length jump is never written for anything else. Long stitches
+ * are split into equal stitches; after a cut the way to the next stitch is jumps. Colors are
+ * rounded to the Janome palette.
  */
-export function writeJef(p: Pattern, date = new Date(), hoop: Hoop | null = null): Uint8Array {
-  const recs = new ByteWriter();
-  let points = 1; // the end command
-  let blocks = 1;
-  let cx = 0;
-  let cy = 0;
-  const rec = (dx: number, dy: number, ctrl: number | null) => {
-    if (ctrl !== null) {
-      recs.bytes([0x80, ctrl]);
-      points++;
-    }
-    recs.u8(dx);
-    recs.u8(-dy);
-    points++;
-    cx += dx;
-    cy += dy;
-  };
-  // Nothing is sewn yet: the way to the first stitch is jumps, not a stitch from the origin.
-  let trimmed = true;
-  // A cut since the last stitch, written right before the next record.
-  let cut = false;
-  const writeCut = () => {
-    if (cut) for (let k = 0; k < 3; k++) rec(0, 0, 0x02);
-    cut = false;
-  };
-  for (let i = 0; i < p.cmd.length; i++) {
-    const c = p.cmd[i];
-    if (c === END) break;
-    if (c === STITCH) {
-      writeCut();
-      // After a cut the way there may be jumps; otherwise they would read as a cut.
-      const pieces = splitMove(p.x[i] - cx, p.y[i] - cy, JEF_MAX_DELTA);
-      pieces.forEach(([dx, dy], k) => rec(dx, dy, trimmed && k < pieces.length - 1 ? 0x02 : null));
-      trimmed = false;
-    } else if (c === TRIM) {
-      // Only thread that was sewn can be cut.
-      if (!trimmed) cut = true;
-      trimmed = true;
-    } else if (c === JUMP) {
-      writeCut();
-      for (const [dx, dy] of splitMove(p.x[i] - cx, p.y[i] - cy, JEF_MAX_DELTA)) if (dx || dy) rec(dx, dy, 0x02);
-    } else if (c === COLOR_CHANGE) {
-      writeCut();
-      rec(0, 0, 0x01);
-      blocks++;
-      trimmed = true;
-    }
-  }
-  writeCut();
-  recs.bytes([0x80, 0x10]);
-
-  const b = extents(p);
-  const halfW = Math.round((b.maxX - b.minX) / 2);
-  const halfH = Math.round((b.maxY - b.minY) / 2);
-  const out = new ByteWriter();
-  out.u32(0x74 + blocks * 8);
-  out.u32(0x14);
-  out.ascii(stamp(date));
-  out.u8(0);
-  out.u8(0);
-  out.u32(blocks);
-  out.u32(points);
-  out.u32((hoop && jefHoopCode(hoop)) ?? jefHoop(b.maxX - b.minX, b.maxY - b.minY));
-  for (const v of [halfW, halfH, halfW, halfH]) out.u32(v);
-  // Distance to the edges of the 110 x 110, 50 x 50, 140 x 200 and custom hoops (-1 when it does not fit).
-  // The custom slot holds the chosen sewing field.
-  const custom = hoop ? [hoop.w * 5, hoop.h * 5] : [700, 1000];
-  for (const [hw, hh] of [[550, 550], [250, 250], [700, 1000], custom]) {
-    const ex = hw - halfW;
-    const ey = hh - halfH;
-    for (const v of Math.min(ex, ey) >= 0 ? [ex, ey, ex, ey] : [-1, -1, -1, -1]) out.u32(v);
-  }
-  for (const index of palette(p, blocks)) out.u32(index);
-  for (let k = 0; k < blocks; k++) out.u32(0x0d);
-  out.bytes(recs.result());
-  return out.result();
-}
+export const writeJef = (p: Pattern, date = new Date(), hoop: Hoop | null = null): Uint8Array => writeWithCore('jef', p, { hoop, stamp: stamp(date) });

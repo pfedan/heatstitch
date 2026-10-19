@@ -1,4 +1,4 @@
-import { COLOR_CHANGE, STITCH, type Bounds, type Pattern } from '../model/pattern';
+import { COLOR_CHANGE, STITCH, type Bounds, type Pattern } from '../../../../src/model/pattern';
 
 export const ICON_W = 48;
 export const ICON_H = 38;
