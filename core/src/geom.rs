@@ -4,7 +4,7 @@ pub type Pt = [f64; 2];
 
 /// Points from a flat list x0, y0, x1, y1, ... (a `Float64Array` on the JavaScript side).
 pub fn pts_from_flat(flat: &[f64]) -> Vec<Pt> {
-    flat.chunks_exact(2).map(|c| [c[0], c[1]]).collect()
+    flat.as_chunks::<2>().0.to_vec()
 }
 
 /// Points as a flat list x0, y0, x1, y1, ...

@@ -10,9 +10,9 @@ runs:
         cache: npm
     - run: npm ci
       shell: bash
-    # Rust comes with the runner; only the WebAssembly target and wasm-pack are added. The compiled
-    # crates are kept per Cargo.lock, so a run only builds the core itself.
-    - run: rustup target add wasm32-unknown-unknown
+    # Rust comes with the runner; rustup picks the version, clippy and the WebAssembly target from
+    # rust-toolchain.toml. The compiled crates are kept per Cargo.lock, so a run only builds the core.
+    - run: rustup show active-toolchain
       shell: bash
     - uses: Swatinem/rust-cache@v2
       with:
