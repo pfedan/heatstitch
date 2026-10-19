@@ -1,5 +1,5 @@
 import type { Orientation } from '../image/orientation';
-import { BEAM_PIECES, beamOnGrid, chooseAngle, fillRegion, noteTravel, pathLength, planOnGrid, type Pieces, pointCount, sewUnderlay, TRAVEL_STITCH, TRAVEL_TOLERANCE, TravelGrid, type FillParams, type FillResult } from './fill';
+import { BEAM_PIECES, beamOnGrid, chooseAngle, fillRegion, noteTravel, pathLength, planOnGrid, type Pieces, pointCount, SHARED_TURN, sewUnderlay, TRAVEL_STITCH, TRAVEL_TOLERANCE, TravelGrid, type FillParams, type FillResult } from './fill';
 import { coverage, peakDensity } from './measure';
 import { sample, type Region } from './region';
 import { ringFill } from './rings';
@@ -640,7 +640,12 @@ export function sewRows(r: Region, rows: Pt[][], p: FillParams, start: Pt, mean:
   for (const { s: chain, e } of order) {
     const lines = e.rev ? chain.slice().reverse().map((row) => row.slice().reverse()) : chain;
     const pts: Pt[] = [];
-    for (const line of lines) pts.push(...(stitched ? line : rowStitches({ k: count++, pts: line }, p.stitch, p.tolerance ?? TOLERANCE)));
+    for (const line of lines) {
+      const row = stitched ? line : rowStitches({ k: count++, pts: line }, p.stitch, p.tolerance ?? TOLERANCE);
+      // Rows this close share the hole where they turn, as tatami rows do (see SHARED_TURN).
+      const last = pts[pts.length - 1];
+      pts.push(...(last && row.length > 1 && dist(last, row[0]) <= SHARED_TURN + 1e-3 ? row.slice(1) : row));
+    }
     const bd = dist(pos, pts[0]);
     let travel: Pt[] | null = null;
     if (cur && straight(pos, pts[0])) travel = [pos, pts[0]];

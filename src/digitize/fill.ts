@@ -561,7 +561,7 @@ function sewSection(f: Frame, s: Section, len: number, pull: number, reversed: b
  * the edge then lie twice as far apart, at most 0.5 mm, which the thread (0.4 mm for 40 wt) still
  * closes. Rows further apart each reach the edge, or the fabric shows between them there (#346).
  */
-const SHARED_TURN = 0.25;
+export const SHARED_TURN = 0.25;
 
 /**
  * The needle points of one row without stitches shorter than SHORTEST. Both ends stay, so every
