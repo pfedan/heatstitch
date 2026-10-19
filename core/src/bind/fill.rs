@@ -29,7 +29,7 @@ fn from_js<T: serde::de::DeserializeOwned>(v: JsValue) -> Result<T, JsError> {
 /// A region from TypeScript. `sdf` is left out when it is `sdfBase` (not grown).
 #[wasm_bindgen]
 pub struct RegionIn {
-    r: Region,
+    pub(crate) r: Region,
 }
 
 #[wasm_bindgen]
@@ -107,7 +107,7 @@ impl FillOut {
     }
 }
 
-fn flat_lines(lines: &[Vec<Pt>]) -> (Vec<f64>, Vec<u32>) {
+pub(crate) fn flat_lines(lines: &[Vec<Pt>]) -> (Vec<f64>, Vec<u32>) {
     let mut pts = Vec::with_capacity(lines.iter().map(|l| 2 * l.len()).sum());
     let mut lens = Vec::with_capacity(lines.len());
     for l in lines {
@@ -154,7 +154,7 @@ impl LinesOut {
     }
 }
 
-fn lines_out(lines: &[Vec<Pt>]) -> LinesOut {
+pub(crate) fn lines_out(lines: &[Vec<Pt>]) -> LinesOut {
     let (pts, lens) = flat_lines(lines);
     LinesOut { pts, lens }
 }

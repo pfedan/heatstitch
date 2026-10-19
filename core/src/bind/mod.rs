@@ -6,6 +6,7 @@ mod digitize;
 mod fill;
 mod image;
 mod parsers;
+mod picture;
 mod satin;
 mod shape;
 mod validation;
