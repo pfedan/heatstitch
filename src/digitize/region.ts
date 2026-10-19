@@ -86,7 +86,25 @@ export function buildRegion(
   grow: number,
   growInto: (label: number) => boolean,
 ): Region {
-  // Only the region's window (with its margin, inside the picture) crosses, not the whole picture.
+  const { map, near, cw, ch, cx0, cy0, into } = regionWindow(compMap, labels, imgW, bbox, imgH, pxMm, grow, growInto);
+  const o = core().buildRegion(map, near, cw, comp, label, bbox.minX - cx0, bbox.minY - cy0, bbox.maxX - cx0, bbox.maxY - cy0, ch, pxMm, grow, into);
+  return fromCore(o, label, pxMm, cx0, cy0);
+}
+
+/**
+ * The window of the picture a region is built from (see buildRegion), as the core takes it: only
+ * the region's window (with its margin, inside the picture) crosses, not the whole picture.
+ */
+export function regionWindow(
+  compMap: Int32Array,
+  labels: Uint8Array,
+  imgW: number,
+  bbox: { minX: number; minY: number; maxX: number; maxY: number },
+  imgH: number,
+  pxMm: number,
+  grow: number,
+  growInto: (label: number) => boolean,
+): { map: Int32Array; near: Uint8Array; cw: number; ch: number; cx0: number; cy0: number; into: Uint8Array } {
   const m = MARGIN + Math.ceil(grow / pxMm);
   const [cx0, cy0] = [Math.max(0, bbox.minX - m), Math.max(0, bbox.minY - m)];
   const [cx1, cy1] = [Math.min(imgW, bbox.maxX + 1 + m), Math.min(imgH, bbox.maxY + 1 + m)];
@@ -101,8 +119,7 @@ export function buildRegion(
   // Labels are bytes: the predicate crosses as a table.
   const into = new Uint8Array(256);
   if (grow > 0) for (let l = 0; l < 256; l++) into[l] = growInto(l) ? 1 : 0;
-  const o = core().buildRegion(map, near, cw, comp, label, bbox.minX - cx0, bbox.minY - cy0, bbox.maxX - cx0, bbox.maxY - cy0, ch, pxMm, grow, into);
-  return fromCore(o, label, pxMm, cx0, cy0);
+  return { map, near, cw, ch, cx0, cy0, into };
 }
 
 /** Bilinear sample of a field at image mm coordinates; far outside the window is "outside". */

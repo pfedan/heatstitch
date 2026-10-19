@@ -69,7 +69,7 @@ table can run in parallel.
 | 2 | Shapes: `shape/path`, `svgPath`, `join`, `simplify`, `vectorize`, `rasterize`, `parts`, `nodeOps`, `band`, and `ops` on Rust polygon booleans and offsets instead of paper.js and Clipper | 3 300 |
 | 3a | Fills: `fill`, `tour`, `border`, `deco`, `flow`, `rings`, `spiral`, `echo`, `motif`, `redwork` | 6 400 |
 | 3b | Satin: `satin`, `rungs`, `satinForms`, `satinShapes`, `satinJoins` | 2 950 |
-| 3c | The image assistant: `digitize/digitize`, `smart`, `image/svg` (with `usvg` for SVG) | 2 300 |
+| 3c | The image assistant: `digitize/digitize`, `smart`, `image/svg` (the browser still reads SVG: `usvg` cost 18 % of the core's size and cannot draw the regions or text the assistant needs) | 2 300 |
 | 4 | Sewing in the model: `sewOne` and what it calls (`along`, `line`, `travel`, `knockout`, `covers`, `jumps`, `order`, `bestOrder`, and `satinEase`, `satinSuggest`, which build on `restitch`) behind one call per object | 8 100 |
 | 5 | Correction engine, lettering, live preview (`correct`, `lettering`, `resew`) | 7 300 |
 | 6 | The TypeScript twins and the fine-grained exports go; ARCHITECTURE.md describes the new layout | |
