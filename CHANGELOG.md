@@ -25,6 +25,7 @@ How it is kept (see [CONTRIBUTING.md](CONTRIBUTING.md#releases)):
 - **Eingemessene Werte bleiben beim Stickmuster:** Ein Stickmuster speichert die Werte aus dem Probestück mit, so wird es in jedem Browser gleich digitalisiert, geprüft und abgestimmt. Unter Material steht, welche Werte gelten und ob sie vom Stoff kommen oder eingemessen sind. Misst du später neu, bietet das Panel die neuen Werte für das offene Stickmuster an, statt sie still zu übernehmen.
 - **Enge Reihen teilen sich das Loch am Rand:** Wo Füllreihen höchstens 0,25 mm auseinanderliegen, enden zwei Reihen im selben Einstich und der Wendestich läuft schräg. So häufen sich am Rand keine Kurzstiche mehr, auch bei gebogenen Reihen in Wirbel, Strahlen und Kreisen.
 - **Frottee, Kappe und Jeans:** Diese Stoffe vertragen beim Prüfen jetzt so viel Faden wie Webware, Frottee bekommt auch denselben Stichabstand (0,4 bis 0,5 mm statt 0,61 bis 0,78). Frottee und Kappen werden üblicherweise eher dichter gestickt, Jeans nicht lockerer; bisher kam dort zu früh Achtung.
+- **Gleichmäßige Reihen bei 45°:** Bei 0°, 45°, 90° und ähnlichen Winkeln liegen die Reihen einer Füllung jetzt genau auf dem 0,1-mm-Raster, in dem jede Stickdatei Einstiche speichert. Bisher rundete jeder Einstich für sich, und bei 45° wirkten die Reihen paarweise. Der Abstand rückt dafür auf die nächste Rasterlinie, bei 45° zum Beispiel von 0,4 auf 0,42 mm.
 
 ### English
 
@@ -35,6 +36,7 @@ How it is kept (see [CONTRIBUTING.md](CONTRIBUTING.md#releases)):
 - **Measured values stay with the design:** A design saves the values from the test swatch with it, so it is digitized, checked and tuned the same in every browser. Under Material you see which values apply and whether they come from the fabric or were measured. Measure again later and the panel offers the new values for the open design instead of taking them silently.
 - **Close rows share the hole at the edge:** Where fill rows lie 0.25 mm apart or less, two rows end in the same needle point and the turn runs slanted. Short stitches no longer pile up along the edge, also on the curved rows of swirls, rays and circles.
 - **Terry, caps and denim:** These fabrics now take as much thread in the check as woven fabric, and terry gets the same spacing too (0.4 to 0.5 mm instead of 0.61 to 0.78). Terry and caps are usually stitched rather denser, denim not more openly; until now they reached Caution too soon.
+- **Even rows at 45°:** At 0°, 45°, 90° and similar angles the rows of a fill now lie exactly on the 0.1 mm grid every embroidery file saves needle points on. Until now each needle point was rounded on its own, and at 45° the rows looked paired. The spacing moves to the nearest grid line for it, at 45° for example from 0.4 to 0.42 mm.
 
 ## [1.0.0] - 2026-10-16
 

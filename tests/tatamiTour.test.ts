@@ -81,6 +81,20 @@ describe('tatami in one go', () => {
     expect(short.length).toBeLessThan(3);
   });
 
+  it('lays rows at 45° on lines of the 0.1 mm grid, evenly apart', () => {
+    // Rounded one by one, rows 0.2 mm apart lay 0.14 and 0.28 mm apart in turn. On grid lines three
+    // diagonals (0.212 mm) apart, every needle point is a grid point of its row.
+    const r = area('M0 0 L20 0 L20 20 L0 20 Z');
+    const res = fillRuns(r, { ...BASE, spacing: 0.2, angle: 45, underlay: false, edge: 0 }, { start: [0, 0] })!;
+    const travel = new Set((res.travel ?? []).flatMap(([a, b]) => Array.from({ length: b - a + 1 }, (_, i) => a + i)));
+    const pts = res.runs.flat().filter((_, i) => !travel.has(i));
+    const on = pts.filter(([x, y]) => {
+      const [gx, gy] = [Math.round(x * 10), Math.round(y * 10)];
+      return Math.abs(gx - x * 10) < 1e-6 && Math.abs(gy - y * 10) < 1e-6 && (((gy - gx) % 3) + 3) % 3 === 0;
+    });
+    expect(on.length / pts.length).toBeGreaterThan(0.95);
+  });
+
   it('merges a short stitch into the next, keeping both ends', () => {
     const pts: Pt[] = [[0, 0], [4, 0], [4.2, 0], [8, 0], [8, 0.3]];
     expect(merged(pts, SHORTEST)).toEqual([[0, 0], [4, 0], [8, 0.3]]);
