@@ -13,6 +13,10 @@ crate-type = ["cdylib", "rlib"]
 wasm-bindgen = "0.2"
 serde = { version = "1", features = ["derive"] }
 serde-wasm-bindgen = "0.6"
+clipper2-rust = "1.2.0"
+i_curve = "0.2.0"
+# i_curve 0.2 does not build against i_overlay 9.1 (i_key_sort 0.11 vs 0.12).
+i_overlay = "=9.0.0"
 
 [profile.release]
 opt-level = 3
