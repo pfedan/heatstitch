@@ -9,6 +9,7 @@ pub mod density;
 pub mod digitize;
 pub mod geom;
 pub mod image;
+pub mod js;
 pub mod parsers;
 pub mod pattern;
 pub mod shape;

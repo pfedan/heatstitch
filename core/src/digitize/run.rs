@@ -1,7 +1,7 @@
 //! Running stitch along a line: simplification, even stitches and shorter ones on curves.
 
-use super::js::{dist, hypot};
 use crate::geom::Pt;
+use crate::js::{dist, hypot};
 
 /// How far a stitch may lie from the line it follows by default (mm): a straight stitch cuts every
 /// curve, by L² / 8R for a stitch of length L on a radius R. Below a third of the thread's width

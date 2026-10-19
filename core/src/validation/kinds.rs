@@ -5,7 +5,7 @@
 
 use super::satin::{MIN_LEN, e_stitch_mask, satin_mask};
 use super::short_stitches::{TIE, tag_short_stitches};
-use crate::density::jsmath::hypot;
+use crate::js::hypot;
 use crate::pattern::{Records, STITCH};
 
 pub const RUNNING: u8 = 1;

@@ -17,9 +17,9 @@
 
 use serde::Serialize;
 
-use super::js::{IdMap, dist, hypot, max_of};
 use super::medial::{Axis, AxisBranch, AxisNode, leaving, medial_axis};
 use crate::geom::Pt;
+use crate::js::{IdMap, dist, hypot, max_of};
 
 /// Two branches at a junction run through when they turn less than this (degrees): at a fork of
 /// three (a Y) the straightest pair goes on, the hub between them being small; where more meet (a

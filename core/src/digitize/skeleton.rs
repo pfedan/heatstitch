@@ -9,10 +9,10 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::js::{dist, max_of, round};
 use super::region::{Region, pixel_mm};
 use crate::geom::Pt;
 use crate::image::edt::distance_inside;
+use crate::js::{dist, max_of, round};
 
 /// Gaps inside a region smaller than this (mm²) are not holes: the outline drops them too.
 const HOLE_MIN_MM2: f64 = 0.25;

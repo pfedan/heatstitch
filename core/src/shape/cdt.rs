@@ -15,8 +15,8 @@ use std::collections::VecDeque;
 
 use serde::Serialize;
 
-use crate::digitize::js::{IdMap, round};
 use crate::geom::Pt;
+use crate::js::{IdMap, round};
 
 /// Grid the coordinates are snapped to (mm).
 const SNAP: f64 = 1e-4;

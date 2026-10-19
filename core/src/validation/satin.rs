@@ -1,6 +1,6 @@
 //! Satin columns and E stitches recognized from the stitches alone (src/validation/satin.ts).
 
-use crate::density::jsmath::hypot;
+use crate::js::hypot;
 use crate::pattern::{Records, STITCH};
 
 /// Minimum number of consecutive zigzag segments to call a run satin.

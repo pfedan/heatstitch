@@ -1,8 +1,8 @@
 //! Measurements of generated stitches, to check them before they are used.
 
-use super::js::{IdMap, hypot, round};
 use super::region::Region;
 use crate::geom::Pt;
+use crate::js::{IdMap, hypot, round};
 
 /// Thread per area (mm/mm²) at the densest 1 mm cell of the runs. A satin column reaches about
 /// 2 / spacing; where a tight bend fans its stitches or columns pile up, the generated satin is
