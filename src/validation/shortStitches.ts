@@ -12,7 +12,9 @@ export const TIE_MAX = 6;
 /**
  * Tags every stitch record whose incoming stitch is shorter than SHORT_STITCH_MM. Up to TIE_MAX
  * short stitches directly after the first stitch of a block (after a jump, trim, color change or
- * the design start: tie-in) or directly before its last stitch (tie-off) are ties.
+ * the design start: tie-in) or directly before its last stitch (tie-off) are ties. So is a lock
+ * where the thread goes on without a jump (around hidden travel between objects, see
+ * model/travel.ts): a few short stitches back and forth that end where they began.
  */
 export function tagShortStitches(p: Pattern): Uint8Array {
   const n = p.cmd.length;
@@ -29,6 +31,7 @@ export function tagShortStitches(p: Pattern): Uint8Array {
     tags.fill(SHORT, a, b + 1);
     if (!isStitch(a - 2)) tags.fill(TIE, a, Math.min(b, a + TIE_MAX - 1) + 1); // a - 1 starts its block
     if (!isStitch(b + 1)) tags.fill(TIE, Math.max(a, b - TIE_MAX + 1), b + 1); // b ends its block
+    if (b - a + 1 >= 3 && b - a < TIE_MAX && p.x[b] === p.x[a - 1] && p.y[b] === p.y[a - 1]) tags.fill(TIE, a, b + 1); // a lock in a running thread
     a = b;
   }
   return tags;

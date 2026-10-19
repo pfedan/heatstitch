@@ -125,6 +125,11 @@ node tools/fonts/convert.mjs /tmp/embroidery-fonts/src <commit>
 
 Ink/Stitch's code is GPL: read it to understand the font format, but never copy from it.
 
+One font has its own source: Hershey Sans 1-stroke (`tools/fonts/hershey/`, the Hershey fonts as SVG
+font by Evil Mad Scientist), a single line sewn as triple stitch for small text such as the labels of
+the test swatch. `tools/fonts/hershey.mjs` turns its strokes into one route per letter; `convert.mjs`
+runs it too, or alone: `node tools/fonts/hershey.mjs`.
+
 ### Motifs
 
 The motif library in `public/library/` is built from Twemoji (CC BY 4.0) with the CLDR names of

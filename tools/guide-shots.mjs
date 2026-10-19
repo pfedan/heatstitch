@@ -550,22 +550,25 @@ async function density(page, fabric, real = false) {
   await sidebarTop(page);
 }
 
-// 10. findings: patch.pes on woven fabric, the Ampel "Klappt das?" with its rows
+// 10. findings: patch.pes on light fabric (since #367 it passes on woven), the Ampel "Klappt das?" with its rows
 shots.findings = async (lang) => {
   const { page, close } = await boot(lang, { width: 1280, height: 960 });
   await loadFile(page, DEMOS + 'patch.pes');
-  await density(page, 'woven');
+  await density(page, 'light');
   await fit(page);
+  // the Beheben estimate behind each row is computed after the findings; wait for it
+  await page.waitForFunction(() => !/Wird berechnet|Working it out/.test(document.querySelector('#ampel-body')?.innerText ?? ''), null, { timeout: 120000 }).catch(() => {});
+  await page.waitForTimeout(800);
   await mouseAway(page);
   await jpeg(page, `findings-${lang}`);
   await close();
 };
 
-// 11. correct: cat on knit, proposals, hovering the second row
+// 11. correct: cat on light fabric (knit gives one proposal since #367), proposals, hovering the second row
 shots.correct = async (lang) => {
   const { page, close } = await boot(lang, { width: 1280, height: 960 });
   await example(page, 'cat');
-  await density(page, 'knit');
+  await density(page, 'light');
   await propose(page, lang);
   await inspectorTo(page, '#fix-report', -60);
   const row = page.locator('#fix-report .plan-row').nth(1);
@@ -575,11 +578,11 @@ shots.correct = async (lang) => {
   await close();
 };
 
-// 12. compare: patch.pes corrected, split view with the comparison table
+// 12. compare: patch.pes on light fabric corrected, split view with the comparison table
 shots.compare = async (lang) => {
   const { page, close } = await boot(lang, { width: 1280, height: 960 });
   await loadFile(page, DEMOS + 'patch.pes');
-  await density(page, 'woven', true);
+  await density(page, 'light', true);
   await page.evaluate(() => document.querySelector('input[name="fix-goal"][value="caution"]').click());
   await page.waitForTimeout(500);
   await propose(page, lang);

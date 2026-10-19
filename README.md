@@ -109,7 +109,11 @@ with this section when the site starts sending anything new.
   rotate, scale, duplicate, mirror, delete, context menu, combine and split, cut out, don't sew or
   keep as guide, knock out under later shapes, own thread per object, **cut apart** a fill into
   parts with their own direction (one border around all parts), **contour around** the selection
-  at a set distance (a patch edge as satin, a patch ground as fill)
+  at a set distance (a patch edge as satin, a patch ground as fill); between objects of one thread
+  the way runs **hidden under a dense fill or a satin from 2 mm sewn later** as running stitch
+  instead of a trim (found on the travel grid, 0.5 mm inside the cover; open and light patterns,
+  narrow satin, running lines and knocked-out parts don't hide it); hidden ways are listed and
+  clickable like jumps, and a trim set there by hand stays
 - **Stitch settings** with live preview: fill patterns in three tabs (classic: tatami with offset,
   gradient, contour fill without a seam, spiral for any shape, as sewn, guided by drawn lines; decor: textures in the
   tatami (zigzag, swell, steps, herringbone: needle points shifted, no stitch more), embossed motifs, waves,
@@ -139,8 +143,8 @@ with this section when the site starts sending anything new.
 - **Single stitches**: move, insert, split and delete needle points; release an object from its shape
 - **Drawing**: rectangle, ellipse, pen, freehand, sewn at once with the material's settings; *Fill gap*
   makes a fill of the space shut in between shapes (enclosed, with bays, or a background under them)
-- **Lettering** in 41 fonts from Ink/Stitch: height, alignment, arcs and circle, spacing, single
-  letters, stays text
+- **Lettering** in 41 fonts from Ink/Stitch and a single line Hershey font for small text: height,
+  alignment, arcs and circle, spacing, single letters, stays text
 - **Jumps**: trim and tie, or remove trims, one jump at a time or by length
 
 **Checking and correcting (Check)**

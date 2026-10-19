@@ -36,6 +36,7 @@ export const de = {
   'check.jumps.cut': 'Gewählten Sprung schneiden und vernähen',
   'check.jumps.tie': 'Am gewählten Sprung Vernähen ergänzen',
   'check.jumps.carry': 'Gewählten Sprung nicht schneiden',
+  'check.jumps.hide': 'Gewählten Schnitt wieder verstecken',
   'check.jumps.from': 'Schneiden ab',
   'check.heatmap.plan': 'mit Stichplan',
 } as const;
@@ -77,6 +78,7 @@ export const en: Record<keyof typeof de, string> = {
   'check.jumps.cut': 'Trim and tie off the selected jump',
   'check.jumps.tie': 'Add tie-off stitches at the selected jump',
   'check.jumps.carry': 'Do not trim the selected jump',
+  'check.jumps.hide': 'Hide the selected trim again',
   'check.jumps.from': 'Trim from',
   'check.heatmap.plan': 'with stitch plan',
 };
