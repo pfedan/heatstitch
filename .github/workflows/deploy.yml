@@ -20,6 +20,9 @@ permissions:
   contents: read
 
 jobs:
+  # A pull request into another branch (a stage collected in a feature branch, see docs/rust-core.md) only
+  # gets the build, the unit tests and the core's checks; the slow jobs and the preview run when that
+  # branch comes to develop.
   # The tests run on several machines side by side, the site is built next to them: the run takes as long
   # as its slowest job instead of all of them one after another. Deploy and preview wait for all of them.
   build:
@@ -33,11 +36,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
+      - uses: ./.github/actions/setup
       - run: npm run build
         env:
           CHANNEL: ${{ github.event_name == 'pull_request' && 'preview' || github.ref == 'refs/heads/develop' && 'beta' || 'dev' }}
@@ -62,27 +61,35 @@ jobs:
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
+      - uses: ./.github/actions/setup
       - run: npx vitest run --shard=${{ matrix.shard }}/3
+
+  # The Rust compute core on its own (core/): formatting, lints and its unit tests, natively.
+  core:
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: core-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup show active-toolchain
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: core
+      - run: cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
+        working-directory: core
 
   # 120 objects, each common operation within a time budget (tests/load.test.ts), alone on the machine.
   load:
-    if: github.event.action != 'closed'
+    if: github.event.action != 'closed' && (github.event_name != 'pull_request' || github.base_ref == 'develop' || github.base_ref == 'main')
     runs-on: ubuntu-latest
     concurrency:
       group: load-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
+      - uses: ./.github/actions/setup
       - run: npx vitest run tests/load.test.ts
         env:
           LOAD: '1'
@@ -93,18 +100,14 @@ jobs:
   # an object in the list (tests/layerDrag.test.ts); a converted image opens fitted (tests/imageTakeFit.test.ts);
   # opening a section of the right column, scrolled down, does not make it jump (tests/sectionScroll.test.ts).
   browser:
-    if: github.event.action != 'closed'
+    if: github.event.action != 'closed' && (github.event_name != 'pull_request' || github.base_ref == 'develop' || github.base_ref == 'main')
     runs-on: ubuntu-latest
     concurrency:
       group: browser-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
+      - uses: ./.github/actions/setup
       # The browser is kept per Playwright version; the system libraries it needs are installed every time.
       - id: playwright
         run: echo "version=$(node -p "require('playwright/package.json').version")" >> "$GITHUB_OUTPUT"
@@ -124,7 +127,7 @@ jobs:
   # Videos, voice takes and other large media live in Cloudflare R2, not in git: one file over 5 MB anywhere
   # in the history (a video, or a merge that brings back history from before the clean-up) fails here.
   size:
-    if: github.event.action != 'closed'
+    if: github.event.action != 'closed' && (github.event_name != 'pull_request' || github.base_ref == 'develop' || github.base_ref == 'main')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -138,21 +141,17 @@ jobs:
   # Every save format read back by pystitch (Ink/Stitch's pyembroidery), an independent reader (tests/oracle.test.ts,
   # scripts/oracle.py): a writer bug that heatstitch's own reader would mirror still shows here.
   oracle:
-    if: github.event.action != 'closed'
+    if: github.event.action != 'closed' && (github.event_name != 'pull_request' || github.base_ref == 'develop' || github.base_ref == 'main')
     runs-on: ubuntu-latest
     concurrency:
       group: oracle-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
+      - uses: ./.github/actions/setup
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: npm ci
       - run: pip install pystitch==1.0.1
       - run: npx vitest run tests/oracle.test.ts
         env:
@@ -163,7 +162,7 @@ jobs:
   # no case fixes less than the reference in tests/bench/korrektur.json. A third of the cases on each machine
   # (BENCH_SHARD, split by the reference's times); each case gives the same result as in one run.
   korrektur:
-    if: github.event.action != 'closed'
+    if: github.event.action != 'closed' && (github.event_name != 'pull_request' || github.base_ref == 'develop' || github.base_ref == 'main')
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -174,11 +173,7 @@ jobs:
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
+      - uses: ./.github/actions/setup
       - run: npx vitest run tests/korrekturBench.test.ts
         env:
           BENCH: '1'
@@ -195,7 +190,7 @@ jobs:
   # with its own address and so its own storage, apart from heatstitch.app.
   deploy-beta:
     if: github.ref == 'refs/heads/develop' && github.event_name != 'pull_request'
-    needs: [build, test, load, browser]
+    needs: [build, test, load, browser, core]
     runs-on: ubuntu-latest
     concurrency:
       group: deploy-beta
@@ -224,7 +219,7 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository && !cancelled() &&
       needs.build.result == 'success' && needs.test.result == 'success' &&
       needs.load.result == 'success' && needs.browser.result == 'success'
-    needs: [build, test, load, browser]
+    needs: [build, test, load, browser, core]
     runs-on: ubuntu-latest
     permissions:
       contents: read

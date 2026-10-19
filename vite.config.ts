@@ -169,7 +169,7 @@ export default defineConfig({
         // from the server (src/build/pageCache.ts). The font list and the thread catalogs come along; a font
         // (some 100 KB to 2 MB) only once it is used, then it works offline too. The tooltip pictures are small and come along.
         // So does the list of motifs; a category of motifs (up to some 300 KB) once it was opened.
-        globPatterns: [...APP_PAGES, '**/*.{js,css,svg,png,webmanifest,pes}', 'tips/*.webp', 'fonts/index.json', 'threads/catalogs.json', 'library/index.json'],
+        globPatterns: [...APP_PAGES, '**/*.{js,css,svg,png,webmanifest,pes,wasm}', 'tips/*.webp', 'fonts/index.json', 'threads/catalogs.json', 'library/index.json'],
         runtimeCaching: [
           // The demo project is not part of the install (some 500 KB); it is kept once it was opened.
           {

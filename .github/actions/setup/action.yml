@@ -1,0 +1,24 @@
+name: Set up
+description: Node with the app's packages and the compute core built to WebAssembly (core/, npm run wasm).
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+        cache: npm
+    - run: npm ci
+      shell: bash
+    # Rust comes with the runner; rustup picks the version, clippy and the WebAssembly target from
+    # rust-toolchain.toml. The compiled crates are kept per Cargo.lock, so a run only builds the core.
+    - run: rustup show active-toolchain
+      shell: bash
+    - uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: core
+    - uses: taiki-e/install-action@v2
+      with:
+        tool: wasm-pack
+    - run: npm run wasm
+      shell: bash

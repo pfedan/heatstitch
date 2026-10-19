@@ -5,12 +5,17 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
+    "predev": "npm run wasm",
     "dev": "vite",
+    "prebuild": "npm run wasm",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
+    "pretest": "npm run wasm",
     "test": "vitest run",
     "test:timings": "node scripts/test-timings.mjs",
-    "typecheck": "tsc --noEmit"
+    "pretypecheck": "npm run wasm",
+    "typecheck": "tsc --noEmit",
+    "wasm": "wasm-pack build core --target web --out-dir ../src/wasm/pkg --no-pack --release"
   },
   "devDependencies": {
     "highs": "^1.15.3",

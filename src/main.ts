@@ -92,6 +92,10 @@ import { initResponsive } from './areas/responsive/responsive';
 import type { ZoneDecision } from './ui/validationPanel';
 import { bindTrace } from './app/trace';
 import { geoUse, sewnAlong } from './model/geo';
+import { loadCore } from './wasm/core';
+
+// The compute core (Rust, WebAssembly) before anything is read, sewn or drawn: its functions are synchronous.
+await loadCore();
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 

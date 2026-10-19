@@ -38,10 +38,15 @@ The code falls into three layers:
 Core modules never import from `ui`, `areas`, `app`, `render` or `shell`. Keep it that way: it is
 what lets the torture test and the workers use the same code as the app.
 
+The core is moving to Rust (`core/`, built to WebAssembly and loaded by `src/wasm/core.ts`), one
+module at a time; [docs/rust-core.md](docs/rust-core.md) has the plan and the rules. A module that
+moved keeps its TypeScript name and exports and calls the Rust code.
+
 ## Repository layout
 
 ```
 src/            The app (see below)
+core/           The compute core in Rust, built to WebAssembly (docs/rust-core.md)
 tests/          Vitest tests, synthetic fixtures (tests/helpers), the torture test, benchmarks
 public/         Static files: examples, fonts, motif library, thread catalogs, guide pictures, tips
 tools/          Node scripts that produce files in public/ or docs/ (fonts, motifs, threads,

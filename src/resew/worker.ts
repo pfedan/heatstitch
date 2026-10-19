@@ -2,6 +2,7 @@
 import type { Pattern } from '../model/pattern';
 import type { Mat } from '../shape/path';
 import type { Settings } from '../model/restitch';
+import { loadCore } from '../wasm/core';
 import { fillsShipped, resew, restitchShipped, transformShipped, unship, type SewnFills, type Shipped, type ShippedRestitch, type ShippedTransform } from './live';
 
 /**
@@ -40,8 +41,11 @@ export interface RestitchResponse {
 const ctx = self as unknown as DedicatedWorkerGlobalScope;
 let design: Pattern | null = null;
 
-ctx.onmessage = (e: MessageEvent<ResewRequest>) => {
+const ready = loadCore();
+
+ctx.onmessage = async (e: MessageEvent<ResewRequest>) => {
   const req = e.data;
+  await ready;
   if (req.type === 'load') {
     design = unship(req.design);
     return;

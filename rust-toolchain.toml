@@ -1,0 +1,5 @@
+# The Rust the core (core/) is built and linted with, the same here and in CI.
+[toolchain]
+channel = "1.97.0"
+components = ["clippy", "rustfmt"]
+targets = ["wasm32-unknown-unknown"]

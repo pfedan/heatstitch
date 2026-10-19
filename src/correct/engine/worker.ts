@@ -4,6 +4,7 @@ import { restoreRemembered, type ObjectsAsStored } from '../../model/restitch';
 import type { Acknowledgement } from '../../validation/acks';
 import type { Profile } from '../../validation/profiles';
 import type { Checks } from '../../validation/validate';
+import { loadCore } from '../../wasm/core';
 import { ampelReport, directFix, restFix, type AmpelReport } from './ampel';
 import type { PlannedFix } from './apply';
 import type { FixTarget } from './cells';
@@ -56,5 +57,9 @@ export async function handleEngine(req: EngineRequest): Promise<EngineResponse> 
 
 if (typeof self !== 'undefined' && typeof (self as { importScripts?: unknown }).importScripts === 'function') {
   const ctx = self as unknown as DedicatedWorkerGlobalScope;
-  ctx.onmessage = async (e: MessageEvent<EngineRequest>) => ctx.postMessage(await handleEngine(e.data));
+  const ready = loadCore();
+  ctx.onmessage = async (e: MessageEvent<EngineRequest>) => {
+    await ready;
+    ctx.postMessage(await handleEngine(e.data));
+  };
 }
