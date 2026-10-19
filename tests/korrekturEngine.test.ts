@@ -42,8 +42,8 @@ describe('correction engine', () => {
   it('takes a fix back exactly where sewing anew splits an object differently and moves the jump after it', async () => {
     // The cat: object 0 is sewn anew in several sections, and the travel to object 1 changes.
     const p = load('cat-60mm.pes');
-    // Terry with 12 wt: the limits the cat's rows (sewn 0.36 to 0.4 mm apart) were made for.
-    const f = await prepareFix(p, { fabric: 'terry', thread: '12' }, 'density', { trimMm: 2, visible: false, hand: false });
+    // Light fabric with 12 wt: limits low enough for the cat's rows (sewn 0.36 to 0.4 mm apart).
+    const f = await prepareFix(p, { fabric: 'light', thread: '12' }, 'density', { trimMm: 2, visible: false, hand: false });
     expect(f.objects.length).toBeGreaterThan(0);
     const q = applyFix(p, f)!;
     expect(fixedObjects(q)).toEqual(f.objects.map((x) => x.index));

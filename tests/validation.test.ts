@@ -105,9 +105,9 @@ describe('thresholds and profiles', () => {
   it('keeps the newer fabrics and orders their tolerance by their neighbours', () => {
     for (const fabric of ['woven_heavy', 'fleece', 'sheer'] as const) expect(normalizeProfile({ fabric, thread: '40' }).fabric).toBe(fabric);
     const factor = (fabric: Profile['fabric']) => thresholdsFor({ fabric, thread: '40' }).factor;
-    // Heavy woven carries more than woven; fleece lies between terry and knit; sheer below light.
-    expect(factor('woven_heavy')).toBeGreaterThan(factor('woven'));
-    expect(factor('fleece')).toBeGreaterThan(factor('terry'));
+    // Heavy woven, cap and terry carry as much as woven (the reference manual sews none of them more
+    // openly); fleece lies below knit; sheer below light.
+    for (const fabric of ['woven_heavy', 'cap', 'terry'] as const) expect(factor(fabric)).toBe(factor('woven'));
     expect(factor('fleece')).toBeLessThan(factor('knit'));
     expect(factor('sheer')).toBeLessThan(factor('light'));
     // Heavy woven a little looser than woven (Wilcom's auto fabric Denim).
