@@ -5,6 +5,7 @@ import { transformObjects } from '../../src/model/reshape';
 import { sewDesign } from '../../src/model/sew';
 import { scaling } from '../../src/shape/path';
 import { designs, hashOf } from './designs';
+import { v8Math } from './v8math';
 
 /**
  * Stage 4 of the Rust core: whole designs sewn anew from their objects, as they are and scaled to
@@ -20,7 +21,7 @@ const expected = JSON.parse(readFileSync('tests/rust/fixtures/stage4-hashes.json
 const QUICK = new Set(['Blume', 'Musterkarte Offen', 'Linienstiche', 'Linien mit Parametern', 'Handstiche', 'Linieneffekte', 'Redwork', 'Satinflächen', 'Applikation', 'demos/confetti.pes', 'demos/overlap.pes', 'demos/sun.dst', 'svg kirschen', 'svg abzeichen', 'svg apfel', 'svg blumenzweig', 'svg overlapping-circles']);
 const all = process.env.STAGE4_ALL === '1';
 
-describe('stage 4: whole designs sewn anew', () => {
+describe.runIf(v8Math)('stage 4: whole designs sewn anew', () => {
   it(
     'give the stitches they gave before, as they are and at 110 %',
     async () => {

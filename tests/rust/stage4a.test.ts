@@ -20,6 +20,7 @@ import * as tsApplique from './ts/model/applique';
 import * as tsLine from './ts/model/line';
 import * as tsRestitch from './ts/model/restitch';
 import * as tsOrder from './ts/model/satinOrder';
+import { v8Math } from './v8math';
 
 /**
  * Stage 4a of the Rust core: sewing along lines and borders, satin from its rails (sections,
@@ -237,7 +238,7 @@ async function demoDesigns(): Promise<{ name: string; p: Pattern }[]> {
   });
 }
 
-describe('stage 4a: TypeScript and Rust agree', () => {
+describe.runIf(v8Math)('stage 4a: TypeScript and Rust agree', () => {
   it(
     'on every line, satin, border and appliqué of the demo project',
     check(async () => {
