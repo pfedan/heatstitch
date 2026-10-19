@@ -6,7 +6,7 @@ import type { Form } from './path';
  * Operations on forms as vectors: areas joined and cut exactly on their curves, areas grown or
  * shrunk by a distance (polygons, curves fitted again), paths cut where they cross, a fill cut apart
  * along drawn lines, and the free area around shapes. Computed by the Rust core
- * (core/src/shape/ops.rs): joining and cutting with `i_curve`, offsets with `clipper2-rust`.
+ * (core/src/shape/ops.rs): joining and cutting with `linesweeper`, offsets with `clipper2-rust`.
  *
  * Chosen by measurement on the forms of the demo project and the SVG examples (see
  * core/src/shape/ops.rs and the pull request "Rust core stage 2"): joining is within 0.001 mm of a

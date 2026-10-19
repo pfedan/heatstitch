@@ -27,7 +27,7 @@ import * as tsVec from './ts/shape/vectorize';
  *
  * Where the algorithm is the same (path data, simplifying, vectorizing, rastering, parts, bands,
  * offsets) the results agree to rounding. Joining and cutting on the curves moved from paper.js to
- * i_curve: there the areas must agree within a band of 0.002 mm along the outline (the area where
+ * linesweeper: there the areas must agree within a band of 0.002 mm along the outline (the area where
  * the two differ, measured on polygons 1 µm from the curves) plus 0.01 mm².
  */
 

@@ -2,15 +2,15 @@
 //! curves, areas grown or shrunk by a distance (polygons, curves fitted again), paths cut where
 //! they cross, a fill cut apart along drawn lines, and the free area around shapes.
 //!
-//! Joining and cutting on the curves uses `i_curve` (the curves split where they meet and kept
-//! as curves, the topology settled on one integer grid by `i_overlay`); offsets and the polygon
-//! work use `clipper2-rust`, a faithful port of Clipper2. Chosen by measurement on the forms of the
-//! demo project and the SVG examples (pull request "Rust core stage 2"): on 314 pairs and 2 250
-//! hard cases (the same form, moved by 1e-7 mm, turned) `i_curve` is within 0.001 mm of a 1 µm
-//! reference like paper.js before, with no case off by more than 0.1 mm (paper.js: 51); the more
-//! used `linesweeper` left slivers where curves coincide (A minus A in 65 of 125 forms). Offsets
-//! with `clipper2-rust` give the same results as Clipper2 in TypeScript did (within 0.042 mm of the
-//! reference in 375 of 375 cases), where offsetting the curves directly failed past a curve's radius.
+//! Joining and cutting on the curves uses `linesweeper` (a sweep over the curves themselves, kept
+//! as curves), with the slivers it leaves where curves lie on each other dropped; offsets and the
+//! polygon work use `clipper2-rust`, a faithful port of Clipper2. Chosen by measurement on the forms
+//! of the demo project and the SVG examples (pull request "Rust core stage 2"): on 314 pairs and
+//! 2 250 hard cases (the same form, moved by 1e-7 mm, turned) it is within 0.001 mm of a 1 µm
+//! reference like paper.js before, with no case off by more than 0.1 mm (paper.js: 51), and keeps
+//! the nodes of the input. Offsets with `clipper2-rust` give the same results as Clipper2 in
+//! TypeScript did (within 0.042 mm of the reference in 375 of 375 cases), where offsetting the
+//! curves directly failed past a curve's radius.
 
 use std::collections::HashMap;
 
@@ -18,8 +18,8 @@ use clipper2_rust::{
     self as clip, ClipType, ClipperOffset, EndType, FillRule as ClipFill, JoinType, Path64,
     Paths64, Point64, PointInPolygonResult, PolyTree64,
 };
-use i_curve::float::{CurvePath, CurveSegment, CurveShape};
-use i_curve::{FillRule, FloatCurveOverlay, OverlayRule};
+use kurbo::{BezPath, PathEl, Point, Shape as _};
+use linesweeper::topology::Topology;
 use serde::{Deserialize, Serialize};
 
 use crate::geom::Pt;
@@ -29,33 +29,48 @@ use crate::shape::path::{
 };
 use crate::shape::vectorize::fit_cubic;
 
-type P = [f64; 2];
-
 // Joining and cutting --------------------------------------------------------------------------
 
-/// The closed paths of a form as curve paths (each closed, at least two nodes).
-fn curve_paths(f: &Form) -> Vec<CurvePath<P>> {
-    f.paths
-        .iter()
-        .filter(|p| p.closed && p.nodes.len() > 1)
-        .filter_map(|p| {
-            let segs = (0..segments(p))
-                .map(|k| {
-                    let c = segment(p, k);
-                    if straight(&c) {
-                        CurveSegment::Line { to: c[3] }
-                    } else {
-                        CurveSegment::Cubic {
-                            ctrl0: c[1],
-                            ctrl1: c[2],
-                            to: c[3],
-                        }
-                    }
-                })
-                .collect();
-            CurvePath::try_new(p.nodes[0].p, segs).ok()
-        })
-        .collect()
+/// Curves nearer than this (mm) are one curve to the sweep. The sweep leaves a piece about a
+/// hundred times this wide where curves lie on each other; at 1e-9 that is under 0.1 µm, a tenth of
+/// `SLIVER`, and the sweep still holds on forms moved by 1e-7 mm or turned.
+const SWEEP_EPS: f64 = 1e-9;
+/// Result pieces thinner than this on average (twice their area over their outline, mm) are
+/// slivers where curves lie on each other, not parts.
+const SLIVER: f64 = 1e-3;
+/// Result pieces smaller than this (mm²) are specks, not parts.
+const SPECK: f64 = 1e-5;
+/// A curve followed by itself backwards within this (mm) is a spike of no width.
+const SPIKE: f64 = 1e-6;
+
+/// Rule by which two forms are combined.
+#[derive(Clone, Copy)]
+enum Rule {
+    Union,
+    Difference,
+    Intersect,
+}
+
+/// One result part: its outline first, then the outlines inside it (holes, parts in holes, ...).
+type Shape = Vec<Vec<Cubic>>;
+
+/// The closed paths of a form as one Bézier path (each closed, at least two nodes).
+fn bez_path(f: &Form) -> BezPath {
+    let mut bp = BezPath::new();
+    for p in f.paths.iter().filter(|p| p.closed && p.nodes.len() > 1) {
+        let at = |q: Pt| Point::new(q[0], q[1]);
+        bp.move_to(at(p.nodes[0].p));
+        for k in 0..segments(p) {
+            let c = segment(p, k);
+            if straight(&c) {
+                bp.line_to(at(c[3]));
+            } else {
+                bp.curve_to(at(c[1]), at(c[2]), at(c[3]));
+            }
+        }
+        bp.close_path();
+    }
+    bp
 }
 
 /// Whether a form has an area to work on.
@@ -64,14 +79,20 @@ fn has_area(f: &Form) -> bool {
 }
 
 /// The curves of one result contour, as cubics (lines with their handles on the nodes).
-fn contour_cubics(c: &CurvePath<P>) -> Vec<Cubic> {
-    let mut last = c.start();
+fn contour_cubics(bp: &BezPath) -> Vec<Cubic> {
+    let pt = |p: Point| [p.x, p.y];
+    let (mut start, mut last): (Pt, Pt) = ([0.0; 2], [0.0; 2]);
     let mut out = vec![];
-    for s in c.segments() {
-        let cubic = match s {
-            CurveSegment::Line { to } => [last, last, *to, *to],
-            CurveSegment::Quad { ctrl, to } => {
-                let (q, e) = (*ctrl, *to);
+    for el in bp.elements() {
+        let cubic = match *el {
+            PathEl::MoveTo(p) => {
+                start = pt(p);
+                last = start;
+                continue;
+            }
+            PathEl::LineTo(p) => [last, last, pt(p), pt(p)],
+            PathEl::QuadTo(q, p) => {
+                let (q, e) = (pt(q), pt(p));
                 [
                     last,
                     [
@@ -85,15 +106,11 @@ fn contour_cubics(c: &CurvePath<P>) -> Vec<Cubic> {
                     e,
                 ]
             }
-            CurveSegment::Cubic { ctrl0, ctrl1, to } => [last, *ctrl0, *ctrl1, *to],
-            // Only lines and cubics go in; an arc is its chord at worst.
-            CurveSegment::Arc { arc } => {
-                let e = arc.control_points[2];
-                [last, last, e, e]
-            }
+            PathEl::CurveTo(a, b, p) => [last, pt(a), pt(b), pt(p)],
+            PathEl::ClosePath => [last, last, start, start],
         };
         last = cubic[3];
-        // Pieces of no length (where the grid put two points on one).
+        // Pieces of no length.
         if dist(cubic[0], cubic[3]) < 1e-12 && straight(&cubic) {
             continue;
         }
@@ -102,8 +119,90 @@ fn contour_cubics(c: &CurvePath<P>) -> Vec<Cubic> {
     out
 }
 
-/// The grid the curves are settled on moves points by well under this (mm): a result point this
-/// near a node of the input is that node.
+/// A closed run of cubics without the spikes of no width in it: a curve followed by the same curve
+/// backwards goes, a straight side followed by a way back along it is cut to what is left.
+fn without_spikes(mut cs: Vec<Cubic>) -> Vec<Cubic> {
+    loop {
+        let n = cs.len();
+        if n < 2 {
+            return vec![];
+        }
+        let mut hit = None;
+        for i in 0..n {
+            let (a, b) = (cs[i], cs[(i + 1) % n]);
+            if dist(a[0], b[3]) < SPIKE
+                && dist(a[1], b[2]) < SPIKE
+                && dist(a[2], b[1]) < SPIKE
+                && dist(a[3], b[0]) < SPIKE
+            {
+                hit = Some((i, None));
+                break;
+            }
+            if straight(&a) && straight(&b) {
+                let u = [a[3][0] - a[0][0], a[3][1] - a[0][1]];
+                let v = [b[3][0] - b[0][0], b[3][1] - b[0][1]];
+                let lu = hypot(u[0], u[1]);
+                if lu < 1e-12 || u[0] * v[0] + u[1] * v[1] >= 0.0 {
+                    continue;
+                }
+                let off = ((b[3][0] - a[0][0]) * u[1] - (b[3][1] - a[0][1]) * u[0]).abs() / lu;
+                if off < SPIKE {
+                    hit = Some((i, Some([a[0], a[0], b[3], b[3]])));
+                    break;
+                }
+            }
+        }
+        let Some((i, rest)) = hit else { return cs };
+        let j = (i + 1) % n;
+        let (lo, hi) = (i.min(j), i.max(j));
+        cs.remove(hi);
+        cs.remove(lo);
+        if let Some(r) = rest.filter(|r| dist(r[0], r[3]) > 1e-12) {
+            cs.insert(lo.min(cs.len()), r);
+        }
+    }
+}
+
+/// Whether a result contour is a part: not a sliver where curves lay on each other, not a speck.
+fn is_part(bp: &BezPath) -> bool {
+    let area = bp.area().abs();
+    area >= SPECK && 2.0 * area / bp.perimeter(1e-5).max(1e-12) >= SLIVER
+}
+
+/// The parts the sweep found inside by `inside`, without slivers, specks and spikes.
+fn shapes_of<W: linesweeper::topology::WindingNumber>(
+    top: &Topology<W>,
+    inside: impl Fn(&W) -> bool,
+) -> Vec<Shape> {
+    let contours = top.contours(inside);
+    let all: Vec<&linesweeper::topology::Contour> = contours.contours().collect();
+    let mut dropped = vec![false; all.len()];
+    let mut shapes = vec![];
+    for group in contours.grouped() {
+        let mut shape: Shape = vec![];
+        for idx in group {
+            let c = all[idx.0];
+            // What lies in a dropped piece goes with it.
+            if c.parent.is_some_and(|p| dropped[p.0]) || !is_part(&c.path) {
+                dropped[idx.0] = true;
+                continue;
+            }
+            let cs = without_spikes(contour_cubics(&c.path));
+            if cs.len() < 2 {
+                dropped[idx.0] = true;
+                continue;
+            }
+            shape.push(cs);
+        }
+        if !shape.is_empty() {
+            shapes.push(shape);
+        }
+    }
+    shapes
+}
+
+/// The sweep moves points by well under this (mm): a result point this near a node of the input
+/// is that node.
 const SNAP: f64 = 1e-5;
 
 /// The input nodes, to find a result point's node by.
@@ -161,8 +260,7 @@ fn collinear(n: &Node) -> bool {
 
 /// One result contour as a path; nodes that were nodes of `from` are those nodes exactly and keep
 /// whether they were smooth. None for less than two curves.
-fn path_of(c: &CurvePath<P>, known: &Known) -> Option<Path> {
-    let cs = contour_cubics(c);
+fn path_of(cs: &[Cubic], known: &Known) -> Option<Path> {
     let m = cs.len();
     if m < 2 {
         return None;
@@ -206,11 +304,11 @@ fn path_of(c: &CurvePath<P>, known: &Known) -> Option<Path> {
 }
 
 /// Result shapes as one form (even-odd: they do not overlap).
-fn form_of(shapes: &[CurveShape<P>], from: &[&Form]) -> Option<Form> {
+fn form_of(shapes: &[Shape], from: &[&Form]) -> Option<Form> {
     let known = Known::new(from);
     let paths: Vec<Path> = shapes
         .iter()
-        .flat_map(|s| s.contours())
+        .flatten()
         .filter_map(|c| path_of(c, &known))
         .collect();
     (!paths.is_empty()).then_some(Form {
@@ -219,48 +317,59 @@ fn form_of(shapes: &[CurveShape<P>], from: &[&Form]) -> Option<Form> {
     })
 }
 
-fn fill_rule(f: &Form) -> FillRule {
-    if f.nonzero {
-        FillRule::NonZero
-    } else {
-        FillRule::EvenOdd
-    }
+fn inside(w: i32, nonzero: bool) -> bool {
+    if nonzero { w != 0 } else { w % 2 != 0 }
 }
 
 /// The area of a form by its own rule, as shapes that do not overlap.
-fn settled(f: &Form) -> Vec<CurveShape<P>> {
-    let ps = curve_paths(f);
-    if ps.is_empty() {
+fn settled(f: &Form) -> Vec<Shape> {
+    let bp = bez_path(f);
+    if bp.is_empty() {
         return vec![];
     }
-    FloatCurveOverlay::<P, i32>::try_from_subject(&ps)
-        .map(|o| o.resolve_subject(fill_rule(f)))
+    Topology::from_path(&bp, SWEEP_EPS)
+        .map(|t| shapes_of(&t, |w| inside(*w, f.nonzero)))
         .unwrap_or_default()
 }
 
-/// `a` and `b` combined by `rule`, each filled by its own rule.
-fn boolean(a: &Form, b: &Form, rule: OverlayRule) -> Vec<CurveShape<P>> {
-    let (pa, pb, fill) = if a.nonzero == b.nonzero {
-        (curve_paths(a), curve_paths(b), fill_rule(a))
-    } else {
-        // One rule for both: the nonzero one settled first (its shapes do not overlap).
-        let flat = |f: &Form| -> Vec<CurvePath<P>> {
-            if f.nonzero {
-                settled(f)
-                    .into_iter()
-                    .flat_map(|s| s.into_contours())
-                    .collect()
-            } else {
-                curve_paths(f)
-            }
-        };
-        (flat(a), flat(b), FillRule::EvenOdd)
+/// The area of a form as outlines that run one way round it (the area on their right), as the sweep
+/// leaves them. Combining forms needs this: `linesweeper` 0.5 misreads a curve two forms share when
+/// they run it in opposite directions with their areas on the same side (a form and itself drawn
+/// the other way round, a part cut from a fill and that fill), and outlines that run alike round
+/// their areas only share a curve that way when the areas lie on opposite sides of it.
+fn settled_path(f: &Form) -> BezPath {
+    let bp = bez_path(f);
+    if bp.is_empty() {
+        return bp;
+    }
+    let Ok(t) = Topology::from_path(&bp, SWEEP_EPS) else {
+        return bp;
     };
+    let mut out = BezPath::new();
+    for c in t.contours(|w| inside(*w, f.nonzero)).contours() {
+        out.extend(c.path.iter());
+    }
+    out
+}
+
+/// `a` and `b` combined by `rule`, each filled by its own rule.
+fn boolean(a: &Form, b: &Form, rule: Rule) -> Vec<Shape> {
+    let (pa, pb) = (settled_path(a), settled_path(b));
     if pa.is_empty() && pb.is_empty() {
         return vec![];
     }
-    FloatCurveOverlay::<P, i32>::try_new(&pa, &pb)
-        .map(|o| o.overlay(rule, fill))
+    Topology::from_paths_binary(&pa, &pb, SWEEP_EPS)
+        .map(|t| {
+            shapes_of(&t, |w| {
+                // Settled, each area is where its outlines wind once.
+                let (x, y) = (w.shape_a != 0, w.shape_b != 0);
+                match rule {
+                    Rule::Union => x || y,
+                    Rule::Difference => x && !y,
+                    Rule::Intersect => x && y,
+                }
+            })
+        })
         .unwrap_or_default()
 }
 
@@ -286,7 +395,7 @@ pub fn union_forms(forms: &[Form]) -> Option<Form> {
     }
     let mut acc: Form = (*first).clone();
     for f in &closed[1..] {
-        let u = boolean(&acc, f, OverlayRule::Union);
+        let u = boolean(&acc, f, Rule::Union);
         acc = form_of(&u, &closed).unwrap_or_default();
     }
     (!acc.paths.is_empty()).then_some(acc)
@@ -294,12 +403,12 @@ pub fn union_forms(forms: &[Form]) -> Option<Form> {
 
 /// The area of `a` without the area of `b`; None when nothing is left.
 pub fn subtract_form(a: &Form, b: &Form) -> Option<Form> {
-    form_of(&boolean(a, b, OverlayRule::Difference), &[a, b])
+    form_of(&boolean(a, b, Rule::Difference), &[a, b])
 }
 
 /// The areas both forms cover; None when none.
 pub fn intersect_forms(a: &Form, b: &Form) -> Option<Form> {
-    form_of(&boolean(a, b, OverlayRule::Intersect), &[a, b])
+    form_of(&boolean(a, b, Rule::Intersect), &[a, b])
 }
 
 /// Signed area of a closed run of cubics (Green's theorem, exact for cubics; the formula of
@@ -319,16 +428,11 @@ fn cubics_area(cs: &[Cubic]) -> f64 {
 
 /// Area enclosed by a form (mm², even-odd or nonzero as the form says), exact on the curves.
 pub fn area_of_form(f: &Form) -> f64 {
+    // The sweep turns every outline one way round the area (holes the other): the signed areas add up.
     settled(f)
         .iter()
-        .map(|s| {
-            let mut cs = s
-                .contours()
-                .iter()
-                .map(|c| cubics_area(&contour_cubics(c)).abs());
-            let outer = cs.next().unwrap_or(0.0);
-            outer - cs.sum::<f64>()
-        })
+        .flatten()
+        .map(|c| cubics_area(c))
         .sum::<f64>()
         .abs()
 }
@@ -1233,15 +1337,11 @@ pub fn split_form(
             .collect(),
         nonzero: f.nonzero,
     };
-    let rest = boolean(f, &cutter, OverlayRule::Difference);
+    let rest = boolean(f, &cutter, Rule::Difference);
     // The pieces: each outline with the holes in it.
-    let pieces: Vec<&CurveShape<P>> = rest
+    let pieces: Vec<&Shape> = rest
         .iter()
-        .filter(|s| {
-            s.contours()
-                .first()
-                .is_some_and(|c| cubics_area(&contour_cubics(c)).abs() > 1e-9)
-        })
+        .filter(|s| s.first().is_some_and(|c| cubics_area(c).abs() > 1e-9))
         .collect();
     let known = [f];
     let forms: Vec<Option<Form>> = pieces
@@ -1251,10 +1351,8 @@ pub fn split_form(
     let outer_pts: Vec<Vec<Pt>> = pieces
         .iter()
         .map(|s| {
-            let c = &s.contours()[0];
-            let cs = contour_cubics(c);
             let mut pts = vec![];
-            for c in &cs {
+            for c in &s[0] {
                 for i in 0..16 {
                     pts.push(bezier(c, i as f64 / 16.0));
                 }
@@ -1710,7 +1808,8 @@ mod tests {
         let (a, b) = (rect(0.0, 0.0, 10.0, 10.0), disc(10.0, 5.0, 4.0));
         let u = union_forms(&[a, b.clone()]).unwrap();
         assert_eq!(u.paths.len(), 1);
-        assert!((area_of_form(&u) - (100.0 + area_of_form(&b) / 2.0)).abs() < 1e-6);
+        // The sweep lays curves where others are near again, within a few hundredths of a µm.
+        assert!((area_of_form(&u) - (100.0 + area_of_form(&b) / 2.0)).abs() < 1e-3);
         let has = |q: Pt| u.paths[0].nodes.iter().find(|n| n.p == q).map(|n| n.smooth);
         assert_eq!(has([0.0, 0.0]), Some(false));
         assert_eq!(has([0.0, 10.0]), Some(false));
@@ -1727,7 +1826,59 @@ mod tests {
         assert!(subtract_form(&disc(5.0, 5.0, 2.0), &rect(0.0, 0.0, 10.0, 10.0)).is_none());
         let a = disc(5.0, 5.0, 3.0);
         assert!(subtract_form(&a, &a).is_none());
-        assert!((area_of_form(&intersect_forms(&a, &a).unwrap()) - area_of_form(&a)).abs() < 1e-6);
+        assert!((area_of_form(&intersect_forms(&a, &a).unwrap()) - area_of_form(&a)).abs() < 1e-3);
+    }
+
+    #[test]
+    fn curves_shared_in_either_direction() {
+        // An ellipse, and the same drawn the other way round: the sweep alone reads them wrong.
+        let n = |p: Pt, a: Pt, b: Pt| Node {
+            p,
+            a,
+            b,
+            smooth: true,
+        };
+        let a = Form {
+            paths: vec![Path {
+                closed: true,
+                nodes: vec![
+                    n([31.07, 19.95], [24.56, 17.83], [37.58, 22.06]),
+                    n([40.76, 30.25], [41.92, 26.68], [39.6, 33.82]),
+                    n([26.87, 32.88], [33.38, 35.0], [20.35, 30.77]),
+                    n([17.17, 22.58], [16.01, 26.16], [18.34, 19.01]),
+                ],
+            }],
+            nonzero: false,
+        };
+        let mut b = a.clone();
+        for p in &mut b.paths {
+            p.nodes.reverse();
+            for n in &mut p.nodes {
+                std::mem::swap(&mut n.a, &mut n.b);
+            }
+        }
+        let whole = area_of_form(&a);
+        for f in [
+            intersect_forms(&a, &b),
+            union_forms(&[a.clone(), b.clone()]),
+        ] {
+            assert!((area_of_form(&f.unwrap()) - whole).abs() < 1e-3);
+        }
+        assert!(subtract_form(&a, &b).is_none());
+        // A part cut from a lens, held to the lens: the part again.
+        let lens = Form {
+            paths: vec![Path {
+                closed: true,
+                nodes: vec![
+                    n([55.0, 34.0], [60.5, 27.63], [60.5, 40.38]),
+                    n([77.0, 34.0], [72.6, 40.38], [72.6, 27.63]),
+                ],
+            }],
+            nonzero: false,
+        };
+        let top = subtract_form(&lens, &rect(50.0, 34.0, 30.0, 10.0)).unwrap();
+        let held = intersect_forms(&top, &lens).unwrap();
+        assert!((area_of_form(&held) - area_of_form(&top)).abs() < 1e-3);
     }
 
     #[test]
