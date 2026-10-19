@@ -35,8 +35,9 @@ describe('measuring objects', () => {
     const { p, kinds, objs } = setup('demos/letters.pes');
     for (const o of objs.filter((x) => x.kind === 'fill')) {
       const m = measureFill(p, analyze(p, o, kinds));
-      expect(m.spacing).toBeGreaterThan(0.3);
-      expect(m.spacing).toBeLessThan(0.5);
+      // Rows 0.2 mm apart (0.4 counted across two rows).
+      expect(m.spacing).toBeGreaterThan(0.15);
+      expect(m.spacing).toBeLessThan(0.25);
     }
   });
 

@@ -42,7 +42,8 @@ describe('correction engine', () => {
   it('takes a fix back exactly where sewing anew splits an object differently and moves the jump after it', async () => {
     // The cat: object 0 is sewn anew in several sections, and the travel to object 1 changes.
     const p = load('cat-60mm.pes');
-    const f = await prepareFix(p, { fabric: 'terry', thread: '40' }, 'density', { trimMm: 2, visible: false, hand: false });
+    // Terry with 12 wt: the limits the cat's rows (sewn 0.36 to 0.4 mm apart) were made for.
+    const f = await prepareFix(p, { fabric: 'terry', thread: '12' }, 'density', { trimMm: 2, visible: false, hand: false });
     expect(f.objects.length).toBeGreaterThan(0);
     const q = applyFix(p, f)!;
     expect(fixedObjects(q)).toEqual(f.objects.map((x) => x.index));
@@ -58,10 +59,10 @@ describe('correction engine', () => {
     const o = parsePattern(file.data, file.name);
     const p = fromStored(o, file.working) ?? o;
     restoreRemembered(p, file.objects);
-    // The rays (object 2) a little wider than recommended (0.50 mm), so a gap opens between them.
+    // The rays (object 2) a little wider than recommended (rows 0.25 mm apart), so a gap opens between them.
     const kinds = stitchKinds(p);
     const objs = sewObjects(p, kinds);
-    const wide = takeOver(restitch(p, objs, [2], { kind: 'fill', s: { ...remembered(p, objs[2])!.fill!, spacing: 0.5 } }, kinds, 3))!;
+    const wide = takeOver(restitch(p, objs, [2], { kind: 'fill', s: { ...remembered(p, objs[2])!.fill!, spacing: 0.3 } }, kinds, 3))!;
     const f = (await directFix(wide, WOVEN, 'gaps', { trimMm: 3 }))!;
     expect(f).toBeTruthy();
     const q = applyFix(wide, f)!;
