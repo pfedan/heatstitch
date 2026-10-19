@@ -16,8 +16,9 @@ export interface Profile {
   thread: ThreadId;
   /**
    * Values measured on the user's own fabric with a test swatch (see model/swatch.ts), in place of
-   * the fabric's. They belong to this browser, not to a design: the app puts them on the active
-   * profile (see withOwn in settings.ts), normalizeProfile leaves them off.
+   * the fabric's. A design keeps a copy with its material (taken from this browser's measured values
+   * when it is made or its fabric changes, see withOwn in settings.ts), so it is digitized, checked
+   * and tuned the same everywhere. None: the fabric's values.
    */
   own?: OwnValues;
 }
@@ -35,7 +36,7 @@ export interface OwnValues {
 }
 
 /** Sensible bounds for measured values: anything outside is not kept. */
-const OWN_SPACING: [number, number] = [0.2, 1.5];
+const OWN_SPACING: [number, number] = [0.1, 1.5];
 const OWN_PULL: [number, number] = [0, 2];
 
 const ownOk = (v: unknown): v is Own => {
@@ -66,9 +67,11 @@ export const threadOf = (p: Profile): Thread => THREAD[p.thread] ?? THREAD['40']
  * every older project keeps its fabric.
  */
 export function normalizeProfile(p: Partial<Profile> | undefined): Profile {
+  const own = normalizeOwn(p?.own);
   return {
     fabric: Object.hasOwn(FABRIC, p?.fabric ?? '') ? p!.fabric! : DEFAULT_PROFILE.fabric,
     thread: Object.hasOwn(THREAD, p?.thread ?? '') ? p!.thread! : DEFAULT_PROFILE.thread,
+    ...(own ? { own } : {}),
   };
 }
 
@@ -80,7 +83,20 @@ export function threadWidthMm(p: Profile): number {
   return 0.4 / threadOf(p).factor;
 }
 
-/** The fabric's spacing range for the profile's thread, without measured values (thicker thread needs wider spacing). */
+/**
+ * Spacing is counted as embroidery software commonly counts it: across two rows, a fill row there
+ * and the one back, as a satin's spacing is between penetrations on the same side (Daniel,
+ * 2026-10-19: the established language, 0.4 mm on woven). The fabric table,
+ * the panels and the test swatch show it so; a fill's rows lie half of it apart, which is what
+ * FillSettings.spacing and measured fill values keep.
+ */
+export const ROW_PAIR = 2;
+/** A fill's distance between neighbouring rows as shown and typed (across two rows). */
+export const shownRows = (rowSpacing: number): number => rowSpacing * ROW_PAIR;
+/** A fill's distance between neighbouring rows for a spacing shown or typed across two rows. */
+export const rowsOf = (shown: number): number => shown / ROW_PAIR;
+
+/** The fabric's spacing range for the profile's thread, counted across two rows, without measured values (thicker thread needs wider spacing). */
 export function fabricSpacing(p: Profile): [number, number] {
   const k = threadOf(p).factor;
   const [a, b] = fabricOf(p).spacing;
@@ -88,12 +104,20 @@ export function fabricSpacing(p: Profile): [number, number] {
 }
 
 /**
- * Recommended spacing range in mm for the profile. A spacing measured with a fill test swatch
- * becomes its lower end (the default), the range keeping the fabric's width ratio.
+ * Recommended distance between neighbouring fill rows in mm for the profile. A spacing measured
+ * with a fill test swatch becomes its lower end (the default), the range keeping the fabric's
+ * width ratio.
  */
 export function recommendedSpacing(p: Profile): [number, number] {
-  const [a, b] = fabricSpacing(p);
+  const [a, b] = fabricSpacing(p).map(rowsOf);
   const own = p.own?.fill?.spacing;
+  return own ? [own, (own * b) / a] : [a, b];
+}
+
+/** Recommended satin spacing range in mm (between penetrations on the same side): measured, else the fabric's. */
+export function recommendedSatin(p: Profile): [number, number] {
+  const [a, b] = fabricSpacing(p);
+  const own = p.own?.satin?.spacing;
   return own ? [own, (own * b) / a] : [a, b];
 }
 

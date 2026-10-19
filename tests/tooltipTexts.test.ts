@@ -44,9 +44,10 @@ describe('tooltip pictures', () => {
   for (const [file, text] of files) {
     // The tooltip's own comment names an example.
     if (file.endsWith('tooltip.ts')) continue;
-    for (const m of text.matchAll(/data-tip-img="([\w-]+)"|'data-tip-img': '([\w-]+)'|tipImg = '([\w-]+)'|tipImg = `style-\$\{k\}`/g)) {
+    for (const m of text.matchAll(/data-tip-img="([\w{}-]+)"|'data-tip-img': '([\w{}-]+)'|tipImg(?: =|:) '([\w{}-]+)'|tipImg = `style-\$\{k\}`/g)) {
       if (m[0].includes('${k}')) ['style-smart', 'style-dynamic'].forEach((n) => used.add(n));
-      else used.add(m[1] ?? m[2] ?? m[3]);
+      // A shot per language: `{lang}` in the name (see shell/tooltip.ts).
+      else for (const lang of ['de', 'en']) used.add((m[1] ?? m[2] ?? m[3]).replace('{lang}', lang));
     }
     // Pictures by value on the buttons of a choice (stitchPanel's pictured).
     for (const m of text.matchAll(/pictured\([\s\S]*?\{([^}]*)\},\s*'/g)) for (const n of m[1].matchAll(/'([\w-]+)'/g)) used.add(n[1]);

@@ -168,17 +168,24 @@ instantly for all loaded files when you change fabric or thread.
 
 ### Material profiles
 
-The limits apply to 40 wt on stable woven fabric and are scaled by a factor from fabric and thread
-(ratio of the recommended stitch spacing to the 0.40 mm reference).
+The limits apply to 40 wt on stable woven fabric and are scaled by a factor from fabric and thread.
+
+Spacing is counted as common embroidery software counts it: across two rows for a fill (a row there and the one back),
+between penetrations on the same side for a satin. A fill at 0.40 mm has its rows 0.20 mm apart.
+The panels, the test swatch and the fabric table all use this count; `FillSettings.spacing` keeps the
+distance between neighboring rows (`shownRows` / `rowsOf` in `validation/profiles.ts`).
 
 | Fabric | Factor | Recommended spacing (40 wt) | Long stitch from |
 |---|---|---|---|
-| Stable woven (twill, canvas, denim) | 1.0 | 0.40 to 0.45 mm | 10 mm |
-| Cap, structured | 0.9 | 0.40 to 0.50 mm | 7 mm |
-| Knit, fleece (piqué, jersey) | 0.85 | 0.42 to 0.50 mm | 7 mm |
-| Terry, pile | 0.65 | 0.55 to 0.70 mm | 7 mm |
-| Light, delicate (silk, batiste) | 0.6 | 0.60 to 0.70 mm | 8 mm |
-| Leather, faux leather (+ perforation check) | 0.7 | 0.50 to 0.80 mm | 8 mm |
+| Stable woven (cotton, linen, poplin) | 1.0 | 0.40 to 0.50 mm | 10 mm |
+| Heavy woven (denim, canvas, twill) | 1.0 | 0.42 to 0.56 mm | 10 mm |
+| Cap, structured | 1.0 | 0.40 to 0.50 mm | 7 mm |
+| Knit (piqué, jersey) | 0.85 | 0.47 to 0.56 mm | 7 mm |
+| Fleece, sweat | 0.75 | 0.47 to 0.56 mm | 7 mm |
+| Terry, pile | 1.0 | 0.40 to 0.50 mm | 7 mm |
+| Light (silk, batiste) | 0.6 | 0.56 to 0.67 mm | 8 mm |
+| Sheer (organza, chiffon) | 0.5 | 0.67 to 0.83 mm | 7 mm |
+| Leather, faux leather (+ perforation check) | 0.7 | 0.56 to 0.89 mm | 8 mm |
 
 | Thread | 60 wt | 40 wt | 30 wt | 12 wt |
 |---|---|---|---|---|
@@ -188,16 +195,18 @@ The limits apply to 40 wt on stable woven fabric and are scaled by a factor from
 
 | Rule | Caution | Critical |
 |---|---|---|
-| Thread length per area, fill | from 7.0 mm/mm² (about 3 layers) | from 9.5 mm/mm² (4 layers) |
-| Thread length per area, pure satin | from 11 mm/mm² | from 12 mm/mm² |
+| Thread length per area, fill | from 14 mm/mm² (about 3 layers) | from 24 mm/mm² (between 4 and 5 layers) |
+| Thread length per area, pure satin | from 15 mm/mm² | from 17.5 mm/mm² |
 | Short-stitch cluster | ≥ 8 stitches under 1 mm in one cell (woven, caps) | ≥ 8 (all other fabrics) |
 | Perforation (leather only) | ≥ 6 penetrations within 1 mm | ≥ 9 |
 | Coverage: fabric shows through | one layer looser than 1/1.15 of the widest recommended spacing | never |
 | Gap between objects | fabric shows when the thread pulls the fabric together | never |
 | Long stitches | from the fabric's limit (7 to 10 mm) | never |
 
-Density values are multiplied by the profile factor. One fill layer at 0.4 mm spacing has 2.5 mm/mm²,
-a satin at 0.4 mm spacing (between penetrations on the same side) 5.0 mm/mm².
+Density values are multiplied by the profile factor. One fill layer at 0.4 mm spacing (rows 0.2 mm
+apart) has 5.0 mm/mm², and so does a satin at 0.4 mm spacing (between penetrations on the same
+side). The fill limits were calibrated with rows 0.4 mm apart and grow with the denser rows
+(`FILL_DENSER`); cells of fill and satin blend the two limits by their share of layers.
 
 - **Grid:** fixed 1 mm cells. Density is computed on 0.2 mm subcells and smoothed with σ = 0.6 mm;
   each cell gets the **peak** of its subcells. That way narrow columns (lettering, borders) are not
@@ -548,7 +557,7 @@ fill rows end there, satin edges are found there, underlay lies on a contour ins
   stitch, up to 3 mm a jump, beyond that a tie-off (0, 0.5, 1, 0.5, 0 mm along the thread), trim, jump
   and tie-in; the same at color changes.
 - **Defaults** by material (`digitizeDefaults`): spacing from the profile's recommendation (woven
-  40 wt: 0.40 mm between neighboring rows, as measured in the example cat), pull compensation by
+  40 wt: 0.40 mm across two rows), pull compensation by
   fabric (Wilcom table), gap rows on knit. Everything can be overridden in the *Stitches* panel.
 
 The generated stitches go through the same check as loaded files. *Take over* adds them

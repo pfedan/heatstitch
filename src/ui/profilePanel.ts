@@ -4,7 +4,10 @@ import { setProfile, type Settings } from '../settings';
 import {
   FABRICS,
   fabricOf,
+  fabricPull,
   recommendedSpacing,
+  satinSpacing,
+  shownRows,
   THREADS,
   threadWidthMm,
   type FabricId,
@@ -80,7 +83,10 @@ export function bindProfile(s: Settings, onChange: () => void): { refresh: () =>
     const lines = [
       t(`fabric.${s.profile.fabric}.ex` as Key),
       t('profile.limits', { caution: formatNumber(th.caution, 1), critical: formatNumber(th.critical, 1) }),
-      t('profile.spacing', { min: formatNumber(min, 2), max: formatNumber(max, 2) }),
+      t('profile.spacing', { min: formatNumber(shownRows(min), 2), max: formatNumber(shownRows(max), 2) }),
+      // Where the design's defaults come from: the fabric, or a test swatch it keeps (see swatchPanel).
+      t('profile.values.fill', { spacing: formatNumber(shownRows(min), 2), pull: formatNumber(fabricPull(s.profile, 'fill'), 2), from: t(s.profile.own?.fill ? 'profile.from.own' : 'profile.from.fabric') }),
+      t('profile.values.satin', { spacing: formatNumber(satinSpacing(s.profile), 2), pull: formatNumber(fabricPull(s.profile, 'satin'), 2), from: t(s.profile.own?.satin ? 'profile.from.own' : 'profile.from.fabric') }),
     ];
     if (fabricOf(s.profile).perforation) lines.push(t('profile.perforation'));
     info.replaceChildren(...lines.map((l) => Object.assign(document.createElement('span'), { textContent: l })));
@@ -106,7 +112,7 @@ export function bindProfile(s: Settings, onChange: () => void): { refresh: () =>
     if (th.holes) items.push(t('validation.explain.perforation', { caution: HOLES_CAUTION, critical: HOLES_CRITICAL }));
     items.push(
       t('validation.explain.coverage', {
-        spacing: formatNumber(1 / th.sparse, 2),
+        spacing: formatNumber(shownRows(1 / th.sparse), 2),
         pull: formatNumber(PULL[th.pull].share * 100, 1),
         cap: formatNumber(PULL[th.pull].cap, 2),
       }),

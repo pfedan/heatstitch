@@ -1,5 +1,7 @@
 import { formatNumber, t, type Key } from '../i18n';
 import type { Fixed } from '../model/restitch';
+import type { ObjectKind } from '../model/objects';
+import { shownRows } from '../validation/profiles';
 
 const mm = (v: Fixed['from']) => (typeof v === 'number' ? formatNumber(v, 2) : v === '' ? '…' : String(v));
 const signed = (v: Fixed['from']) => (typeof v === 'number' ? (v > 0 ? '+' : '') + formatNumber(v, 2) : v === '' ? '…' : String(v));
@@ -11,11 +13,14 @@ const UNDER: Record<string, Key> = {
   both: 'stitch.under.both',
 };
 
-/** One change the correction made or proposes, in words: "Abstand 0,41 → 0,44 mm". */
-export function fixText(c: Fixed): string {
+/** One change the correction made or proposes on an object of `kind`, in words: "Abstand 0,41 → 0,44 mm". */
+export function fixText(c: Fixed, kind?: ObjectKind): string {
   switch (c.field) {
-    case 'spacing':
-      return t('plan.change.spacing', { a: mm(c.from), b: mm(c.to) });
+    case 'spacing': {
+      // A fill's spacing as shown everywhere: across two rows.
+      const shown = (v: Fixed['from']) => (kind === 'fill' && typeof v === 'number' ? shownRows(v) : v);
+      return t('plan.change.spacing', { a: mm(shown(c.from)), b: mm(shown(c.to)) });
+    }
     case 'underlay':
       return t(c.to ? 'plan.change.underlayOn' : 'plan.change.underlayOff');
     case 'underCross':

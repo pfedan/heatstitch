@@ -1,7 +1,7 @@
 import { patternStats, STITCH, type Pattern } from '../model/pattern';
 import { satinMask } from '../validation/satin';
 import { measurePattern, type Measurement } from '../validation/measure';
-import { recommendedSpacing, type Profile } from '../validation/profiles';
+import { recommendedSatin, recommendedSpacing, type Profile } from '../validation/profiles';
 import { tagShortStitches, TIE } from '../validation/shortStitches';
 import { densityLimits, SHORT_STITCH_COUNT } from '../validation/thresholds';
 import { ALL_CHECKS, CAUTION, classify, CRITICAL, type Checks, type Level, type ValidationResult } from '../validation/validate';
@@ -364,6 +364,7 @@ export function autoCorrect(input: Pattern, profile: Profile, opts: CorrectionOp
     // 4. Fewer stitches where the focus asks for it: rows hidden under other objects first (thread
     //    focus), then fills and satins re-spaced evenly within the material's recommended range.
     const maxSpacing = recommendedSpacing(profile)[1] * 10;
+    const satinMaxSpacing = recommendedSatin(profile)[1] * 10;
     for (let round = 0; round < ROUNDS; round++) {
       f = field(v, opts);
       if (!f.any) break;
@@ -393,7 +394,7 @@ export function autoCorrect(input: Pattern, profile: Profile, opts: CorrectionOp
         f = field(v, opts);
       }
       cur = p;
-      const satins = respaceSatins(cur, { needAt: needAt(cur), maxSpacing }, satinColumns(cur, undefined, satinMask(cur, ZIGZAG_MIN)));
+      const satins = respaceSatins(cur, { needAt: needAt(cur), maxSpacing: satinMaxSpacing }, satinColumns(cur, undefined, satinMask(cur, ZIGZAG_MIN)));
       if (attempt(satins.pattern)) {
         report.respaced += satins.sweeps;
         report.respacedRows += satins.rows;
