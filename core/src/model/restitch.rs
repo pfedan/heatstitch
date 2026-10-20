@@ -1548,8 +1548,14 @@ pub fn chained(cols: &[Rails], s: &SatinSettings) -> Vec<Rails> {
 /// between them (see bestChain in restitch.ts): which column at each place, and sewn which of the
 /// four ways (as given, turned round, mirrored, both).
 pub fn best_chain(cols: &[Rails], s: &SatinSettings) -> Vec<Step> {
+    best_chain_from(cols, s, None)
+}
+
+/// best_chain for a chain sewn on from `from` (where the needle is before it): the way from there
+/// to the first column counts too, under all the columns still to be sewn.
+pub fn best_chain_from(cols: &[Rails], s: &SatinSettings, from: Option<Pt>) -> Vec<Step> {
     let n = cols.len();
-    if n < 2 {
+    if n < 2 && from.is_none() {
         return (0..n).map(|c| Step { c, w: 0 }).collect();
     }
     let sw = Sewing::of(s);
@@ -1578,6 +1584,7 @@ pub fn best_chain(cols: &[Rails], s: &SatinSettings) -> Vec<Step> {
             ends[c * 4 + w] = id_of(run.last().copied());
         }
     }
+    let entry = from.map_or(-1, |p| id_of(Some(p)));
     let columns: Vec<Column> = cols.iter().map(|r| column_of(&sections_of(r)[0])).collect();
     let mut model = WayModel::new(cols.iter().map(outline_of).collect(), &columns);
     let np = points.len();
@@ -1585,6 +1592,7 @@ pub fn best_chain(cols: &[Rails], s: &SatinSettings) -> Vec<Step> {
     let mut tried: Vec<Option<Vec<Costed>>> = vec![None; np * np];
     let mut later = Later::new(n);
     let mut cx = ChainCx {
+        entry,
         starts: &starts,
         ends: &ends,
         points: &points,
@@ -1605,6 +1613,8 @@ fn key_bits(v: f64) -> u64 {
 
 /// What the order search asks about the ways between columns.
 struct ChainCx<'a> {
+    /// The point the chain is sewn on from, or -1 when the way to its first column does not count.
+    entry: i32,
     starts: &'a [i32],
     ends: &'a [i32],
     points: &'a [Pt],
@@ -1615,7 +1625,13 @@ struct ChainCx<'a> {
 impl ChainCx<'_> {
     /// What the way from column c sewn way w to column d sewn way x costs, `later` still to be sewn.
     fn travel(&mut self, c: usize, w: usize, d: usize, x: usize, later: &Later) -> f64 {
-        let p = self.ends[c * 4 + w];
+        self.way(self.ends[c * 4 + w], d, x, later)
+    }
+    /// What the way from the entry to column d sewn way x costs (0 without an entry).
+    fn enter(&mut self, d: usize, x: usize, later: &Later) -> f64 {
+        self.way(self.entry, d, x, later)
+    }
+    fn way(&mut self, p: i32, d: usize, x: usize, later: &Later) -> f64 {
         let q = self.starts[d * 4 + x];
         if p < 0 || q < 0 {
             return 0.0;
@@ -1631,7 +1647,9 @@ impl ChainCx<'_> {
     }
     /// The least that way can cost: straight there.
     fn at_least(&self, c: usize, w: usize, d: usize, x: usize) -> f64 {
-        let p = self.ends[c * 4 + w];
+        self.least_from(self.ends[c * 4 + w], d, x)
+    }
+    fn least_from(&self, p: i32, d: usize, x: usize) -> f64 {
         let q = self.starts[d * 4 + x];
         if p < 0 || q < 0 {
             0.0
@@ -1648,9 +1666,10 @@ fn exact_chain(n: usize, cx: &mut ChainCx, later: &mut Later) -> Vec<Step> {
     let mut best = vec![f64::INFINITY; (full + 1) * nn];
     let mut from = vec![-1i64; (full + 1) * nn];
     // Among orders that cost the same, the one that changes the least.
+    later.from(0);
     for c in 0..n {
         for w in 0..4 {
-            best[(1 << c) * nn + c * 4 + w] = if w > 0 { TIE } else { 0.0 };
+            best[(1 << c) * nn + c * 4 + w] = cx.enter(c, w, later) + if w > 0 { TIE } else { 0.0 };
         }
     }
     for set in 1..full {
@@ -1780,6 +1799,8 @@ struct Search<'a, 'b> {
     pos: Pos,
     way: WayAt,
     terms: Vec<f64>,
+    /// The first position whose way in counts: 0 with an entry (the way to the first column), else 1.
+    first: usize,
     cx: &'a mut ChainCx<'b>,
     later: &'a mut Later,
 }
@@ -1799,9 +1820,22 @@ impl Search<'_, '_> {
     }
     /// What the ways into positions lo to hi cost, summed, in the changed order; Infinity once over `limit`.
     fn cost_of(&mut self, lo: usize, hi: usize, limit: f64) -> f64 {
-        let lo = lo.max(1);
-        self.later.reset_from(&self.cs, lo - 1);
+        let lo = lo.max(self.first);
         let mut v = 0.0;
+        let lo = if lo == 0 {
+            // Every column is still to be sewn on the way in.
+            self.later.reset_from(&self.cs, 0);
+            v += self
+                .cx
+                .enter(self.cs[self.pos.at(0)], self.way_at(0), self.later);
+            if v >= limit {
+                return f64::INFINITY;
+            }
+            1
+        } else {
+            self.later.reset_from(&self.cs, lo - 1);
+            lo
+        };
         let mut c = self.cs[self.pos.at(lo - 1)];
         let mut w = self.way_at(lo - 1);
         for k in lo..=hi {
@@ -1820,32 +1854,33 @@ impl Search<'_, '_> {
     /// The least the ways into positions lo to hi can cost in the changed order.
     fn least_of(&self, lo: usize, hi: usize) -> f64 {
         let mut v = 0.0;
-        for k in lo.max(1)..=hi {
-            v += self.cx.at_least(
-                self.cs[self.pos.at(k - 1)],
-                self.way_at(k - 1),
-                self.cs[self.pos.at(k)],
-                self.way_at(k),
-            );
+        for k in lo.max(self.first)..=hi {
+            let (d, x) = (self.cs[self.pos.at(k)], self.way_at(k));
+            v += if k == 0 {
+                self.cx.least_from(self.cx.entry, d, x)
+            } else {
+                self.cx
+                    .at_least(self.cs[self.pos.at(k - 1)], self.way_at(k - 1), d, x)
+            };
         }
         v
     }
     fn refresh(&mut self) {
         self.pos = Pos::Id;
         self.way = WayAt::Base;
-        for k in 1..self.n {
+        for k in self.first..self.n {
             self.terms[k] = self.cost_of(k, k, f64::INFINITY);
         }
     }
     fn sum(&self, lo: usize, hi: usize) -> f64 {
         let mut v = 0.0;
-        for k in lo.max(1)..=hi {
+        for k in lo.max(self.first)..=hi {
             v += self.terms[k];
         }
         v
     }
     fn total(&self) -> f64 {
-        self.sum(1, self.n - 1)
+        self.sum(0, self.n - 1)
     }
     /// Costs the change set in pos and way over positions lo to hi; a better gain replaces `found`.
     fn offer(
@@ -1992,6 +2027,7 @@ fn searched_chain(n: usize, cx: &mut ChainCx, later: &mut Later) -> Vec<Step> {
         pos: Pos::Id,
         way: WayAt::Base,
         terms: vec![0.0; n],
+        first: if cx.entry >= 0 { 0 } else { 1 },
         cx,
         later,
     };
@@ -2831,6 +2867,28 @@ mod tests {
         let mut runs = satin_runs(&cols, &settings(), None);
         runs.insert(0, Run::new(vec![[0.0, 0.0]]));
         assert_eq!(runs.len(), 2);
+    }
+
+    #[test]
+    fn a_chain_sewn_on_from_a_point_starts_near_it() {
+        // In a row, short (planned outright) and long (searched): entered from one side, the
+        // column on that side comes first.
+        for n in [4usize, 13] {
+            let cols: Vec<Rails> = (0..n)
+                .map(|k| {
+                    let mut r = bar(k as f64 * 6.0, 0.0, 5.0, 2.0);
+                    r.chain = Some(0.0);
+                    r
+                })
+                .collect();
+            for (from, first) in [([-1.0, 1.0], 0), ([n as f64 * 6.0 + 1.0, 1.0], n - 1)] {
+                let steps = best_chain_from(&cols, &settings(), Some(from));
+                assert_eq!(steps[0].c, first, "{n} columns from {from:?}");
+                let mut seen: Vec<usize> = steps.iter().map(|s| s.c).collect();
+                seen.sort();
+                assert_eq!(seen, (0..n).collect::<Vec<_>>());
+            }
+        }
     }
 
     #[test]

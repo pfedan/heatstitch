@@ -105,12 +105,18 @@ pub fn satin_runs(rails: JsValue, settings: JsValue, with_steps: bool) -> Result
     Ok(runs_out(&runs, with_steps.then_some(steps)))
 }
 
-/// The best order of a chain as column, way pairs (way: bit 1 turned, bit 2 mirrored).
+/// The best order of a chain as column, way pairs (way: bit 1 turned, bit 2 mirrored); with `from`
+/// (x, y), sewn on from there.
 #[wasm_bindgen(js_name = bestChain)]
-pub fn best_chain(cols: JsValue, settings: JsValue) -> Result<Vec<u32>, JsError> {
+pub fn best_chain(
+    cols: JsValue,
+    settings: JsValue,
+    from: Option<Vec<f64>>,
+) -> Result<Vec<u32>, JsError> {
     let cols: Vec<Rails> = from_js(cols)?;
     let s: SatinSettings = from_js(settings)?;
-    Ok(restitch::best_chain(&cols, &s)
+    let from = from.filter(|f| f.len() >= 2).map(|f| [f[0], f[1]]);
+    Ok(restitch::best_chain_from(&cols, &s, from)
         .iter()
         .flat_map(|st| [st.c as u32, st.w as u32])
         .collect())
