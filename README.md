@@ -98,7 +98,8 @@ with this section when the site starts sending anything new.
 **Viewing**
 
 - **Realistic threads**: round, twisted threads with shading and shadows (WebGL2), the light follows
-  the pointer or the tilt of a phone, a procedural **fabric texture** per material behind them
+  the pointer or the tilt of a phone, a procedural **fabric texture** per material behind them; the slider
+  under it sets the thread width, or the **line width** of the flat stitch lines when realistic threads are off
 - Heatmap of thread length (mm/mm²) or needle points (1/mm²), stitch plan overlay, markers for
   jumps, trims, color changes, start and end and needle points
 - Player with estimated sewing time, statistics, tooltip with density and stitch data
@@ -120,7 +121,7 @@ with this section when the site starts sending anything new.
   grain, rays, swirl, color fade with a second color; open: meander, maze, grid, motifs (hearts, stars, flowers,
   circles strung in rows), echo, cross stitch (only along the slants, on a grid shared by the design, so
   areas on top of each other meet without a gap; sizes of Aida marked), crosshatch), irregular rows for a hand-sewn look,
-  spacing, angle, stitch length, edges, expand, underlay
+  spacing (rows on the 0.1 mm grid at 0°, 45°, 90° and similar angles, so they lie evenly), angle, stitch length, edges, expand, underlay
   (off, across, cross, inset, left out under later objects), **border** (running, triple or satin,
   offset, own thread); satin pattern or E stitch, spacing (also by width and per rung), width per
   side (by fabric: free ends also shortened against push), fringe, irregular (width and spacing varying from stitch to stitch, kept by a seed), short stitches in curves, split, underlay kind (the zigzag sewn out and back, crossing), **rungs** for the direction and **sections**
