@@ -1,5 +1,6 @@
 import init, { initSync } from './pkg/heatstitch_core';
 import * as exports from './pkg/heatstitch_core';
+import { withProgress, type Progress } from './progress';
 
 /**
  * The compute core in Rust (core/), built to WebAssembly by `npm run wasm` into src/wasm/pkg.
@@ -50,8 +51,15 @@ export const coreGeneration = (): number => generation;
 /** Bytes of WebAssembly memory the core holds (it only grows), 0 before it is loaded. */
 export const coreMemoryBytes = (): number => (ready ? exports.memoryBytes() : 0);
 
-export function loadCore(): Promise<void> {
-  loading ??= init({ module_or_path: WASM }).then(() => {
+/**
+ * Loads the core once. The app passes onProgress for its splash (src/ui/boot.ts); the download still
+ * compiles while it streams in. The built page asks for the file early (vite.config.ts, corePreload),
+ * so by now some of it may be there already.
+ */
+export function loadCore(onProgress?: Progress): Promise<void> {
+  loading ??= init({
+    module_or_path: onProgress ? fetch(WASM).then((res) => withProgress(res, import.meta.env.CORE_BYTES ?? 0, onProgress)) : WASM,
+  }).then(() => {
     ready = true;
   });
   return loading;

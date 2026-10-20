@@ -195,7 +195,9 @@ export const DEFAULTS: Settings = {
 };
 
 // v3: material profiles. The modes (v4 fields) are added to v3 settings on load.
-const KEY = `${STORAGE_NS}.settings.v3`;
+/** Where the settings are kept (the splash in index.html reads the language from there too, src/build/boot.ts). */
+export const SETTINGS_KEY = `${STORAGE_NS}.settings.v3`;
+const KEY = SETTINGS_KEY;
 
 const MODES: Mode[] = ['flow', 'density', 'image'];
 const IMAGE_VIEWS: ImageView[] = ['original', 'prepared', 'stitches'];

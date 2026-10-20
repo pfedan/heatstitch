@@ -21,12 +21,14 @@ How it is kept (see [CONTRIBUTING.md](CONTRIBUTING.md#releases)):
 - **Linienbreite einstellbar:** Im Ansicht-Menü stellt der Regler unter *Realistische Fäden* jetzt auch ohne realistische Ansicht die Breite der Stichlinien ein, live auf der Bühne. Die Linienbreite und die Fadenbreite der realistischen Ansicht merken sich getrennt.
 - **Große Stickmuster schneller:** Große Füllungen mit vielen Teilen werden etwa dreimal so schnell neu gestickt, mit genau denselben Stichen wie bisher. Änderst du die Stichart mehrerer Füllungen auf einmal, rechnen mehrere Prozessorkerne gleichzeitig daran. Beim Skalieren mit dem Rahmen bleibt die Oberfläche nach dem Loslassen bedienbar, bis die neuen Stiche da sind.
 - **Gleichmäßige Reihen bei 45°:** Bei 0°, 45°, 90° und ähnlichen Winkeln liegen die Reihen einer Füllung jetzt genau auf dem 0,1-mm-Raster, in dem jede Stickdatei Einstiche speichert. Bisher rundete jeder Einstich für sich, und bei 45° wirkten die Reihen paarweise. Der Abstand rückt dafür auf die nächste Rasterlinie, bei 45° zum Beispiel von 0,4 auf 0,42 mm.
+- **Ladeanzeige beim Start:** Solange heatstitch lädt, zeigt die Seite statt einer halb fertigen Oberfläche ohne Beschriftung einen ruhigen Ladebildschirm mit Fortschritt. Ist alles schon im Browser, erscheint die App gleich. Klappt das Laden nicht, sagt die Seite das und bietet *Neu laden* an.
 
 ### English
 
 - **Adjustable line width:** In the View menu the slider under *Realistic threads* now sets the width of the stitch lines when the realistic view is off too, live on the stage. The line width and the thread width of the realistic view are kept apart.
 - **Large designs are faster:** Large fills in many parts are sewn anew about three times as fast, with exactly the same stitches as before. When you change the stitch settings of several fills at once, several processor cores work on them at the same time. After scaling with the frame, the page stays usable until the new stitches are there.
 - **Even rows at 45°:** At 0°, 45°, 90° and similar angles the rows of a fill now lie exactly on the 0.1 mm grid every embroidery file saves needle points on. Until now each needle point was rounded on its own, and at 45° the rows looked paired. The spacing moves to the nearest grid line for it, at 45° for example from 0.4 to 0.42 mm.
+- **Loading screen at start:** While heatstitch loads, the page shows a calm loading screen with its progress instead of a half-ready interface without labels. When everything is in the browser already, the app appears right away. If loading fails, the page says so and offers *Reload*.
 
 ## [1.1.0] - 2026-10-19
 
