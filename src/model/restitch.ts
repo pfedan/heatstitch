@@ -2486,8 +2486,9 @@ export const sameGrid = (a: CrossGrid, b: CrossGrid) => a.size === b.size && a.a
  */
 function newSatin(p: Pattern, pt: Part, s: SatinSettings, kinds: Uint8Array, known?: Rails[], reverse = false, shape?: Remembered, trimMm = 2): { runs: Pt[][]; rails: Rails[] } | null {
   const sewn = (list: Rails[]) => {
-    // Reversed: the columns from the last to the first, each from its other end (sides swap with it).
-    const rails = reverse ? reversedChains(list, swappedSides(s), pt10(p, pt.e)) : list;
+    // Reversed: the columns from the last to the first, each from its other end (sides swap with it),
+    // the columns of a chain in a new order from where the stitches before it end (see reversedChains).
+    const rails = reverse ? reversedChains(list.slice().reverse().map(reversedRails), s, pt10(p, pt.e)) : list;
     return { runs: satinRuns(rails, reverse ? swappedSides(s) : s), rails };
   };
   const read = known ? null : readRails(p, pt, kinds, shape);
@@ -2529,26 +2530,19 @@ function orderedChains(rails: Rails[], s: SatinSettings): Rails[] {
 }
 
 /**
- * `rails` sewn the other way round, from `from` (where the part ended): the last column first, each
- * from its other end. A chain is planned anew from where the needle is then: its ways between the
- * columns run under columns still to be sewn, and turned round in time they would all lie on top
- * of satin sewn already.
+ * Columns sewn the other way round (`rails`, already from the last to the first, each turned):
+ * each chain of them planned anew (see bestChain), the first from `from`. Turned round as they
+ * are, the ways between them would lie over the columns sewn before instead of under those sewn
+ * later. Chains longer than ORDER_MAX keep the order (as orderedChains).
  */
 function reversedChains(rails: Rails[], s: SatinSettings, from: Pt): Rails[] {
-  const back = rails.slice().reverse().map(reversedRails);
   const out: Rails[] = [];
-  let at = from;
-  for (let k = 0; k < back.length; ) {
+  for (let k = 0; k < rails.length; ) {
     let e = k + 1;
-    while (back[k].chain !== undefined && e < back.length && back[e].chain === back[k].chain) e++;
-    const g = back.slice(k, e);
-    const planned = g.length > 1 && g.length <= ORDER_MAX ? bestChain(g, s, at) : g;
-    out.push(...planned);
+    while (rails[k].chain !== undefined && e < rails.length && rails[e].chain === rails[k].chain) e++;
+    const g = rails.slice(k, e);
+    out.push(...(g.length > 1 && g.length <= ORDER_MAX ? bestChain(g, s, k === 0 ? from : undefined) : g));
     k = e;
-    if (k >= back.length) break;
-    const runs = satinRuns(planned.slice(-1), s);
-    const last = runs[runs.length - 1];
-    if (last?.length) at = last[last.length - 1];
   }
   return out;
 }
@@ -2836,10 +2830,11 @@ export const trimBefore = new WeakSet<Pt[]>();
  * show the least of the way between them: under columns still to be sewn rather than over sewn
  * satin, over satin rather than across the fabric, then the shortest. Short chains get the best
  * order there is, longer ones are searched from the order given (core/src/model/restitch.rs).
- * With `from` (where the needle is before the chain), the way from there to its first column counts too.
+ * With `from`, the needle comes from there: the way to the first column counts too (all columns
+ * still to be sewn).
  */
 export function bestChain(cols: Rails[], s: SatinSettings, from?: Pt): Rails[] {
-  if (cols.length < (from ? 1 : 2)) return cols;
+  if (cols.length < 2) return cols;
   const steps = core().bestChain(cols.map(railsIn), s, from ? new Float64Array(from) : undefined);
   const out: Rails[] = [];
   for (let i = 0; i < steps.length; i += 2) {

@@ -1551,11 +1551,11 @@ pub fn best_chain(cols: &[Rails], s: &SatinSettings) -> Vec<Step> {
     best_chain_from(cols, s, None)
 }
 
-/// best_chain for a chain sewn on from `from` (where the needle is before it): the way from there
-/// to the first column counts too, under all the columns still to be sewn.
+/// best_chain with the needle coming from `from`: the way to the first column counts too (all
+/// columns still to be sewn).
 pub fn best_chain_from(cols: &[Rails], s: &SatinSettings, from: Option<Pt>) -> Vec<Step> {
     let n = cols.len();
-    if n < 2 && from.is_none() {
+    if n < 2 {
         return (0..n).map(|c| Step { c, w: 0 }).collect();
     }
     let sw = Sewing::of(s);
@@ -1613,7 +1613,7 @@ fn key_bits(v: f64) -> u64 {
 
 /// What the order search asks about the ways between columns.
 struct ChainCx<'a> {
-    /// The point the chain is sewn on from, or -1 when the way to its first column does not count.
+    /// Where the needle comes from (the way to the first column counts), or -1.
     entry: i32,
     starts: &'a [i32],
     ends: &'a [i32],
@@ -1627,7 +1627,7 @@ impl ChainCx<'_> {
     fn travel(&mut self, c: usize, w: usize, d: usize, x: usize, later: &Later) -> f64 {
         self.way(self.ends[c * 4 + w], d, x, later)
     }
-    /// What the way from the entry to column d sewn way x costs (0 without an entry).
+    /// What the way from `from` to column d sewn way x costs (0 without `from`).
     fn enter(&mut self, d: usize, x: usize, later: &Later) -> f64 {
         self.way(self.entry, d, x, later)
     }
@@ -1648,6 +1648,10 @@ impl ChainCx<'_> {
     /// The least that way can cost: straight there.
     fn at_least(&self, c: usize, w: usize, d: usize, x: usize) -> f64 {
         self.least_from(self.ends[c * 4 + w], d, x)
+    }
+    /// The least the way from `from` to column d sewn way x can cost: straight there.
+    fn enter_at_least(&self, d: usize, x: usize) -> f64 {
+        self.least_from(self.entry, d, x)
     }
     fn least_from(&self, p: i32, d: usize, x: usize) -> f64 {
         let q = self.starts[d * 4 + x];
@@ -1799,8 +1803,6 @@ struct Search<'a, 'b> {
     pos: Pos,
     way: WayAt,
     terms: Vec<f64>,
-    /// The first position whose way in counts: 0 with an entry (the way to the first column), else 1.
-    first: usize,
     cx: &'a mut ChainCx<'b>,
     later: &'a mut Later,
 }
@@ -1818,24 +1820,19 @@ impl Search<'_, '_> {
             }
         }
     }
-    /// What the ways into positions lo to hi cost, summed, in the changed order; Infinity once over `limit`.
+    /// What the ways into positions lo to hi cost, summed (the way into position k from k - 1, into
+    /// position 0 from where the needle comes), in the changed order; Infinity once over `limit`.
     fn cost_of(&mut self, lo: usize, hi: usize, limit: f64) -> f64 {
-        let lo = lo.max(self.first);
         let mut v = 0.0;
-        let lo = if lo == 0 {
-            // Every column is still to be sewn on the way in.
+        if lo == 0 {
+            // All columns still to be sewn.
             self.later.reset_from(&self.cs, 0);
-            v += self
+            v = self
                 .cx
                 .enter(self.cs[self.pos.at(0)], self.way_at(0), self.later);
-            if v >= limit {
-                return f64::INFINITY;
-            }
-            1
-        } else {
-            self.later.reset_from(&self.cs, lo - 1);
-            lo
-        };
+        }
+        let lo = lo.max(1);
+        self.later.reset_from(&self.cs, lo - 1);
         let mut c = self.cs[self.pos.at(lo - 1)];
         let mut w = self.way_at(lo - 1);
         for k in lo..=hi {
@@ -1853,28 +1850,32 @@ impl Search<'_, '_> {
     }
     /// The least the ways into positions lo to hi can cost in the changed order.
     fn least_of(&self, lo: usize, hi: usize) -> f64 {
-        let mut v = 0.0;
-        for k in lo.max(self.first)..=hi {
-            let (d, x) = (self.cs[self.pos.at(k)], self.way_at(k));
-            v += if k == 0 {
-                self.cx.least_from(self.cx.entry, d, x)
-            } else {
-                self.cx
-                    .at_least(self.cs[self.pos.at(k - 1)], self.way_at(k - 1), d, x)
-            };
+        let mut v = if lo == 0 {
+            self.cx
+                .enter_at_least(self.cs[self.pos.at(0)], self.way_at(0))
+        } else {
+            0.0
+        };
+        for k in lo.max(1)..=hi {
+            v += self.cx.at_least(
+                self.cs[self.pos.at(k - 1)],
+                self.way_at(k - 1),
+                self.cs[self.pos.at(k)],
+                self.way_at(k),
+            );
         }
         v
     }
     fn refresh(&mut self) {
         self.pos = Pos::Id;
         self.way = WayAt::Base;
-        for k in self.first..self.n {
+        for k in 0..self.n {
             self.terms[k] = self.cost_of(k, k, f64::INFINITY);
         }
     }
     fn sum(&self, lo: usize, hi: usize) -> f64 {
         let mut v = 0.0;
-        for k in lo.max(self.first)..=hi {
+        for k in lo..=hi {
             v += self.terms[k];
         }
         v
@@ -2027,7 +2028,6 @@ fn searched_chain(n: usize, cx: &mut ChainCx, later: &mut Later) -> Vec<Step> {
         pos: Pos::Id,
         way: WayAt::Base,
         terms: vec![0.0; n],
-        first: if cx.entry >= 0 { 0 } else { 1 },
         cx,
         later,
     };
