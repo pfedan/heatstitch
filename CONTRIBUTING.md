@@ -36,7 +36,8 @@ npm run dev        # dev server with hot reload
 npm test           # unit tests (Vitest)
 npm run typecheck  # TypeScript only
 npm run build      # typecheck + production build into dist/
-npm run wasm       # only the Rust core into src/wasm/pkg (the commands above do it first)
+npm run wasm       # only the Rust core into src/wasm/pkg, as released (npm run build does it first)
+npm run wasm:fast  # the same, rebuilt in seconds (npm run dev, npm test and typecheck do it first)
 npm run preview    # serve the build: http://localhost:4173/
 ```
 
