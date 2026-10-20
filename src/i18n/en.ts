@@ -15,6 +15,7 @@ import { en as swatch } from './areas/swatch';
 import { en as measure } from './areas/measure';
 import { en as applique } from './areas/applique';
 import { en as library } from './areas/library';
+import { en as boot } from './areas/boot';
 
 
 const enBase: Record<keyof typeof deBase, string> = {
@@ -1539,4 +1540,4 @@ const enBase: Record<keyof typeof deBase, string> = {
   'canvas.hint.letters': 'Drag letters: move · Arrow keys: nudge · Esc: back to the lettering',
 };
 
-export const en: Record<keyof typeof de, string> = { ...enBase, ...shell, ...files, ...objects, ...shapes, ...stitches, ...check, ...image, ...design, ...ready, ...ampel, ...responsive, ...fabrics, ...swatch, ...measure, ...applique, ...library };
+export const en: Record<keyof typeof de, string> = { ...enBase, ...shell, ...files, ...objects, ...shapes, ...stitches, ...check, ...image, ...design, ...ready, ...ampel, ...responsive, ...fabrics, ...swatch, ...measure, ...applique, ...library, ...boot };

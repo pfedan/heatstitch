@@ -2,4 +2,6 @@
 interface ImportMetaEnv {
   readonly APP_VERSION?: string;
   readonly APP_CHANNEL?: 'release' | 'beta' | 'preview' | 'dev';
+  /** Bytes of the built compute core (src/wasm/pkg), for the progress of its download. */
+  readonly CORE_BYTES?: number;
 }

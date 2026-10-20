@@ -60,7 +60,13 @@ src/wasm/pkg/          Built by `npm run wasm` (wasm-pack), ignored by version c
 
 - **Loading.** The exports are synchronous. The app awaits `loadCore()` before its first
   computation (`main.ts`), each worker before its first message. In Node (tests, tools) `core()`
-  instantiates the module from the file on first use.
+  instantiates the module from the file on first use. Until the app is set up, a splash in
+  `index.html` covers the page (style, texts and a small script inline, so it shows from the first
+  paint; `src/ui/boot.ts` drives it): the app's `loadCore(bootProgress)` reports the download as it
+  streams in (`src/wasm/progress.ts`, against the built size when the server compresses), the built
+  page preloads the core beside the app's script (`vite.config.ts`), and a failed load ends in a
+  message with a reload button. Its texts are in `src/i18n/areas/boot.ts`; the build writes both
+  languages into the page (`src/build/boot.ts`).
 - **Data across the boundary.** Records cross as typed arrays (`Int32Array` x and y,
   `Uint8Array` commands), points as `Float64Array` x, y pairs with a lengths array per run,
   regions as their pixel fields (`regionIn` in `digitize/region.ts`). Settings, forms and

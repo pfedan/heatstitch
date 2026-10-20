@@ -92,9 +92,14 @@ import type { ZoneDecision } from './ui/validationPanel';
 import { bindTrace } from './app/trace';
 import { geoUse, sewnAlong } from './model/geo';
 import { loadCore } from './wasm/core';
+import { bootDone, bootFailed, bootProgress } from './ui/boot';
 
 // The compute core (Rust, WebAssembly) before anything is read, sewn or drawn: its functions are synchronous.
-await loadCore();
+// The splash (src/ui/boot.ts) shows how far its download is, and says so when it fails.
+await loadCore(bootProgress).catch((err: unknown) => {
+  bootFailed();
+  throw err;
+});
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -2085,3 +2090,4 @@ $('fabric-tune').addEventListener('click', () => void tuneToFabric());
 
 // Set up: the core loads first (top-level await), which can end after the page's load event.
 document.documentElement.dataset.ready = '';
+bootDone();
