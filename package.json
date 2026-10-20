@@ -15,7 +15,8 @@
     "test:timings": "node scripts/test-timings.mjs",
     "pretypecheck": "node scripts/wasm.mjs",
     "typecheck": "tsc --noEmit",
-    "wasm": "wasm-pack build core --target web --out-dir ../src/wasm/pkg --no-pack --release"
+    "wasm": "wasm-pack build core --target web --out-dir ../src/wasm/pkg --no-pack --release",
+    "wasm:fast": "wasm-pack build core --target web --out-dir ../src/wasm/pkg --no-pack --profile fast"
   },
   "devDependencies": {
     "highs": "^1.15.3",

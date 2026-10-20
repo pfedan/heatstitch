@@ -85,7 +85,9 @@ src/wasm/pkg/          Built by `npm run wasm` (wasm-pack), ignored by version c
   The crate builds for speed (`opt-level = 3`), with `strip` and `panic = "abort"` for size.
 
 `npm test`, `npm run build`, `npm run dev` and `npm run typecheck` build the module first
-(`scripts/wasm.mjs`). CI builds it once per run (`.github/actions/core`) and hands it to the other
+(`scripts/wasm.mjs`): `npm run build` as released, the others with the `fast` profile, which
+skips link-time optimisation and builds incrementally, so a change is rebuilt in seconds and runs
+just as fast. CI builds it once per run (`.github/actions/core`) and hands it to the other
 jobs (`CORE_PREBUILT`), and runs `cargo fmt`, `cargo clippy` and `cargo test` on the crate. How the
 TypeScript was moved over, stage by stage, is in [docs/rust-core.md](docs/rust-core.md).
 

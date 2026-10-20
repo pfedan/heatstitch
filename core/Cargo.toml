@@ -25,7 +25,18 @@ codegen-units = 1
 panic = "abort"
 strip = true
 
+# For working on the code (dev, test, typecheck; see scripts/wasm.mjs): just as fast to run, but
+# rebuilt in seconds instead of minutes, as it skips the whole-program optimisation.
+[profile.fast]
+inherits = "release"
+lto = false
+codegen-units = 16
+incremental = true
+
 # wasm-opt (binaryen) is not needed: LTO already gives a small module, and leaving it out keeps
 # the build free of a second downloaded tool.
 [package.metadata.wasm-pack.profile.release]
+wasm-opt = false
+
+[package.metadata.wasm-pack.profile.custom]
 wasm-opt = false
