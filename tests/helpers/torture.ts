@@ -27,7 +27,7 @@ import { pieceAt } from '../../src/render/applique';
 import { appliquesOf, asFill, canApplique, fromApplique, setApplique, toApplique } from '../../src/model/appliqueOps';
 import type { Region } from '../../src/digitize/region';
 import { GAP_ROWS_MAX } from '../../src/digitize/fill';
-import { fillRuns, TRAVEL_REACH } from '../../src/model/restitch';
+import { fillRuns, travelOf, TRAVEL_REACH } from '../../src/model/restitch';
 import { expandRegion, outline as outlineOf, sample as sampleField } from '../../src/digitize/region';
 import { shownTravel } from './travel';
 import { analyze, backToVersion, crossGridOf, sameGrid, edgeAlong, keepShape, measureSatin, sectionsOf, sectionPlan, sectionView, keepVersion, relearn, objectKey, remember, remembered, rememberedIn, restitch, restoreRemembered, DECO_PATTERNS, OPEN_PATTERNS, type BorderSettings, type DecoSettings, type FillSettings, type Rails, type Remembered, type SatinSettings, type StoredObjects } from '../../src/model/restitch';
@@ -601,7 +601,9 @@ export const OPS: Op[] = [
       if (!d.objects.length) return false;
       const sel = [...new Set([pick(r, d.objects).index, pick(r, d.objects).index])];
       if (process.env.TORTURE_TRACE) console.log('duplicate in place', sel);
-      return shapes(d, duplicateObjects(d.cur.p, sel, T, 0)?.pattern);
+      const dup = duplicateObjects(d.cur.p, sel, T, 0);
+      if (dup) checkCopiedChains(dup.pattern, dup.copies);
+      return shapes(d, dup?.pattern);
     },
   },
   { name: 'move', run: (d, r) => d.objects.length > 0 && transform(d, [pick(r, d.objects).index], translation(between(r, -8, 8), between(r, -8, 8))) },
@@ -2530,6 +2532,40 @@ export function checkSatinOrder(p: Pattern): void {
     });
   }
   expect(problems.join('; '), 'the order of satin parts').toBe('');
+}
+
+/** mm of the ways between the columns of the chains (up to 16 columns, as restitch plans them) of each satin part of `o` that show. */
+function chainWaysShown(p: Pattern, o: SewObject): number[] {
+  const m = remembered(p, o);
+  if (!m?.satin || !m.columns) return [];
+  return m.columns.map((part) => {
+    let v = 0;
+    for (let k = 0; k < part.length; ) {
+      let e = k + 1;
+      while (part[k].chain !== undefined && e < part.length && part[e].chain === part[k].chain) e++;
+      if (e - k > 1 && e - k <= 16) v += travelOf(part.slice(k, e), m.satin!).visible;
+      k = e;
+    }
+    return v;
+  });
+}
+
+/**
+ * A satin copied in place (Ctrl+D), sewn the other way round, shows no more of the ways between
+ * its chained columns than its original: they are planned anew, under columns sewn later, not
+ * turned round onto the satin sewn before. Each copy is sewn right after its original.
+ */
+export function checkCopiedChains(p: Pattern, copies: number[]): void {
+  const objs = sewObjects(p);
+  const problems: string[] = [];
+  for (const k of copies) {
+    if (k < 1 || !objs[k]) continue;
+    const was = chainWaysShown(p, objs[k - 1]);
+    const now = chainWaysShown(p, objs[k]);
+    if (was.length !== now.length) continue;
+    now.forEach((v, j) => v > was[j] + 1 && problems.push(`copy ${k} part ${j}: ${v.toFixed(1)} mm of the ways shown, its original ${was[j].toFixed(1)}`));
+  }
+  expect(problems.join('; '), 'ways between satin columns over the copy').toBe('');
 }
 
 /** What leaves out the shapes on top fits the shapes on top now. */
