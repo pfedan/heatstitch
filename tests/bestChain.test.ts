@@ -70,6 +70,18 @@ describe('bestChain', () => {
     }
   });
 
+  it('starts where the needle comes from, the ways still hidden', () => {
+    for (const teeth of [5, 14]) {
+      const cols = comb(teeth);
+      // The tip of the last tooth: sewn from there, that tooth comes first (turned, from its tip).
+      const tip: [number, number] = [1 + (teeth - 1) * 4 + 1, 12];
+      const best = bestChain(cols, S, tip);
+      expect(which(best[0]), `${teeth} teeth`).toBe(teeth);
+      expect(new Set(best.map(which)).size).toBe(cols.length);
+      expect(chainCost(best, S), `${teeth} teeth: hidden`).toBeLessThan(100 * teeth);
+    }
+  });
+
   it('leaves a chain alone that is already best', () => {
     const best = bestChain(comb(5), S);
     expect(bestChain(best, S)).toEqual(best);
