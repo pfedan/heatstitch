@@ -1,10 +1,11 @@
+import { readFileSync } from 'node:fs';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { digitizeDefaults } from '../src/digitize/digitize';
 import { addShape } from '../src/model/addShape';
 import { wholeArea } from '../src/model/knockout';
 import { sewObjects } from '../src/model/objects';
 import type { Pattern } from '../src/model/pattern';
-import { analyze, measureFill, objectKey, remember, remembered, restitch, type BorderSettings, type FillSettings, type RestitchResult } from '../src/model/restitch';
+import { analyze, measureFill, objectKey, remember, remembered, restitch, restoreRemembered, travelOf, type BorderSettings, type FillSettings, type RestitchResult } from '../src/model/restitch';
 import { coversOver } from '../src/model/covers';
 import { STITCH } from '../src/model/pattern';
 import { rememberObjects } from '../src/model/objects';
@@ -18,6 +19,10 @@ import { ellipsePath, parsePath, rectPath } from '../src/shape/svgPath';
 import { DEFAULT_PROFILE } from '../src/validation/profiles';
 import { guessArea } from '../src/model/geo';
 import { areaOfForm, loadOps } from '../src/shape/ops';
+import { reverseObjects } from '../src/model/reverse';
+import { parsePattern } from '../src/parsers';
+import { fromStored } from '../src/storage/fileStore';
+import { decodeProject } from '../src/storage/project';
 
 beforeAll(loadOps);
 
@@ -240,6 +245,30 @@ describe('duplicating several, and in place', () => {
     expect(objectKey(d.pattern, objs[1])).not.toBe(objectKey(d.pattern, objs[0]));
     expect(remembered(d.pattern, objs[1])?.geo).toBeTruthy();
     box(d.pattern, 1).forEach((v, k) => expect(Math.abs(v - box(d.pattern, 0)[k])).toBeLessThanOrEqual(2));
+  });
+
+  it('copies a satin of chained columns in place without its ways over the satin', async () => {
+    // A brush character: one satin, four columns in a chain whose ways hide under the columns
+    // sewn later. Turned round as they were, the ways lay on top of the copy (88 mm in sight).
+    const file = (await decodeProject(new Uint8Array(readFileSync(new URL('./fixtures/brush-chain.heatstitch', import.meta.url))))).files[0];
+    const p = fromStored(parsePattern(file.data, file.name), file.working)!;
+    restoreRemembered(p, file.objects);
+    const shown = (q: Pattern, o: number) => {
+      const m = remembered(q, sewObjects(q)[o])!;
+      return travelOf(m.columns![0].filter((r) => r.chain === 0), m.satin!);
+    };
+    const before = shown(p, 0);
+    expect(before.visible).toBeLessThan(1);
+    const d = duplicateObjects(p, [0], options.trimMm, 0)!;
+    expect(d.nudged).toBe(0);
+    const objs = sewObjects(d.pattern);
+    expect(objectKey(d.pattern, objs[1])).not.toBe(objectKey(d.pattern, objs[0]));
+    expect(shown(d.pattern, 1).visible).toBeLessThanOrEqual(before.visible + 0.1);
+    // Sewn backwards the same.
+    const kinds = stitchKinds(p);
+    const r = reverseObjects(p, sewObjects(p, kinds), [0], kinds, options.trimMm);
+    expect(r.failed).toEqual([]);
+    expect(travelOf(r.memory[0]!.columns![0].filter((c) => c.chain === 0), r.memory[0]!.satin!).visible).toBeLessThanOrEqual(before.visible + 0.1);
   });
 
   it('copies a fill in place with its border in a thread of its own, each fill with its own border', () => {

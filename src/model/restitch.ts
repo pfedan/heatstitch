@@ -2711,8 +2711,9 @@ export const sameGrid = (a: CrossGrid, b: CrossGrid) => a.size === b.size && a.a
  */
 function newSatin(p: Pattern, pt: Part, s: SatinSettings, kinds: Uint8Array, known?: Rails[], reverse = false, shape?: Remembered, trimMm = 2): { runs: Pt[][]; rails: Rails[] } | null {
   const sewn = (list: Rails[]) => {
-    // Reversed: the columns from the last to the first, each from its other end (sides swap with it).
-    const rails = reverse ? list.slice().reverse().map(reversedRails) : list;
+    // Reversed: the columns from the last to the first, each from its other end (sides swap with it),
+    // the columns of a chain in a new order from where the stitches before it end (see reversedChains).
+    const rails = reverse ? reversedChains(list.slice().reverse().map(reversedRails), s, pt10(p, pt.e)) : list;
     return { runs: satinRuns(rails, reverse ? swappedSides(s) : s), rails };
   };
   const read = known ? null : readRails(p, pt, kinds, shape);
@@ -2748,6 +2749,24 @@ function orderedChains(rails: Rails[], s: SatinSettings): Rails[] {
     while (rails[k].chain !== undefined && e < rails.length && rails[e].chain === rails[k].chain) e++;
     const g = rails.slice(k, e);
     out.push(...(g.length > 1 && g.length <= ORDER_MAX ? bestChain(g, s) : g));
+    k = e;
+  }
+  return out;
+}
+
+/**
+ * Columns sewn the other way round (`rails`, already from the last to the first, each turned):
+ * each chain of them planned anew (see bestChain), the first from `from`. Turned round as they
+ * are, the ways between them would lie over the columns sewn before instead of under those sewn
+ * later. Chains longer than ORDER_MAX keep the order (as orderedChains).
+ */
+function reversedChains(rails: Rails[], s: SatinSettings, from: Pt): Rails[] {
+  const out: Rails[] = [];
+  for (let k = 0; k < rails.length; ) {
+    let e = k + 1;
+    while (rails[k].chain !== undefined && e < rails.length && rails[e].chain === rails[k].chain) e++;
+    const g = rails.slice(k, e);
+    out.push(...(g.length > 1 && g.length <= ORDER_MAX ? bestChain(g, s, k === 0 ? from : undefined) : g));
     k = e;
   }
   return out;
@@ -3290,9 +3309,10 @@ class Later {
  * satin, over satin rather than across the fabric, then the shortest (see wayModel). Short chains
  * get the best order there is, found over all orders at once (see exactChain); longer ones are
  * searched from the order given, a column turned, mirrored or moved or a stretch turned round
- * at a time, as long as that helps (see searchedChain).
+ * at a time, as long as that helps (see searchedChain). With `from`, the needle comes from there:
+ * the way to the first column counts too (all columns still to be sewn).
  */
-export function bestChain(cols: Rails[], s: SatinSettings): Rails[] {
+export function bestChain(cols: Rails[], s: SatinSettings, from?: Pt): Rails[] {
   if (cols.length < 2) return cols;
   const n = cols.length;
   const { sew, along } = sewing(s);
@@ -3337,7 +3357,18 @@ export function bestChain(cols: Rails[], s: SatinSettings): Rails[] {
     const q = starts[d * 4 + x];
     return p < 0 || q < 0 ? 0 : dist(points[p], points[q]);
   };
-  const steps = n <= EXACT_MAX ? exactChain(n, travel, later) : searchedChain(n, travel, atLeast, later);
+  /** What the way from `from` to column c sewn way w costs (0 without `from`). */
+  const all = new Later(n);
+  all.from(0);
+  const enter = (c: number, w: number): number => {
+    const q = ways[c][w].a;
+    return from && q ? model.costOf(model.costed(from, q), all) : 0;
+  };
+  const enterAtLeast = (c: number, w: number): number => {
+    const q = ways[c][w].a;
+    return from && q ? dist(from, q) : 0;
+  };
+  const steps = n <= EXACT_MAX ? exactChain(n, travel, later, enter) : searchedChain(n, travel, atLeast, later, enter, enterAtLeast);
   // Mirrored or not: only where set.
   return steps.map(({ c, w }) => {
     const r = ways[c][w].r;
@@ -3355,14 +3386,14 @@ type Step = { c: number; w: number };
  * its way, the cheapest way to have got there (Held-Karp), as what a way between two columns
  * costs depends only on which columns are still to be sewn.
  */
-function exactChain(n: number, travel: (c: number, w: number, d: number, x: number) => number, later: Later): Step[] {
+function exactChain(n: number, travel: (c: number, w: number, d: number, x: number) => number, later: Later, enter: (c: number, w: number) => number): Step[] {
   const N = n * 4;
   const full = (1 << n) - 1;
   const best = new Float64Array((full + 1) * N).fill(Infinity);
   const from = new Int32Array((full + 1) * N).fill(-1);
   // Among orders that cost the same, the one that changes the least: a column sewn another way
   // or not following the one before it as given costs a touch.
-  for (let c = 0; c < n; c++) for (let w = 0; w < 4; w++) best[(1 << c) * N + c * 4 + w] = w ? TIE : 0;
+  for (let c = 0; c < n; c++) for (let w = 0; w < 4; w++) best[(1 << c) * N + c * 4 + w] = (w ? TIE : 0) + enter(c, w);
   for (let set = 1; set < full; set++) {
     const base = set * N;
     later.from(set);
@@ -3407,20 +3438,27 @@ const SHAKES = 12;
  * (two stretches swapped, a few columns sewn another way) and searched again, a few times, and
  * the best order found is kept.
  */
-function searchedChain(n: number, travel: (c: number, w: number, d: number, x: number) => number, atLeast: (c: number, w: number, d: number, x: number) => number, later: Later): Step[] {
+function searchedChain(
+  n: number,
+  travel: (c: number, w: number, d: number, x: number) => number,
+  atLeast: (c: number, w: number, d: number, x: number) => number,
+  later: Later,
+  enter: (c: number, w: number) => number,
+  enterAtLeast: (c: number, w: number) => number,
+): Step[] {
   const cs = new Int32Array(n).map((_, c) => c);
   const ws = new Int32Array(n);
   // A change tried: where the columns of positions lo to hi of the changed order are found in the order now.
   let posOf: (i: number) => number = (i) => i;
   let wayAt: (i: number) => number = (i) => ws[posOf(i)];
   /**
-   * What the ways into positions lo to hi cost, summed (the way into position k from k - 1), in
-   * the changed order; Infinity once over `limit`.
+   * What the ways into positions lo to hi cost, summed (the way into position k from k - 1, into
+   * position 0 from where the needle comes), in the changed order; Infinity once over `limit`.
    */
   const costOf = (lo: number, hi: number, limit = Infinity): number => {
+    let v = lo <= 0 ? enter(cs[posOf(0)], wayAt(0)) : 0;
     lo = Math.max(lo, 1);
     later.resetFrom(cs, lo - 1);
-    let v = 0;
     let c = cs[posOf(lo - 1)];
     let w = wayAt(lo - 1);
     for (let k = lo; k <= hi; k++) {
@@ -3435,7 +3473,7 @@ function searchedChain(n: number, travel: (c: number, w: number, d: number, x: n
   };
   /** The least the ways into positions lo to hi can cost in the changed order. */
   const leastOf = (lo: number, hi: number): number => {
-    let v = 0;
+    let v = lo <= 0 ? enterAtLeast(cs[posOf(0)], wayAt(0)) : 0;
     for (let k = Math.max(lo, 1); k <= hi; k++) v += atLeast(cs[posOf(k - 1)], wayAt(k - 1), cs[posOf(k)], wayAt(k));
     return v;
   };
@@ -3443,14 +3481,14 @@ function searchedChain(n: number, travel: (c: number, w: number, d: number, x: n
   const refresh = () => {
     posOf = (i) => i;
     wayAt = (i) => ws[i];
-    for (let k = 1; k < n; k++) terms[k] = costOf(k, k);
+    for (let k = 0; k < n; k++) terms[k] = costOf(k, k);
   };
   const sum = (lo: number, hi: number) => {
     let v = 0;
-    for (let k = Math.max(lo, 1); k <= hi; k++) v += terms[k];
+    for (let k = Math.max(lo, 0); k <= hi; k++) v += terms[k];
     return v;
   };
-  const total = () => sum(1, n - 1);
+  const total = () => sum(0, n - 1);
   /** A round over the columns: for each, the best change that moves or turns it, applied at once; whether any helped. */
   const improve = (): boolean => {
     let helped = false;
