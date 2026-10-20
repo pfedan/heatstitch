@@ -43,7 +43,8 @@ const MARGIN: i32 = 6;
 
 /// Signed fields of the last masks: sewing an object anew (another spacing, the correction trying
 /// variants, a border following its fill) rasters the same area again and again, and the distance
-/// transforms are the costly part. Found by size and content; callers get a copy.
+/// transforms are the costly part. Found by size and content; callers get a copy. At most FIELDS of
+/// them and FIELD_BYTES together: a dozen fields of a large area held over a gigabyte.
 struct Cached {
     w: usize,
     h: usize,
@@ -54,6 +55,7 @@ struct Cached {
 }
 
 const FIELDS: usize = 12;
+const FIELD_BYTES: usize = 64 << 20;
 
 thread_local! {
     static CACHE: RefCell<Vec<Cached>> = const { RefCell::new(Vec::new()) };
@@ -102,9 +104,22 @@ pub fn signed_field(mask: &[u8], w: usize, h: usize, px_mm: f64) -> Vec<f32> {
                 field: field.clone(),
             },
         );
-        c.truncate(FIELDS);
+        keep_fields(c);
     });
     field
+}
+
+/// The cache cut to what it may hold: newest first, as many as fit.
+fn keep_fields(c: &mut Vec<Cached>) {
+    let mut bytes = 0;
+    let fit = c
+        .iter()
+        .position(|e| {
+            bytes += e.mask.len() + 4 * e.field.len();
+            bytes > FIELD_BYTES
+        })
+        .unwrap_or(c.len());
+    c.truncate(fit.min(FIELDS));
 }
 
 fn compute_field(mask: &[u8], w: usize, h: usize, px_mm: f64) -> Vec<f32> {
@@ -475,6 +490,29 @@ pub fn expand_field(
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
+
+    #[test]
+    fn keeps_fields_up_to_a_size() {
+        let cached = |n: usize| Cached {
+            w: n,
+            h: 1,
+            px_mm: 0.1,
+            hash: 0,
+            mask: vec![0; n],
+            field: vec![0.0; n],
+        };
+        // A dozen small ones.
+        let mut c: Vec<Cached> = (0..20).map(|_| cached(100)).collect();
+        keep_fields(&mut c);
+        assert_eq!(c.len(), FIELDS);
+        // Large ones: as many as fit, newest first; one too large for it is not kept.
+        let mut c: Vec<Cached> = (0..5).map(|_| cached(FIELD_BYTES / 5 / 2)).collect();
+        keep_fields(&mut c);
+        assert_eq!(c.len(), 2);
+        let mut c = vec![cached(FIELD_BYTES)];
+        keep_fields(&mut c);
+        assert!(c.is_empty());
+    }
 
     /// A region from a test on pixel centers (mm) in a `n` × `n` pixel image.
     pub fn region_of(n: usize, px: f64, f: impl Fn(f64, f64) -> bool) -> Region {
