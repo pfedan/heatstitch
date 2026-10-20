@@ -13,8 +13,42 @@ export type Core = typeof exports;
 
 let ready = false;
 let loading: Promise<void> | undefined;
+let generation = 0;
 
 const WASM = new URL('./pkg/heatstitch_core_bg.wasm', import.meta.url);
+
+/**
+ * A call that traps (memory exhausted, a panic: the core cannot unwind) leaves the instance broken
+ * mid-call, and every later call would fail too. The call still fails, with its error, but the next
+ * one runs on a fresh instance (resetCore), so only that one operation is lost. What the core was
+ * handed before (fonts, see coreGeneration) is gone with the old instance.
+ */
+const guard =
+  <A extends unknown[], R>(f: (...a: A) => R) =>
+  (...a: A): R => {
+    try {
+      return f(...a);
+    } catch (e) {
+      if (e instanceof WebAssembly.RuntimeError) {
+        generation++;
+        exports.resetCore();
+        // The fresh instance comes with the next call, but a call with arguments copies them into
+        // the old one first: a call without any brings it now.
+        exports.memoryBytes();
+      }
+      throw e;
+    }
+  };
+
+const guarded = Object.fromEntries(
+  Object.entries(exports).map(([k, v]) => [k, typeof v === 'function' && /^[a-z]/.test(k) && k !== 'initSync' && k !== 'default' ? guard(v as (...a: unknown[]) => unknown) : v]),
+) as Core;
+
+/** Counts the fresh starts after a trap: what the core was handed before (fonts) is gone with them. */
+export const coreGeneration = (): number => generation;
+
+/** Bytes of WebAssembly memory the core holds (it only grows), 0 before it is loaded. */
+export const coreMemoryBytes = (): number => (ready ? exports.memoryBytes() : 0);
 
 export function loadCore(): Promise<void> {
   loading ??= init({ module_or_path: WASM }).then(() => {
@@ -32,5 +66,5 @@ export function core(): Core {
     initSync({ module: fs.readFileSync(WASM) });
     ready = true;
   }
-  return exports;
+  return guarded;
 }

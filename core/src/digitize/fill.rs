@@ -1389,13 +1389,30 @@ impl InsideWays {
         if let Some(d) = self.cache.borrow().get(&s) {
             return d[q];
         }
+        let (d, _) = self.search(s);
+        let v = d[q];
+        self.cache.borrow_mut().insert(s, d);
+        v
+    }
+
+    /// The lengths of the ways from cell `s` to every cell, and how many cells were queued.
+    fn search(&self, s: usize) -> (Vec<f32>, usize) {
         let (w, h) = (self.w, self.h);
+        let mut queued = 1;
         let mut d = vec![f32::INFINITY; w * h];
+        let mut done = vec![false; w * h];
         d[s] = 0.0;
         let mut heap = MinHeap::new();
         heap.push(s as i32, 0.0);
         while !heap.is_empty() {
             let c = heap.pop() as usize;
+            // Each cell is settled once. Compared in f64 against the f32 kept, a length that rounds
+            // up was "shorter" every time and pushed its cell again from each copy of its neighbour:
+            // copies multiplied along the ways, gigabytes of heap on a large area.
+            if done[c] {
+                continue;
+            }
+            done[c] = true;
             let ci = (c % w) as i64;
             let cj = (c / w) as i64;
             for m in 0..8 {
@@ -1408,16 +1425,16 @@ impl InsideWays {
                 if self.open[q] == 0 {
                     continue;
                 }
-                let nd = f64::from(d[c]) + STEP_LEN[m] * self.cell;
-                if nd < f64::from(d[q]) {
-                    d[q] = nd as f32;
-                    heap.push(q as i32, nd);
+                // Rounded as kept, so it is only taken when it really is shorter.
+                let nd = (f64::from(d[c]) + STEP_LEN[m] * self.cell) as f32;
+                if nd < d[q] {
+                    d[q] = nd;
+                    heap.push(q as i32, f64::from(nd));
+                    queued += 1;
                 }
             }
         }
-        let v = d[q];
-        self.cache.borrow_mut().insert(s, d);
-        v
+        (d, queued)
     }
 
     fn way(&self, p: Pt, q: Pt) -> f64 {
@@ -2443,5 +2460,26 @@ mod tests {
         // Next to a fill at 45 degrees, another angle.
         assert_ne!(choose_angle(&r, 0.4, &[45.0]), 45.0);
         assert!(merged(&[[0.0, 0.0], [0.1, 0.0], [1.0, 0.0]], 0.4).len() == 2);
+    }
+
+    #[test]
+    fn ways_inside_queue_each_cell_a_few_times() {
+        // An area in large pixels (a design scaled up): on its coarse grid many lengths round up
+        // as f32. Compared in f64, that queued the 4489 cells of this disc 525 783 times (at
+        // twice its size 238 times each, at three times it did not end in minutes).
+        let n = 200;
+        let px = 0.327;
+        let c = n as f64 * px / 2.0;
+        let r = region_of(n, px, |x, y| (x - c).hypot(y - c) < c - 2.0);
+        let grid = TravelGrid::new(&r, false, None);
+        let ways = InsideWays::new(&grid, Some(&r));
+        let (d, queued) = ways.search(ways.at([c, c]));
+        assert!(queued <= 4 * ways.w * ways.h, "{queued}");
+        // Never shorter than the straight line, about as long inside a disc.
+        let far = d[ways.at([c + c / 2.0, c])];
+        assert!(
+            f64::from(far) >= c / 2.0 - ways.cell && f64::from(far) < c / 2.0 * 1.1,
+            "{far}"
+        );
     }
 }

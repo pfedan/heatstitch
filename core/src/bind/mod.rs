@@ -10,6 +10,7 @@ mod lettering;
 mod model;
 mod parsers;
 mod picture;
+mod runtime;
 mod satin;
 mod shape;
 mod validation;

@@ -618,7 +618,15 @@ export function bindObjects(app: ObjectsApp) {
       const cx = (Math.min(...objs.map((o) => o.minX)) + Math.max(...objs.map((o) => o.maxX))) / 20;
       const cy = (Math.min(...objs.map((o) => o.minY)) + Math.max(...objs.map((o) => o.maxY))) / 20;
       // The stitches reach a little past the shape, by as much at any size: the factors are fitted so they come out as typed.
-      const fit = ui.lettering ? null : fitScaling(p, sel, sx, sy, cx, cy, app.settings.trimMm, app.seq);
+      let fit: ReturnType<typeof fitScaling> = null;
+      try {
+        fit = ui.lettering ? null : fitScaling(p, sel, sx, sy, cx, cy, app.settings.trimMm, app.seq);
+      } catch (e) {
+        // A core call that failed (out of memory on a huge design) loses this resize only.
+        console.error(e);
+        layers.say(t('frame.failed'), true);
+        return app.redraw();
+      }
       app.commitTransform(fit?.m ?? scaling(sx, sy, cx, cy), undefined, fit?.done);
     },
     move: (dx, dy) => {

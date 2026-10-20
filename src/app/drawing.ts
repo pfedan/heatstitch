@@ -452,7 +452,14 @@ export function bindDrawing(app: DrawingApp) {
     }
     const kept = ui.selectedObjects;
     // The objects stay as many as they were.
-    const r = done ?? transformObjects(p, sel, m, app.settings.trimMm, app.seq);
+    // A core call that failed (out of memory on a huge design) loses this transform only.
+    let r: TransformedAll | null;
+    try {
+      r = done ?? transformObjects(p, sel, m, app.settings.trimMm, app.seq);
+    } catch (e) {
+      console.error(e);
+      r = null;
+    }
     if (!r) {
       app.layers.say(t('frame.failed'), true);
       app.redraw();
