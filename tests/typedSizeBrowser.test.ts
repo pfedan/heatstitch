@@ -5,7 +5,8 @@ import { launchChromium } from './helpers/browser';
 
 /**
  * A circle drawn freehand and typed 60 mm wide in the Objekt card comes out 60,0 × 60,0 mm, and
- * one undo brings it back.
+ * one undo brings it back, even with the focus still in the field. Text typed and not yet taken over
+ * is undone in the field, the design stays.
  *
  * Runs only with BROWSER_TESTS set: `BROWSER_TESTS=1 npx vitest run tests/typedSizeBrowser.test.ts`.
  * It needs Playwright's Chromium (`npx playwright install chromium`); PW_CHROMIUM points to another.
@@ -56,5 +57,10 @@ describe.skipIf(!on)('typing a size in the Objekt card', () => {
     expect(await h.inputValue()).toBe('60,0');
     await page.keyboard.press('Control+z');
     await expect.poll(() => w.inputValue(), { timeout: 10_000 }).toBe(before);
+    await w.fill('70');
+    await page.keyboard.press('Control+z');
+    await w.press('Escape');
+    await page.waitForTimeout(300);
+    expect(await w.inputValue()).toBe(before);
   });
 });
