@@ -236,6 +236,8 @@ export function transform(d: Doc, sel: number[], m: Mat): boolean {
     // Scaling holds back no object: one that cannot be sewn anew takes its stitches along scaled.
     if (objs[o] && !isRigid(m)) expect(r, 'scaled: every object goes along').toBeTruthy();
     if (!r) return false;
+    // Moved, turned or scaled, every object keeps its id, the ones sewn anew too.
+    expect(sewObjects(r.pattern).map((x) => x.id), 'transformed: the objects keep their ids').toEqual(objs.map((x) => x.id));
     cur = r.pattern;
   }
   return shapes(d, syncBorders(cur, T));

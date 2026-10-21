@@ -519,7 +519,7 @@ function resewScaled(p: Pattern, objs: SewObject[], o: SewObject, kinds: Uint8Ar
   // Settings as the object has them now (measured after scaling, the rows would be wider apart).
   const given = settingsOf(p, o, kinds);
   if (!given) return null;
-  const moved = transformObject(p, o, m);
+  const moved = transformObject(p, o, m, true);
   const next = moved.pattern;
   const after = kept && transformRemembered(kept, m);
   // The objects stay as they were, with what this one remembers on its new stitches.

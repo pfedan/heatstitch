@@ -6,8 +6,8 @@ import type { PathStitch } from './along';
 import { mirroredOrders } from './lineOrder';
 import { rasterize } from '../shape/rasterize';
 import { vectorize } from '../shape/vectorize';
-import { syncMarks, tidy, withRecords } from './edit';
-import type { SewObject } from './objects';
+import { syncMarks, tidyKept, withRecords } from './edit';
+import { carryObjects, type SewObject } from './objects';
 import { JUMP, STITCH, type Pattern } from './pattern';
 import type { FillSettings, Rails, Remembered } from './restitch';
 import { bandArea, fillArea, geoUse } from './geo';
@@ -42,7 +42,7 @@ export const isRigid = (m: Mat): boolean =>
  * along, the jumps that lead to it are laid on the line from where the thread comes to its new
  * start. Without such a jump one is put in. `first` and `last` are the object's records now.
  */
-export function transformObject(p: Pattern, o: SewObject, m: Mat): { pattern: Pattern; first: number; last: number } {
+export function transformObject(p: Pattern, o: SewObject, m: Mat, keepIds = false): { pattern: Pattern; first: number; last: number } {
   let lead = o.first;
   while (lead - 1 >= 0 && p.cmd[lead - 1] === JUMP) lead--;
   const insert = lead === o.first && o.first > 0 ? 1 : 0;
@@ -78,7 +78,11 @@ export function transformObject(p: Pattern, o: SewObject, m: Mat): { pattern: Pa
     cmd[i] = JUMP;
   }
   syncMarks(x, y, cmd);
-  const next = tidy(withRecords(p, x, y, cmd));
+  const { pattern: next, kept } = tidyKept(withRecords(p, x, y, cmd));
+  // With `keepIds` the objects follow their records, this one too though its stitches moved: it
+  // keeps its id (a jump put in is a new record). Without, as for a look while dragging, they are
+  // found again from the stitches when asked for, and this one is another object.
+  if (keepIds) carryObjects(p, next, Int32Array.from(kept, (i) => (i >= first ? i - insert : insert && i === lead ? -1 : i)));
   // Tidying only drops repeated trims and empty colors, none of which lie before a stitch.
   return { pattern: next, first, last };
 }
