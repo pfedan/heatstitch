@@ -13,7 +13,6 @@ import type { Viewport } from '../render/viewport';
 import { ShapeTool } from '../ui/shapeTool';
 import { deleteObjects, duplicateObjects, extractObjects, mirrorMatrix, subtractTop, takeOutShape } from '../model/shapeOps';
 import { pasteDesign } from '../model/appendDesign';
-import { loadOps, opsReady } from '../shape/ops';
 import { fillsToLines, lineToSatin, reshapeObject } from '../model/reshape';
 import { resewLine, lineSettings, lineToFill, reshapeLineFill } from '../model/line';
 import { refreshKnockouts } from '../model/knockout';
@@ -551,8 +550,6 @@ export function bindShapes(app: ShapesApp) {
     const p = app.files.active?.pattern;
     const sel = app.frameObjects();
     if (!p || sel.length < 2) return;
-    // Cut on the curves: the libraries for that load on first use.
-    if (!opsReady()) return void loadOps().then(subtractSelected);
     const r = subtractTop(p, sel, app.settings.trimMm);
     if (!r) return app.layers.say(t('object.subtract.nothing'), true);
     takeShapes(r.pattern, r.cut);
@@ -602,7 +599,6 @@ export function bindShapes(app: ShapesApp) {
     const f = app.files.active;
     const sel = app.frameObjects();
     if (!f?.pattern || !sel.length) return;
-    if (!opsReady()) return void loadOps().then(contourSelected);
     const r = addContour(f.pattern, sel, CONTOUR_GAP, { trimMm: app.settings.trimMm });
     if (!r) return app.layers.say(t('object.contour.nothing'), true);
     const obj = app.seq(r.pattern).objects[r.index];
@@ -631,10 +627,6 @@ export function bindShapes(app: ShapesApp) {
         ui.flowPreview = null;
         app.redraw();
       }
-      return false;
-    }
-    if (!opsReady()) {
-      if (final) void loadOps().then(() => setContourGap(d, final));
       return false;
     }
     const form = contourAt(memo.source, d);

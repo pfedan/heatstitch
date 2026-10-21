@@ -1,7 +1,7 @@
 /// <reference types="vitest/config" />
 import { defineConfig, type Plugin } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
-import { readFileSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import { langPage, type Page } from './src/build/langPages';
 import { expandVideos } from './src/build/videoHtml';
 import { watchPage } from './src/build/watchPage';
@@ -10,6 +10,7 @@ import { videoByKey, VIDEOS, watchPath } from './src/videos/catalog';
 import { APP_NAVIGATION, APP_PAGES } from './src/build/pageCache';
 import { expandReleases, parseChangelog, shownReleases } from './src/build/changelog';
 import { buildChannel, buildVersion } from './src/build/version';
+import { bootPage } from './src/build/boot';
 
 // The site lives at the root of heatstitch.app; the beta (beta.heatstitch.app) and pull request previews
 // get their own address (see .github/workflows/deploy.yml), so every build uses the same base.
@@ -112,14 +113,49 @@ const releasePages: Plugin = {
   },
 };
 
+/**
+ * The splash of the app (src/ui/boot.ts): its texts in both languages before any script of the app is
+ * there (src/build/boot.ts), and the compute core asked for at once, beside the app's script instead of
+ * after it, so the two come in together. The app's own fetch then takes it from the preload.
+ */
+const coreSplash: Plugin[] = [
+  {
+    name: 'core-splash-texts',
+    transformIndexHtml: { order: 'pre', handler: (html, ctx) => (ctx.path.endsWith('/index.html') ? bootPage(html) : html) },
+  },
+  {
+    name: 'core-splash-preload',
+    // After the build has named the file; the dev server serves the core as it is asked for.
+    transformIndexHtml: {
+      order: 'post',
+      handler(html, ctx) {
+        const core = ctx.path.endsWith('/index.html') && Object.values(ctx.bundle ?? {}).find((f) => /heatstitch_core_bg-[\w-]+\.wasm$/.test(f.fileName));
+        if (!core) return html;
+        return { html, tags: [{ tag: 'link', attrs: { rel: 'preload', href: base + core.fileName, as: 'fetch', crossorigin: '' }, injectTo: 'head' }] };
+      },
+    },
+  },
+];
+
+/** The size of the built core, the total of its download when the server compresses it (src/wasm/progress.ts). */
+function coreBytes(): number {
+  try {
+    return statSync(new URL('src/wasm/pkg/heatstitch_core_bg.wasm', import.meta.url)).size;
+  } catch {
+    return 0;
+  }
+}
+
 export default defineConfig({
   base,
   // The version and where the build runs, for the app's menu and the beta's badge (src/ui/version.ts).
   define: {
     'import.meta.env.APP_VERSION': JSON.stringify(version),
     'import.meta.env.APP_CHANNEL': JSON.stringify(channel),
+    'import.meta.env.CORE_BYTES': JSON.stringify(coreBytes()),
   },
   plugins: [
+    ...coreSplash,
     videoPages,
     releasePages,
     langPages,
@@ -169,7 +205,10 @@ export default defineConfig({
         // from the server (src/build/pageCache.ts). The font list and the thread catalogs come along; a font
         // (some 100 KB to 2 MB) only once it is used, then it works offline too. The tooltip pictures are small and come along.
         // So does the list of motifs; a category of motifs (up to some 300 KB) once it was opened.
-        globPatterns: [...APP_PAGES, '**/*.{js,css,svg,png,webmanifest,pes}', 'tips/*.webp', 'fonts/index.json', 'threads/catalogs.json', 'library/index.json'],
+        globPatterns: [...APP_PAGES, '**/*.{js,css,svg,png,webmanifest,pes,wasm}', 'tips/*.webp', 'fonts/index.json', 'threads/catalogs.json', 'library/index.json'],
+        // The compute core (core/, some 2.5 to 4 MB) is above the 2 MB default and the app does not run
+        // without it, so it is installed too.
+        maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
         runtimeCaching: [
           // The demo project is not part of the install (some 500 KB); it is kept once it was opened.
           {

@@ -5,8 +5,9 @@ import type { SewObject } from './objects';
 import type { Pattern } from './pattern';
 import { runWays, traceLine } from './line';
 import { analyze, keepShape, remembered, type FillSettings, type Rails, type Remembered } from './restitch';
-import type { Region } from '../digitize/region';
-import { rasterize, rasterizeStroke, regionOf } from '../shape/rasterize';
+import { fromCore, type Region } from '../digitize/region';
+import { core } from '../wasm/core';
+import { rasterize, rasterizeStroke } from '../shape/rasterize';
 import { stitchKinds } from './sequence';
 
 /**
@@ -16,7 +17,7 @@ import { stitchKinds } from './sequence';
  *
  * - `geoOf`: the form someone gave (drawn, from an SVG, the Image mode, or read and then edited).
  * - `guessGeo`: that form, or else one traced from the stitches (guessed: shown dashed, kept only
- *   once edited, see `geoGuessed`).
+ *   once edited).
  * - `withGeo`: the same object with another form, in the same place.
  */
 
@@ -63,7 +64,8 @@ export function bandArea(geo: Form, fill: FillSettings, pxMm = 0.1): Region | nu
 
 /** Area `a` grown by `grow` mm (shrunk when negative): the pixels whose signed distance is below it. */
 export function grownArea(a: Region, grow: number): Region {
-  return regionOf(Uint8Array.from(a.sdf, (d) => (d < grow ? 1 : 0)), a.x0, a.y0, a.w, a.h, a.pxMm) ?? a;
+  const o = core().grownArea(a.sdf, grow, a.x0, a.y0, a.w, a.h, a.pxMm);
+  return o ? fromCore(o, 0, a.pxMm) : a;
 }
 
 /** The form's area grown by `grow` mm (see FillSettings.areaGrow); as rastered when 0. */
@@ -192,9 +194,6 @@ export function satinOutline(p: Pattern, o: SewObject, kinds: Uint8Array): Form 
 export function guessGeo(p: Pattern, o: SewObject, kinds: Uint8Array): Form | null {
   return sewnAlong(p, o) ? guessLine(p, o, kinds) : (guessArea(p, o, kinds) ?? satinOutline(p, o, kinds));
 }
-
-/** Whether object `o` has no form given to it, so any form shown for it is guessed from its stitches. */
-export const geoGuessed = (p: Pattern, o: SewObject): boolean => !geoOf(remembered(p, o));
 
 /**
  * What a form allows, the one rule of the vector model for it (asked by the kind switch, the level

@@ -259,31 +259,3 @@ export function merged(set: Tool[]): Fixed[] {
   }
   return out;
 }
-
-/**
- * Sews the variants of object `index`: the current one first, then one per tool set. A variant that
- * fails, or changes how many objects there are, is dropped.
- */
-export function sewVariants(p: Pattern, index: number, s: Settings, sets: Tool[][], trimMm: number): Variant[] {
-  const objs = sewObjects(p);
-  const o = objs[index];
-  const out: Variant[] = [{ tools: [], changes: [], knockout: false, stitches: slice(p, o.first, o.last), strength: 0, visible: false }];
-  for (const set of sets) {
-    const changes = merged(set);
-    const knockout = set.some((t) => t.knockout);
-    const next = sewWith(p, index, changes.length ? changed(s, changes) : null, knockout, trimMm);
-    if (!next) continue;
-    const no = sewObjects(next);
-    if (no.length !== objs.length) continue;
-    const x = no[index];
-    out.push({
-      tools: set,
-      changes,
-      knockout,
-      stitches: slice(next, x.first, x.last),
-      strength: Math.max(0, ...set.map((t) => t.strength)),
-      visible: set.some((t) => t.visible),
-    });
-  }
-  return out;
-}

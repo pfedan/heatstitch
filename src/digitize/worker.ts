@@ -4,6 +4,7 @@ import { Preparer, type ColorEdit, type ExactLabels, type PrepareOptions, type P
 import type { Raster } from '../image/raster';
 import { digitize, digitizeShapes, type DigitizeOptions, type Digitized, type ShapeInput } from './digitize';
 import type { ThreadColor } from '../model/pattern';
+import { loadCore } from '../wasm/core';
 
 /**
  * Image conversion off the main thread. The worker keeps the loaded image and the cached stages of
@@ -33,8 +34,11 @@ const ctx = self as unknown as DedicatedWorkerGlobalScope;
 let preparer: Preparer | null = null;
 let prepared: Prepared | null = null;
 
-ctx.onmessage = (e: MessageEvent<ImageRequest>) => {
+const ready = loadCore();
+
+ctx.onmessage = async (e: MessageEvent<ImageRequest>) => {
   const req = e.data;
+  await ready;
   try {
     if (req.type === 'load') {
       preparer = new Preparer(req.raster);

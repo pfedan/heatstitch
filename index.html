@@ -15,6 +15,136 @@
     <link rel="icon" href="/favicon.ico" sizes="48x48" />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!--
+      The splash (#boot) from the first paint until the app is set up (src/ui/boot.ts). Its style is here,
+      not in style.css, so it needs nothing loaded; the colors are the tokens of style.css, which the built
+      page has before its first paint (system colors stand in until then on the dev server).
+    -->
+    <style>
+      .boot {
+        position: fixed;
+        inset: 0;
+        z-index: 1000;
+        display: grid;
+        place-items: center;
+        padding: 16px;
+        background: var(--bg, Canvas);
+        color: var(--ink, CanvasText);
+        font: 14px/1.4 system-ui, -apple-system, 'Segoe UI', sans-serif;
+        transition: opacity 150ms ease-out;
+      }
+      /* Ready within a moment (a warm start): only the plain background was there, nothing blinks. */
+      .boot-box {
+        display: grid;
+        justify-items: center;
+        gap: 12px;
+        max-width: 360px;
+        text-align: center;
+        opacity: 0;
+        animation: boot-in 200ms ease-out 250ms forwards;
+      }
+      .boot-ring {
+        --boot-arc: 25;
+        position: relative;
+        width: 56px;
+        height: 56px;
+        display: grid;
+        place-items: center;
+      }
+      .boot-ring svg {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        fill: none;
+        stroke-width: 3;
+        animation: boot-spin 1s linear infinite;
+      }
+      .boot-track {
+        stroke: var(--line, GrayText);
+      }
+      .boot-arc {
+        stroke: var(--accent, currentColor);
+        stroke-linecap: round;
+        stroke-dasharray: var(--boot-arc) 100;
+        transform: rotate(-90deg);
+        transform-origin: center;
+        transition: stroke-dasharray 120ms linear;
+      }
+      .boot-text {
+        margin: 0;
+      }
+      .boot-pct {
+        color: var(--muted, GrayText);
+        font-variant-numeric: tabular-nums;
+      }
+      .boot-error,
+      .boot-error p {
+        display: none;
+        margin: 0;
+      }
+      .boot-error button {
+        font: inherit;
+        padding: 5px 12px;
+        border-radius: 6px;
+        border: 1px solid var(--accent, currentColor);
+        background: var(--accent, ButtonFace);
+        color: var(--accent-ink, ButtonText);
+        cursor: pointer;
+      }
+      .boot[data-state='error'] .boot-box {
+        opacity: 1;
+        animation: none;
+      }
+      .boot[data-state='error'] .boot-ring,
+      .boot[data-state='error'] .boot-text {
+        display: none;
+      }
+      .boot[data-state='error'] .boot-error {
+        display: grid;
+        justify-items: center;
+        gap: 12px;
+      }
+      .boot[data-error='failed'] [data-i18n='boot.failed'],
+      .boot[data-error='old'] [data-i18n='boot.old'] {
+        display: block;
+      }
+      .boot[data-state='done'] {
+        opacity: 0;
+        pointer-events: none;
+      }
+      @keyframes boot-in {
+        to {
+          opacity: 1;
+        }
+      }
+      @keyframes boot-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+      @keyframes boot-pulse {
+        50% {
+          opacity: 0.45;
+        }
+      }
+      /* No turning and no fades: the ring fills with the progress, and only breathes while that is unknown. */
+      @media (prefers-reduced-motion: reduce) {
+        .boot,
+        .boot-arc {
+          transition: none;
+        }
+        .boot-box {
+          animation: boot-in 0s linear 250ms forwards;
+        }
+        .boot-ring svg {
+          animation: none;
+        }
+        .boot:not([data-progress]) .boot-arc {
+          animation: boot-pulse 2s ease-in-out infinite;
+        }
+      }
+    </style>
 
     <!-- Open Graph -->
     <meta property="og:type" content="website" />
@@ -76,7 +206,66 @@
     </script>
   </head>
   <body>
+    <div class="boot" id="boot" role="status" aria-busy="true">
+      <div class="boot-box">
+        <div class="boot-ring" id="boot-ring" role="progressbar" aria-valuemin="0" aria-valuemax="100" data-i18n-aria="boot.loading">
+          <svg viewBox="0 0 48 48" aria-hidden="true"><circle class="boot-track" cx="24" cy="24" r="21" /><circle class="boot-arc" cx="24" cy="24" r="21" pathLength="100" /></svg>
+          <img src="/favicon.svg" alt="" width="28" height="28" />
+        </div>
+        <p class="boot-text"><span data-i18n="boot.loading"></span> <span class="boot-pct" id="boot-pct" aria-hidden="true"></span></p>
+        <div class="boot-error" role="alert">
+          <p data-i18n="boot.failed"></p>
+          <p data-i18n="boot.old"></p>
+          <button type="button" id="boot-reload" data-i18n="boot.reload"></button>
+        </div>
+      </div>
+    </div>
+    <script>
+      // The splash in the page's language before the app's script is there, and a way out when that
+      // never comes. Plain old JavaScript, so a browser too old for the app still shows why.
+      // The build writes the texts in (src/build/boot.ts, from src/i18n/areas/boot.ts).
+      (function () {
+        var texts = __BOOT_TEXTS__;
+        var root = document.documentElement;
+        var boot = document.getElementById('boot');
+        // As the app chooses (src/i18n detectLang): the page's address, the settings, the browser.
+        var lang = root.dataset.pageLang;
+        if (!lang) {
+          try {
+            lang = JSON.parse(localStorage.getItem(__BOOT_SETTINGS__) || '{}').lang;
+          } catch (e) {}
+        }
+        if (lang !== 'de' && lang !== 'en') lang = /^de/i.test(navigator.language || '') ? 'de' : 'en';
+        boot.setAttribute('lang', lang);
+        var els = boot.querySelectorAll('[data-i18n]');
+        for (var i = 0; i < els.length; i++) els[i].textContent = texts[lang][els[i].getAttribute('data-i18n')];
+        var ring = document.getElementById('boot-ring');
+        ring.setAttribute('aria-label', texts[lang][ring.getAttribute('data-i18n-aria')]);
+        function fail(why) {
+          if (root.hasAttribute('data-ready') || boot.getAttribute('data-state') === 'error') return;
+          boot.setAttribute('data-state', 'error');
+          boot.setAttribute('data-error', why);
+          boot.setAttribute('aria-busy', 'false');
+          document.getElementById('boot-reload').focus();
+        }
+        document.getElementById('boot-reload').onclick = function () {
+          location.reload();
+        };
+        if (typeof WebAssembly !== 'object' || !('noModule' in document.createElement('script'))) return fail('old');
+        // A script of the app that does not load, or an error while it sets up, ends the waiting.
+        function failed(e) {
+          var t = e.target;
+          if (t === window || (t && (t.tagName === 'SCRIPT' || (t.tagName === 'LINK' && /stylesheet|modulepreload/.test(t.rel))))) fail('failed');
+        }
+        window.addEventListener('error', failed, true);
+      })();
+    </script>
     <noscript>
+      <style>
+        .boot {
+          display: none;
+        }
+      </style>
       <p class="noscript">heatstitch needs JavaScript. <a href="docs.html">Read the guide</a> to see what it does.</p>
     </noscript>
     <svg class="sprite" aria-hidden="true" width="0" height="0">

@@ -4,7 +4,6 @@ import { Preparer } from '../src/image/prepare';
 import { redworkShapes } from '../src/image/redwork';
 import type { SvgShape } from '../src/image/svg';
 import { isRedwork } from '../src/model/along';
-import { loadOps } from '../src/shape/ops';
 import { clipLines, flatten, type Mat } from '../src/shape/path';
 import { rasterize } from '../src/shape/rasterize';
 import { parsePath } from '../src/shape/svgPath';
@@ -122,7 +121,6 @@ describe('redworkShapes', () => {
   });
 
   it('keeps only the part cut out, in mm from its top left', async () => {
-    await loadOps();
     const prepared = { palette, ofSource: [0, 0, 0, 1] };
     const { shapes } = redworkShapes(svg, prepared, { minX: 10, minY: 0, maxX: 34, maxY: 20 }, false);
     const across = shapes[1];

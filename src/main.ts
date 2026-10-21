@@ -52,7 +52,6 @@ import type { Mode } from './settings';
 import { isGuessed, isOpenPattern, openOnPurpose, remembered, rememberedIn } from './model/restitch';
 import { innerStops } from './model/applique';
 import { digitizedFile } from './model/digitized';
-import { loadOps } from './shape/ops';
 import { drawAside, drawDrawing } from './render/shapeOverlay';
 import type { LeftOut, SewnFrom } from './ui/imageMode';
 import { asideOf, storeAside, type AsideShape } from './model/aside';
@@ -92,6 +91,15 @@ import { initResponsive } from './areas/responsive/responsive';
 import type { ZoneDecision } from './ui/validationPanel';
 import { bindTrace } from './app/trace';
 import { geoUse, sewnAlong } from './model/geo';
+import { loadCore } from './wasm/core';
+import { bootDone, bootFailed, bootProgress } from './ui/boot';
+
+// The compute core (Rust, WebAssembly) before anything is read, sewn or drawn: its functions are synchronous.
+// The splash (src/ui/boot.ts) shows how far its download is, and says so when it fails.
+await loadCore(bootProgress).catch((err: unknown) => {
+  bootFailed();
+  throw err;
+});
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -2070,8 +2078,6 @@ files.render();
 redraw();
 void files.restore();
 void imageMode.restore();
-// The operations on curves, loaded early: a border's echo and shadow lie on its offset curve (see borderForm).
-void loadOps().catch(() => {});
 // The thread catalogs name the numbers of the threads in the list (Brother's too).
 void loadCatalogs()
   .then(() => {
@@ -2081,3 +2087,7 @@ void loadCatalogs()
   .catch((err) => console.warn('No thread catalogs', err));
 
 $('fabric-tune').addEventListener('click', () => void tuneToFabric());
+
+// Set up: the core loads first (top-level await), which can end after the page's load event.
+document.documentElement.dataset.ready = '';
+bootDone();

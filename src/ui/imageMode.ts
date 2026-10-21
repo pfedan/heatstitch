@@ -1,6 +1,5 @@
 import { ImageClient } from '../digitize/client';
 import { digitizeDefaults, shapesOrigin, wideLinesAsAreas, type DigitizeOptions, type Digitized } from '../digitize/digitize';
-import { loadOps } from '../shape/ops';
 import { areaPixels, boxOf, groupAreas, groupsByColor, TECHNIQUES, type AreaInfo, type Technique } from '../digitize/smart';
 import { formatNumber, onLangChange, t, type Key } from '../i18n';
 import { matchThreads } from '../image/threadMatch';
@@ -236,7 +235,6 @@ export async function digitizeSvg(file: File, prepare: PrepareOptions, options: 
     const all = svg.shapes(widthMm);
     if (all?.length) {
       // Lines too wide for a satin are cut out as areas in their shape.
-      await loadOps();
       const { threads, index } = threadsFor(svg.colors, prepare.threads);
       // A background is kept aside, not sewn (it can be sewn from the list "Not sewn"); a motif
       // of the library has none (`background` false): a big first shape is part of it.
@@ -1116,7 +1114,6 @@ export class ImageMode {
     const fullH = full * svg.aspect;
     const box = { minX: k.x * full, minY: k.y * fullH, maxX: (k.x + k.w) * full, maxY: (k.y + k.h) * fullH };
     const whole = isFull(this.work.crop);
-    if (!whole) await loadOps();
     const { shapes, threads } = redworkShapes(all, this.prepared!, box, whole, s.prepare.background ? backgroundOf(all) : -1);
     const size = { w: box.maxX - box.minX, h: box.maxY - box.minY };
     // What lies under later areas is left out, as the assistant does for every picture.

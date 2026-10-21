@@ -1,6 +1,7 @@
 import type { Components } from '../image/labels';
 import type { Orientation } from '../image/orientation';
-import { sample, type Region } from './region';
+import { core } from '../wasm/core';
+import { regionIn, type Region } from './region';
 import type { Graph, Pt } from './skeleton';
 
 /**
@@ -112,23 +113,19 @@ export function groupsByColor(groups: readonly AreaGroup[]): { label: number; gr
 /**
  * The pixels of some areas (1 inside), to show them on the stage: the pieces of the area's color
  * inside its box (several when a later detail cut it apart), without pieces that are areas of
- * their own (a dot inside a ring).
+ * their own (a dot inside a ring). Computed by the core (core/src/digitize/smart.rs).
  */
 export function areaPixels(comps: Components, w: number, h: number, areas: readonly Pick<AreaInfo, 'key'>[], keys: readonly string[]): Uint8Array {
-  const out = new Uint8Array(w * h);
-  const all = new Set(areas.map((a) => a.key));
-  const take = new Set<number>();
-  for (const key of keys) {
-    const b = boxOf(key);
-    if (!b) continue;
-    comps.label.forEach((l, c) => {
-      if (l !== b.label || comps.minX[c] < b.minX || comps.minY[c] < b.minY || comps.maxX[c] > b.maxX || comps.maxY[c] > b.maxY) return;
-      const own = areaKey(l, comps.minX[c], comps.minY[c], comps.maxX[c], comps.maxY[c]);
-      if (own === key || !all.has(own)) take.add(c);
-    });
-  }
-  for (let i = 0; i < w * h; i++) if (take.has(comps.comp[i])) out[i] = 1;
-  return out;
+  const flat = (ks: readonly string[]) =>
+    Uint32Array.from(
+      ks.flatMap((k) => {
+        const b = boxOf(k);
+        return b ? [b.label, b.minX, b.minY, b.maxX, b.maxY] : [];
+      }),
+    );
+  const boxes = new Uint32Array(4 * comps.label.length);
+  comps.label.forEach((_, c) => boxes.set([comps.minX[c], comps.minY[c], comps.maxX[c], comps.maxY[c]], 4 * c));
+  return core().areaPixels(comps.comp, Uint16Array.from(comps.label), boxes, w, h, flat(areas.map((a) => a.key)), flat(keys));
 }
 
 /** Techniques set by hand as stored: only known techniques survive. */
@@ -151,8 +148,6 @@ export function letterOf(k: number): string {
   return s;
 }
 
-/** The image's own structure counts this far inside an area (mm): its edges are those of other areas. */
-const INSET_MM = 2;
 /** Mean coherence of the image's direction inside an area from which its rows follow it. */
 export const STRUCTURE = 0.3;
 /** Areas smaller than this (mm²) are filled straight: too small for rows to show a direction. */
@@ -168,33 +163,25 @@ export const ROUND_MAX_WIDTH = 4.5;
 /**
  * How clearly the image has a direction of its own inside the area: the mean coherence of the
  * structure tensor (0 flat or without direction, 1 everywhere one clear line direction), away from
- * the area's edge. Zero without orientation.
+ * the area's edge (2 mm in: its edges are those of other areas). Zero without orientation.
+ * Computed by the core (core/src/digitize/smart.rs).
  */
 export function structure(r: Region, orient: Orientation | undefined): number {
   if (!orient) return 0;
-  const inset = INSET_MM / r.pxMm;
-  let sum = 0;
-  let n = 0;
-  let sumAll = 0;
-  let nAll = 0;
-  for (let y = 0; y < r.h; y++) {
-    for (let x = 0; x < r.w; x++) {
-      const i = y * r.w + x;
-      if (!r.mask[i]) continue;
-      const gx = x + r.x0;
-      const gy = y + r.y0;
-      if (gx < 0 || gy < 0 || gx >= orient.width || gy >= orient.height) continue;
-      const k = gy * orient.width + gx;
-      const m = Math.hypot(orient.c[k], orient.s[k]);
-      sumAll += m;
-      nAll++;
-      if (r.inside[i] < inset) continue;
-      sum += m;
-      n++;
-    }
+  // Only the image window the region covers crosses (see flowFill).
+  const { width, height } = orient;
+  const cx0 = Math.min(width - 1, Math.max(0, r.x0));
+  const cy0 = Math.min(height - 1, Math.max(0, r.y0));
+  const cx1 = Math.max(cx0 + 1, Math.min(width, r.x0 + r.w));
+  const cy1 = Math.max(cy0 + 1, Math.min(height, r.y0 + r.h));
+  const cw = cx1 - cx0;
+  const c = new Float32Array(cw * (cy1 - cy0));
+  const s = new Float32Array(c.length);
+  for (let y = cy0; y < cy1; y++) {
+    c.set(orient.c.subarray(y * width + cx0, y * width + cx1), (y - cy0) * cw);
+    s.set(orient.s.subarray(y * width + cx0, y * width + cx1), (y - cy0) * cw);
   }
-  // A narrow area has no inside: then all of it.
-  return n >= 20 ? sum / n : nAll ? sumAll / nAll : 0;
+  return core().areaStructure(regionIn(r), c, s, cx0, cy0, cw, width, height);
 }
 
 /** Widest inscribed circle of the area (mm). */
@@ -207,58 +194,11 @@ export const widest = (r: Region) => {
 /**
  * A single satin column across the area along its longest axis (its stitches cross it the short
  * way), or null when the area is no small blob: wider than `satinMax` or ROUND_MAX_WIDTH
- * anywhere, or larger than ROUND_MAX_MM2 (set by hand: other limits).
+ * anywhere, or larger than ROUND_MAX_MM2 (set by hand: other limits). Computed by the core
+ * (core/src/digitize/smart.rs).
  */
 export function acrossGraph(r: Region, satinMax: number, maxWidth = ROUND_MAX_WIDTH, maxArea = ROUND_MAX_MM2): Graph | null {
+  // Most areas are no small blob: those need not cross.
   if (r.areaMm2 > maxArea || widest(r) > Math.min(satinMax, maxWidth)) return null;
-  // Centroid and second moments of the pixels.
-  let n = 0;
-  let sx = 0;
-  let sy = 0;
-  for (let y = 0; y < r.h; y++) for (let x = 0; x < r.w; x++) if (r.mask[y * r.w + x]) (n++, (sx += x), (sy += y));
-  if (n < 4) return null;
-  const cx = sx / n;
-  const cy = sy / n;
-  let xx = 0;
-  let xy = 0;
-  let yy = 0;
-  for (let y = 0; y < r.h; y++) {
-    for (let x = 0; x < r.w; x++) {
-      if (!r.mask[y * r.w + x]) continue;
-      xx += (x - cx) ** 2;
-      xy += (x - cx) * (y - cy);
-      yy += (y - cy) ** 2;
-    }
-  }
-  const a = 0.5 * Math.atan2(2 * xy, xx - yy);
-  const d: Pt = [Math.cos(a), Math.sin(a)];
-  const c: Pt = [(cx + r.x0 + 0.5) * r.pxMm, (cy + r.y0 + 0.5) * r.pxMm];
-  // Along the axis both ways from the centroid, as long as it is inside.
-  const step = Math.max(0.2, r.pxMm);
-  const inside = (t: number) => sample(r, r.sdfBase, c[0] + d[0] * t, c[1] + d[1] * t) < 0;
-  if (!inside(0)) return null;
-  let t0 = 0;
-  let t1 = 0;
-  while (inside(t0 - step)) t0 -= step;
-  while (inside(t1 + step)) t1 += step;
-  // The ends stay a little inside: the column is extended into its free ends (satin.ts).
-  const ends = Math.min(0.3, (t1 - t0) / 4);
-  t0 += ends;
-  t1 -= ends;
-  if (t1 - t0 < step * 2) return null;
-  const pts: Pt[] = [];
-  const rad: number[] = [];
-  // Half the chord across at each point (not the distance to the nearest edge, which near the
-  // ends of a round area is much shorter): the rails are found within it (satin.ts).
-  const half = (p: Pt, side: number) => {
-    let u = 0;
-    while (u < satinMax && sample(r, r.sdfBase, p[0] - d[1] * side * (u + step / 2), p[1] + d[0] * side * (u + step / 2)) < 0) u += step / 2;
-    return u;
-  };
-  for (let t = t0; t <= t1 + 1e-9; t += step) {
-    const p: Pt = [c[0] + d[0] * t, c[1] + d[1] * t];
-    pts.push(p);
-    rad.push(Math.max(0.1, half(p, 1), half(p, -1)));
-  }
-  return { nodes: [{ p: pts[0], r: rad[0] }, { p: pts[pts.length - 1], r: rad[rad.length - 1] }], branches: [{ a: 0, b: 1, pts, r: rad }] };
+  return core().acrossGraph(regionIn(r), satinMax, maxWidth, maxArea) as Graph | null;
 }

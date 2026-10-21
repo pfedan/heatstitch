@@ -7,13 +7,13 @@ import { densityLimits, SHORT_STITCH_COUNT } from '../validation/thresholds';
 import { ALL_CHECKS, CAUTION, classify, CRITICAL, type Checks, type Level, type ValidationResult } from '../validation/validate';
 import { settledBy, type Acknowledgement } from '../validation/acks';
 import { REASON_BITS, type Zone } from '../validation/zones';
-import { walkCovered } from './cover';
 import { nudgePenetrations, sameHoleStitches } from './nudge';
 import { pullBackFills } from './pullback';
 import { respaceFills, respaceSatins } from './respace';
 import { shortenSatinCurves } from './satinShort';
 import { mergeShortStitches, removeZeroLength } from './shorts';
-import { satinColumns, stitchRuns, ZIGZAG_MIN } from './structure';
+import { satinColumns, ZIGZAG_MIN } from './structure';
+import { core } from '../wasm/core';
 import { thinSweeps } from './thin';
 
 /**
@@ -40,8 +40,6 @@ const MARGIN = 0.9;
 /** At most this share of a sweep's density is removed per round. */
 const MAX_NEED = 0.5;
 const ROUNDS = 2;
-/** Later thread per area (mm/mm²) from which a stitch counts as hidden: a full fill layer. */
-const HIDDEN_COVER = 2.2;
 /** Share of a hidden-row removal that must lie under cover. */
 const HIDDEN_SHARE = 0.95;
 /** Same-hole separation: penetrations within 0.4 mm push apart, by at most 0.3 mm. */
@@ -238,38 +236,13 @@ function score(v: ValidationResult, opts: CorrectionOptions): number {
 
 /**
  * Records whose stitches in and out lie completely and well inside at least one full layer of later
- * stitching, checked every 0.1 mm along them. A row that crosses a visible gap between two
- * outlines is not hidden, even if both of its ends are.
+ * stitching (2.2 mm/mm², also 0.4 mm to every side), checked every 0.1 mm along them. A row that
+ * crosses a visible gap between two outlines is not hidden, even if both of its ends are. Found in
+ * the Rust core (core/src/correct/hidden.rs).
  */
 export function hiddenStitches(p: Pattern): Uint8Array {
-  const n = p.cmd.length;
-  const covered = new Uint8Array(n); // segment ending at i
-  const runs = stitchRuns(p);
-  walkCovered(p, runs, satinMask(p), (r, cover) => {
-    for (let i = runs[r].start + 1; i <= runs[r].end; i++) {
-      const dx = p.x[i] - p.x[i - 1];
-      const dy = p.y[i] - p.y[i - 1];
-      const k = Math.max(1, Math.ceil(Math.hypot(dx, dy)));
-      // Deep inside the cover: also 0.4 mm to every side.
-      const deep = (x: number, y: number) =>
-        cover.later(x, y) >= HIDDEN_COVER &&
-        cover.later(x + 4, y) >= HIDDEN_COVER &&
-        cover.later(x - 4, y) >= HIDDEN_COVER &&
-        cover.later(x, y + 4) >= HIDDEN_COVER &&
-        cover.later(x, y - 4) >= HIDDEN_COVER;
-      let ok = true;
-      for (let j = 0; j <= k && ok; j++) ok = deep(p.x[i - 1] + (dx * j) / k, p.y[i - 1] + (dy * j) / k);
-      if (ok) covered[i] = 1;
-    }
-  });
-  const hidden = new Uint8Array(n);
-  for (let i = 0; i < n; i++) {
-    if (p.cmd[i] !== STITCH) continue;
-    const inOk = i === 0 || p.cmd[i - 1] !== STITCH || covered[i];
-    const outOk = i + 1 >= n || p.cmd[i + 1] !== STITCH || covered[i + 1];
-    if (inOk && outOk && (covered[i] || covered[i + 1])) hidden[i] = 1;
-  }
-  return hidden;
+  const b = p.bounds;
+  return core().hiddenStitches(p.x, p.y, p.cmd, Float64Array.of(b.minX, b.minY, b.maxX, b.maxY));
 }
 
 /** Length (0.1 mm) of the stitch ending at record i, or 0 if there is none. */

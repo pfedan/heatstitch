@@ -20,6 +20,19 @@ export function isShift(m: Mat): boolean {
 /** How much a map scales lengths (1 for moving, turning and mirroring). */
 export const scaleOf = (m: Mat): number => Math.sqrt(Math.abs(m[0] * m[3] - m[1] * m[2]));
 
+/**
+ * Most pixels an area keeps when it is scaled up (a 200 mm square at 0.1 mm). Past that its pixels
+ * grow with it: rastered at 0.1 mm, a design scaled to 300 % took gigabytes in the core (every
+ * field of an area holds 4 bytes per pixel) and ran out of memory.
+ */
+export const MAX_AREA_PX = 4_000_000;
+
+/** The pixel size for area `r` mapped by `m`: its own, or coarser so it stays within MAX_AREA_PX. */
+function scaledPxMm(r: Region, m: Mat): number {
+  const n = r.w * r.h * scaleOf(m) ** 2;
+  return n > MAX_AREA_PX ? Math.ceil(r.pxMm * Math.sqrt(n / MAX_AREA_PX) * 1000) / 1000 : r.pxMm;
+}
+
 /** Whether a map keeps every length (moves, turns, mirrors): the stitches can simply go along. */
 export const isRigid = (m: Mat): boolean =>
   Math.abs(m[0] * m[0] + m[1] * m[1] - 1) < 1e-9 && Math.abs(m[2] * m[2] + m[3] * m[3] - 1) < 1e-9 && Math.abs(m[0] * m[2] + m[1] * m[3]) < 1e-9;
@@ -123,14 +136,14 @@ export function transformRemembered(r: Remembered, m: Mat): Remembered {
   if (!r.geo) {
     // A form read from the stitches stays a guess (no curves are kept): its area moved as pixels where
     // that is exact, else traced, turned and rastered again.
-    if (r.region) out.region = shiftRegion(r.region, m) ?? rasterize(transformForm(vectorize(r.region), m), r.region.pxMm);
-  } else if (use === 'area') out.region = fillArea(out, r.region?.pxMm ?? 0.1);
-  else if (use === 'band' && r.region) out.region = shiftRegion(r.region, m) ?? bandArea(out.geo!, out.fill!, r.region.pxMm);
+    if (r.region) out.region = shiftRegion(r.region, m) ?? rasterize(transformForm(vectorize(r.region), m), scaledPxMm(r.region, m));
+  } else if (use === 'area') out.region = fillArea(out, r.region ? scaledPxMm(r.region, m) : 0.1);
+  else if (use === 'band' && r.region) out.region = shiftRegion(r.region, m) ?? bandArea(out.geo!, out.fill!, scaledPxMm(r.region, m));
   // Where it leaves out what lies on top, the area it was sewn on stays behind: its area is whole
   // again. Still naming that area, `cut` would keep it from being sewn anew on what is left where
   // the moved form leaves the same pixels (a round form turned about its middle).
   delete out.cut;
-  if (r.shape) out.shape = shiftRegion(r.shape, m) ?? rasterize(transformForm(vectorize(r.shape), m), r.shape.pxMm) ?? undefined;
+  if (r.shape) out.shape = shiftRegion(r.shape, m) ?? rasterize(transformForm(vectorize(r.shape), m), scaledPxMm(r.shape, m)) ?? undefined;
   if (r.columns) {
     out.columns = r.columns.map((part) =>
       part.map((c) => mapRails(m, s, c)),

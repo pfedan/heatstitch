@@ -1,6 +1,6 @@
-import { beforeAll, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { joinEnd, joinOpenPaths, splitPathAt } from '../src/shape/join';
-import { loadOps, withCrossingNodes } from '../src/shape/ops';
+import { withCrossingNodes } from '../src/shape/ops';
 import { bezier, segment, segments, type Form, type Mat, type Node, type Path } from '../src/shape/path';
 import { parsePath } from '../src/shape/svgPath';
 
@@ -10,8 +10,6 @@ const count = (f: Form) => f.paths.reduce((a, p) => a + p.nodes.length, 0);
 /** Points along a form's curves. */
 const along = (f: Form, per = 4) => f.paths.flatMap((p) => Array.from({ length: segments(p) }, (_, k) => Array.from({ length: per }, (_, i) => bezier(segment(p, k), i / per))).flat());
 const near = (pts: [number, number][], q: [number, number]) => Math.min(...pts.map((p) => Math.hypot(p[0] - q[0], p[1] - q[1])));
-
-beforeAll(loadOps);
 
 describe('joining paths', () => {
   // A heart in two halves, as SVG files bring it: the ends 0.3 mm apart at the bottom, touching at the top.

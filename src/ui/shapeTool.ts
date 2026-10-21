@@ -726,7 +726,7 @@ export class ShapeTool implements ShapeView {
     return this.sel.length >= 2 ? takeOutNodes(this.form, this.sel, whole) : null;
   }
 
-  /** A node wherever the paths cross, the outline unchanged (needs loadOps); how many were put in. */
+  /** A node wherever the paths cross, the outline unchanged; how many were put in. */
   crossingNodes(): number {
     this.flush();
     const r = withCrossingNodes(this.form);

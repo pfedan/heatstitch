@@ -758,7 +758,7 @@ push to `develop` does the same for heatstitch-beta and beta.heatstitch.app.
 ## Format notes
 
 - **DST** has no explicit trim. As in pyembroidery, a sequence of at least 3 jumps counts as a trim
-  (`DST_TRIM_JUMP_COUNT` in `src/parsers/dst.ts`). DST also has no thread colors; color blocks get
+  (`DST_TRIM_JUMP_COUNT` in `core/src/parsers/dst.rs`). DST also has no thread colors; color blocks get
   substitute colors.
 - **PES:** colors come from the PEC palette, replaced by the thread list of the PES header for
   versions 5 to 10 (real RGB, name, brand, catalog number) like pyembroidery reads it. The hoop named

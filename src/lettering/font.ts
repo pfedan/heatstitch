@@ -1,3 +1,5 @@
+import { core, coreGeneration } from '../wasm/core';
+
 /**
  * Embroidery fonts: letters that are already digitized (satin columns with their rails and rungs,
  * running stitch, fills), made from the Ink/Stitch font library by tools/fonts/convert.mjs. All
@@ -130,6 +132,26 @@ export function loadFont(id: string): Promise<Font> {
 
 /** A font that is loaded already, or undefined. */
 export const fontNow = (id: string): Font | undefined => loaded.get(id);
+
+/** The font object the core holds under each id, since the core started (see coreGeneration). */
+const inCoreNow = new Map<string, Font>();
+let inCoreSince = 0;
+
+/**
+ * The id under which the Rust core knows `font` (core/src/lettering/font.rs): it crosses once,
+ * then the core keeps it (again only when another object of the same id comes).
+ */
+export function inCore(font: Font): string {
+  if (inCoreSince !== coreGeneration()) {
+    inCoreNow.clear();
+    inCoreSince = coreGeneration();
+  }
+  if (inCoreNow.get(font.id) !== font) {
+    core().registerFont(font);
+    inCoreNow.set(font.id, font);
+  }
+  return font.id;
+}
 
 /** Makes a font known without loading it (tests, and fonts read some other way). */
 export function addFont(font: Font): void {

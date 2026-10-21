@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { digitizeDefaults } from '../src/digitize/digitize';
 import { pathLength } from '../src/digitize/fill';
 import { contourFill } from '../src/digitize/flow';
@@ -11,7 +11,6 @@ import { rememberObjects, sewObjects } from '../src/model/objects';
 import { STITCH, type Pattern } from '../src/model/pattern';
 import { remember, restitch, type FillPattern, type FillSettings } from '../src/model/restitch';
 import { stitchKinds } from '../src/model/sequence';
-import { loadOps } from '../src/shape/ops';
 import type { Mat } from '../src/shape/path';
 import { parsePath } from '../src/shape/svgPath';
 import { DEFAULT_PROFILE } from '../src/validation/profiles';
@@ -186,7 +185,6 @@ describe('spiral and contour fill in any shape', () => {
 });
 
 describe('spiral and contour fill in the app', () => {
-  beforeAll(loadOps);
   const ID: Mat = [1, 0, 0, 1, 0, 0];
   const defaults = digitizeDefaults(DEFAULT_PROFILE);
   const empty = { name: 'x', format: 'dst', x: new Int32Array(0), y: new Int32Array(0), cmd: new Uint8Array(0), colors: [], bounds: { minX: 0, minY: 0, maxX: 0, maxY: 0 } } as unknown as Pattern;

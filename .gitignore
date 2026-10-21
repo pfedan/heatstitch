@@ -7,3 +7,4 @@ docs/screencasts/*/ton/
 __pycache__/
 .wrangler/
 dist-moved/
+core/target/

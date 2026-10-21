@@ -1,4 +1,5 @@
-import { distanceInside, distanceToSeeds } from '../image/edt';
+import { core } from '../wasm/core';
+import type { RegionData, RegionIn } from '../wasm/pkg/heatstitch_core';
 
 /**
  * One connected color region, in its own pixel window, with a signed distance field.
@@ -8,6 +9,9 @@ import { distanceInside, distanceToSeeds } from '../image/edt';
  * level, underlay insets are its level sets. Its zero level lies halfway between inside and outside
  * pixel centers, so two neighbouring regions share the same boundary. A light blur rounds the pixel
  * steps (Ink/Stitch smooths traced outlines for the same reason).
+ *
+ * Fields, outlines and grown or shrunk regions are computed by the Rust core
+ * (core/src/digitize/region.rs); `sample`, called per point, stays here.
  */
 export interface Region {
   label: number;
@@ -28,15 +32,23 @@ export interface Region {
   areaMm2: number;
 }
 
+/** Empty pixels round a region in its window (as core/src/digitize/region.rs has them). */
 const MARGIN = 6;
 
+/** A region the core made, put together as an object (each array crosses once). */
+export function fromCore(o: RegionData, label: number, pxMm: number, dx = 0, dy = 0): Region {
+  const sdfBase = o.takeSdfBase();
+  const region: Region = { label, x0: o.x0 + dx, y0: o.y0 + dy, w: o.w, h: o.h, pxMm, mask: o.takeMask(), inside: o.takeInside(), sdf: o.grown ? o.takeSdf() : sdfBase, sdfBase, areaMm2: o.areaMm2 };
+  o.free();
+  return region;
+}
+
 /**
- * Signed fields of the last masks: sewing an object anew (another spacing, the correction trying
- * variants, a border following its fill) rasters the same area again and again, and the distance
- * transforms are the costly part. Found by size and content; callers get a copy.
+ * The region as the core takes it: each array crosses once, the fill field only when it is one of
+ * its own (grown). The object is used up by the call it is passed to.
  */
-const fields: { w: number; h: number; pxMm: number; hash: number; mask: Uint8Array; field: Float32Array }[] = [];
-const FIELDS = 12;
+export const regionIn = (r: Region): RegionIn =>
+  new (core().RegionIn)(r.label, r.x0, r.y0, r.w, r.h, r.pxMm, r.areaMm2 ?? 0, r.mask, r.inside ?? new Float32Array(0), r.sdfBase ?? r.sdf, r.sdfBase && r.sdf !== r.sdfBase ? r.sdf : undefined);
 
 export function maskHash(mask: Uint8Array): number {
   let h = 2166136261;
@@ -44,61 +56,17 @@ export function maskHash(mask: Uint8Array): number {
   return h >>> 0;
 }
 
-export function signedField(mask: Uint8Array, w: number, h: number, pxMm: number): Float32Array {
-  const hash = maskHash(mask);
-  const hit = fields.find((c) => c.w === w && c.h === h && c.pxMm === pxMm && c.hash === hash && sameMask(c.mask, mask));
-  if (hit) return hit.field.slice();
-  const field = computeField(mask, w, h, pxMm);
-  fields.unshift({ w, h, pxMm, hash, mask: mask.slice(), field: field.slice() });
-  if (fields.length > FIELDS) fields.pop();
-  return field;
-}
+/**
+ * The signed field of a mask (mm, negative inside, lightly blurred), computed by the core
+ * (core/src/digitize/region.rs), which keeps the last ones: sewing an object anew rasters the same
+ * area again and again, and the distance transforms are the costly part.
+ */
+export const signedField = (mask: Uint8Array, w: number, h: number, pxMm: number): Float32Array => core().signedField(mask, w, h, pxMm);
 
 export function sameMask(a: Uint8Array, b: Uint8Array): boolean {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i++) if (!a[i] !== !b[i]) return false;
   return true;
-}
-
-function computeField(mask: Uint8Array, w: number, h: number, pxMm: number): Float32Array {
-  const dIn = distanceInside(mask, w, h);
-  const dOut = distanceToSeeds(mask, w, h);
-  const f = new Float32Array(w * h);
-  for (let i = 0; i < f.length; i++) f[i] = (mask[i] ? -(dIn[i] - 0.5) : dOut[i] - 0.5) * pxMm;
-  return blur(f, w, h, 0.7);
-}
-
-/** Separable Gaussian blur with sigma in pixels. */
-function blur(f: Float32Array, w: number, h: number, sigma: number): Float32Array {
-  const r = Math.ceil(2.5 * sigma);
-  const k = Float32Array.from({ length: 2 * r + 1 }, (_, i) => Math.exp(-((i - r) ** 2) / (2 * sigma * sigma)));
-  const tmp = new Float32Array(f.length);
-  const out = new Float32Array(f.length);
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      let s = 0;
-      let ws = 0;
-      for (let j = -r; j <= r; j++) {
-        const xx = Math.min(w - 1, Math.max(0, x + j));
-        s += f[y * w + xx] * k[j + r];
-        ws += k[j + r];
-      }
-      tmp[y * w + x] = s / ws;
-    }
-  }
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      let s = 0;
-      let ws = 0;
-      for (let j = -r; j <= r; j++) {
-        const yy = Math.min(h - 1, Math.max(0, y + j));
-        s += tmp[yy * w + x] * k[j + r];
-        ws += k[j + r];
-      }
-      out[y * w + x] = s / ws;
-    }
-  }
-  return out;
 }
 
 /**
@@ -118,45 +86,40 @@ export function buildRegion(
   grow: number,
   growInto: (label: number) => boolean,
 ): Region {
-  const growPx = Math.ceil(grow / pxMm);
-  const m = MARGIN + growPx;
-  const x0 = bbox.minX - m;
-  const y0 = bbox.minY - m;
-  const w = bbox.maxX - bbox.minX + 1 + 2 * m;
-  const h = bbox.maxY - bbox.minY + 1 + 2 * m;
-  const mask = new Uint8Array(w * h);
-  let area = 0;
-  for (let y = 0; y < h; y++) {
-    const iy = y + y0;
-    if (iy < 0 || iy >= imgH) continue;
-    for (let x = 0; x < w; x++) {
-      const ix = x + x0;
-      if (ix < 0 || ix >= imgW) continue;
-      if (compMap[iy * imgW + ix] === comp) {
-        mask[y * w + x] = 1;
-        area++;
-      }
-    }
+  const { map, near, cw, ch, cx0, cy0, into } = regionWindow(compMap, labels, imgW, bbox, imgH, pxMm, grow, growInto);
+  const o = core().buildRegion(map, near, cw, comp, label, bbox.minX - cx0, bbox.minY - cy0, bbox.maxX - cx0, bbox.maxY - cy0, ch, pxMm, grow, into);
+  return fromCore(o, label, pxMm, cx0, cy0);
+}
+
+/**
+ * The window of the picture a region is built from (see buildRegion), as the core takes it: only
+ * the region's window (with its margin, inside the picture) crosses, not the whole picture.
+ */
+export function regionWindow(
+  compMap: Int32Array,
+  labels: Uint8Array,
+  imgW: number,
+  bbox: { minX: number; minY: number; maxX: number; maxY: number },
+  imgH: number,
+  pxMm: number,
+  grow: number,
+  growInto: (label: number) => boolean,
+): { map: Int32Array; near: Uint8Array; cw: number; ch: number; cx0: number; cy0: number; into: Uint8Array } {
+  const m = MARGIN + Math.ceil(grow / pxMm);
+  const [cx0, cy0] = [Math.max(0, bbox.minX - m), Math.max(0, bbox.minY - m)];
+  const [cx1, cy1] = [Math.min(imgW, bbox.maxX + 1 + m), Math.min(imgH, bbox.maxY + 1 + m)];
+  const [cw, ch] = [cx1 - cx0, cy1 - cy0];
+  const map = new Int32Array(cw * ch);
+  const near = new Uint8Array(grow > 0 ? cw * ch : 0);
+  for (let y = 0; y < ch; y++) {
+    const row = (y + cy0) * imgW + cx0;
+    map.set(compMap.subarray(row, row + cw), y * cw);
+    if (grow > 0) near.set(labels.subarray(row, row + cw), y * cw);
   }
-  const inside = distanceInside(mask, w, h);
-  const sdfBase = signedField(mask, w, h, pxMm);
-  let sdf = sdfBase;
-  if (growPx > 0) {
-    const dOut = distanceToSeeds(mask, w, h);
-    const grown = mask.slice();
-    for (let y = 0; y < h; y++) {
-      const iy = y + y0;
-      if (iy < 0 || iy >= imgH) continue;
-      for (let x = 0; x < w; x++) {
-        const ix = x + x0;
-        const i = y * w + x;
-        if (ix < 0 || ix >= imgW || grown[i] || dOut[i] * pxMm > grow) continue;
-        if (growInto(labels[iy * imgW + ix])) grown[i] = 1;
-      }
-    }
-    sdf = signedField(grown, w, h, pxMm);
-  }
-  return { label, x0, y0, w, h, pxMm, mask, inside, sdf, sdfBase, areaMm2: area * pxMm * pxMm };
+  // Labels are bytes: the predicate crosses as a table.
+  const into = new Uint8Array(256);
+  if (grow > 0) for (let l = 0; l < 256; l++) into[l] = growInto(l) ? 1 : 0;
+  return { map, near, cw, ch, cx0, cy0, into };
 }
 
 /** Bilinear sample of a field at image mm coordinates; far outside the window is "outside". */
@@ -177,80 +140,19 @@ export function sample(r: Region, field: Float32Array, xMm: number, yMm: number)
   return (a * (1 - fu) + b * fu) * (1 - fv) + (c * (1 - fu) + d * fu) * fv;
 }
 
-/** Image mm coordinates of the center of window pixel (x, y). */
-export const pixelMm = (r: Region, x: number, y: number): [number, number] => [(x + r.x0 + 0.5) * r.pxMm, (y + r.y0 + 0.5) * r.pxMm];
-
 /**
  * Outline of a region: the zero level of its own signed distance, as closed polylines in mm
  * (marching squares between pixel centers, the crossings interpolated); with `level`, the line
  * that far outside (+) or inside (-) the edge of `field`.
  */
 export function outline(r: Region, level = 0, field = r.sdfBase): [number, number][][] {
-  const { w, h } = r;
-  const f = level ? field.map((v) => v - level) : field;
-  // Edges between neighbouring pixel centers carry the crossing points: horizontal edge (x, y)
-  // to (x + 1, y) has id 2 * (y * w + x), vertical edge (x, y) to (x, y + 1) the id after it.
-  const point = (id: number): [number, number] => {
-    const k = id >> 1;
-    const x = k % w;
-    const y = (k - x) / w;
-    const a = f[k];
-    const b = id & 1 ? f[k + w] : f[k + 1];
-    const t = a === b ? 0.5 : a / (a - b);
-    const px = id & 1 ? x : x + t;
-    const py = id & 1 ? y + t : y;
-    return [(px + r.x0 + 0.5) * r.pxMm, (py + r.y0 + 0.5) * r.pxMm];
-  };
-  const next = new Map<number, number[]>();
-  const link = (a: number, b: number) => {
-    next.set(a, [...(next.get(a) ?? []), b]);
-    next.set(b, [...(next.get(b) ?? []), a]);
-  };
-  for (let y = 0; y < h - 1; y++) {
-    for (let x = 0; x < w - 1; x++) {
-      const k = y * w + x;
-      const c = (f[k] < 0 ? 1 : 0) | (f[k + 1] < 0 ? 2 : 0) | (f[k + w + 1] < 0 ? 4 : 0) | (f[k + w] < 0 ? 8 : 0);
-      if (c === 0 || c === 15) continue;
-      const top = 2 * k;
-      const bottom = 2 * (k + w);
-      const left = 2 * k + 1;
-      const right = 2 * (k + 1) + 1;
-      // Edges whose two ends lie on different sides, paired around the cell.
-      const cut = [top, right, bottom, left].filter((_, e) => {
-        const corners = [
-          [1, 2],
-          [2, 4],
-          [8, 4],
-          [1, 8],
-        ][e];
-        return !(c & corners[0]) !== !(c & corners[1]);
-      });
-      if (cut.length === 2) link(cut[0], cut[1]);
-      else if (cut.length === 4) {
-        link(cut[0], cut[1]);
-        link(cut[2], cut[3]);
-      }
-    }
-  }
+  const flat = core().outline(field, r.w, r.h, r.x0, r.y0, r.pxMm, level);
   const out: [number, number][][] = [];
-  const seen = new Set<number>();
-  for (const start of next.keys()) {
-    if (seen.has(start)) continue;
-    const line: [number, number][] = [];
-    let prev = -1;
-    let cur = start;
-    while (cur !== undefined && !seen.has(cur)) {
-      seen.add(cur);
-      line.push(point(cur));
-      const n: number[] = next.get(cur) ?? [];
-      const to = n[0] !== prev ? n[0] : n[1];
-      prev = cur;
-      cur = to;
-    }
-    if (line.length > 2) {
-      line.push(line[0]);
-      out.push(line);
-    }
+  for (let i = 0; i < flat.length; ) {
+    const n = flat[i++];
+    const line: [number, number][] = new Array(n);
+    for (let k = 0; k < n; k++, i += 2) line[k] = [flat[i], flat[i + 1]];
+    out.push(line);
   }
   return out;
 }
@@ -262,24 +164,6 @@ export function outline(r: Region, level = 0, field = r.sdfBase): [number, numbe
  */
 export function expandRegion(r: Region, mm: number): Region | null {
   if (Math.abs(mm) < 1e-3) return r;
-  const pad = mm > 0 ? Math.ceil(mm / r.pxMm) + 1 : 0;
-  const w = r.w + 2 * pad;
-  const h = r.h + 2 * pad;
-  const own = new Uint8Array(w * h);
-  // From the area the fill covers now (its field, which may reach a little under neighbours).
-  for (let y = 0; y < r.h; y++) for (let x = 0; x < r.w; x++) own[(y + pad) * w + x + pad] = r.sdf[y * r.w + x] < 0 ? 1 : 0;
-  const d = mm > 0 ? distanceToSeeds(own, w, h) : distanceInside(own, w, h);
-  const limit = Math.abs(mm) / r.pxMm;
-  const mask = new Uint8Array(w * h);
-  let area = 0;
-  for (let i = 0; i < mask.length; i++) {
-    // Pixel centers lie half a pixel from the seeds' edges.
-    const on = mm > 0 ? own[i] === 1 || d[i] - 0.5 <= limit : own[i] === 1 && d[i] - 0.5 > limit;
-    if (!on) continue;
-    mask[i] = 1;
-    area++;
-  }
-  if (!area) return null;
-  const sdf = signedField(mask, w, h, r.pxMm);
-  return { label: r.label, x0: r.x0 - pad, y0: r.y0 - pad, w, h, pxMm: r.pxMm, mask, inside: distanceInside(mask, w, h), sdf, sdfBase: sdf, areaMm2: area * r.pxMm * r.pxMm };
+  const o = core().expandRegion(r.label, r.x0, r.y0, r.w, r.h, r.pxMm, r.sdf, mm);
+  return o ? fromCore(o, r.label, r.pxMm) : null;
 }

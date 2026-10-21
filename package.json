@@ -5,12 +5,18 @@
   "license": "MIT",
   "type": "module",
   "scripts": {
+    "predev": "node scripts/wasm.mjs",
     "dev": "vite",
+    "prebuild": "node scripts/wasm.mjs",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
+    "pretest": "node scripts/wasm.mjs",
     "test": "vitest run",
     "test:timings": "node scripts/test-timings.mjs",
-    "typecheck": "tsc --noEmit"
+    "pretypecheck": "node scripts/wasm.mjs",
+    "typecheck": "tsc --noEmit",
+    "wasm": "wasm-pack build core --target web --out-dir ../src/wasm/pkg --no-pack --release",
+    "wasm:fast": "wasm-pack build core --target web --out-dir ../src/wasm/pkg --no-pack --profile fast"
   },
   "devDependencies": {
     "highs": "^1.15.3",
@@ -19,9 +25,5 @@
     "vite": "^8.3.2",
     "vite-plugin-pwa": "^2.0.0",
     "vitest": "^5.0.3"
-  },
-  "dependencies": {
-    "clipper2-ts": "^2.0.1-18",
-    "paper": "^0.12.18"
   }
 }

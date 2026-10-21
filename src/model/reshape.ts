@@ -8,7 +8,7 @@ import { nextVersion, STITCH, type Pattern } from './pattern';
 import { analyze, bestChain, keepShape, knownKind, measureFill, measureRun, measureSatin, railsArea, remember, remembered, rememberRange, restitch, type FillSettings, type Rails, type Remembered, type RestitchResult, type SatinSettings, type Settings } from './restitch';
 import type { Pt } from '../digitize/skeleton';
 import type { Region } from '../digitize/region';
-import { areaLoops, columnsAlong, suggestSatin } from '../digitize/satinSuggest';
+import { areaLoops, suggestedColumns } from '../digitize/satinSuggest';
 import { cumulative, cutLinesBetween, cutPieces, pointAt, railsFromOutline, stripsOfAreas, stripsOfOutline, type Rung } from '../digitize/rungs';
 import { rasterize } from '../shape/rasterize';
 import { stitchKinds } from './sequence';
@@ -263,13 +263,6 @@ function columnsOfArea(area: Region, cols: Rails[], before: Region | null): Rail
   return null;
 }
 
-/** The columns the kind switch suggests for an area (lines across, cut where it branches), in sewing order; null when none fit. */
-function suggestedColumns(area: Region, satin: SatinSettings): Rails[] | null {
-  const suggested = suggestSatin(area);
-  const made = suggested && suggested.kind !== 'wide' && suggested.ok ? columnsAlong(area, suggested.lines, suggested.cuts) : null;
-  return made && 'columns' in made ? inChainOrder(made.columns, satin) : null;
-}
-
 /**
  * New stitches for satin `o` over the area of `geo` (its outline edited): with its own satin
  * settings, its stitches going across as before where the new area allows (else as a satin made
@@ -391,9 +384,7 @@ export function lineToSatin(p: Pattern, index: number, trimMm: number): Restitch
   if (!o || !known?.line || !geo || known.free || !satin || !fits(geo, 'fill')) return null;
   const area = rasterize(geo);
   if (!area) return null;
-  const suggested = suggestSatin(area);
-  const made = suggested && suggested.kind !== 'wide' && suggested.ok ? columnsAlong(area, suggested.lines, suggested.cuts) : null;
-  const guide = made && 'columns' in made ? inChainOrder(made.columns, satin) : null;
+  const guide = suggestedColumns(area, satin);
   // Columns kept from a satin it was before it was a fill are of another area: not taken.
   let from = p;
   if (known.kept?.satin) {

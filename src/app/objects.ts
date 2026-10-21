@@ -28,7 +28,6 @@ import { t, type Key } from '../i18n';
 import { ui } from './state';
 import { combineLines, joinTouchingEnds, gatherObjects, mergeLeads, partsOfForm, splitByForm, threadOfAFill, unionForm, recolorObjects } from '../model/shapeOps';
 import { runCommand } from '../shell/commands';
-import { loadOps, opsReady } from '../shape/ops';
 import { blendObject } from '../model/blend';
 import { recolorBlock, takeThreads } from '../model/border';
 import { violations, conflicts, reorder } from '../model/order';
@@ -289,8 +288,6 @@ export function bindObjects(app: ObjectsApp) {
     const base = f?.pattern;
     const picked = chosen ?? [...ui.selectedObjects];
     if (!f || !base || picked.length < 2) return;
-    // Outlines are joined on their curves: the libraries for that load on first use.
-    if (!opsReady()) return void loadOps().then(() => mergeObjects(chosen, lead));
     const q0 = app.seq(base);
     const all = [...picked].sort((a, b) => a - b);
     const objs0 = all.map((o) => q0.objects[o]);
@@ -621,7 +618,15 @@ export function bindObjects(app: ObjectsApp) {
       const cx = (Math.min(...objs.map((o) => o.minX)) + Math.max(...objs.map((o) => o.maxX))) / 20;
       const cy = (Math.min(...objs.map((o) => o.minY)) + Math.max(...objs.map((o) => o.maxY))) / 20;
       // The stitches reach a little past the shape, by as much at any size: the factors are fitted so they come out as typed.
-      const fit = ui.lettering ? null : fitScaling(p, sel, sx, sy, cx, cy, app.settings.trimMm, app.seq);
+      let fit: ReturnType<typeof fitScaling> = null;
+      try {
+        fit = ui.lettering ? null : fitScaling(p, sel, sx, sy, cx, cy, app.settings.trimMm, app.seq);
+      } catch (e) {
+        // A core call that failed (out of memory on a huge design) loses this resize only.
+        console.error(e);
+        layers.say(t('frame.failed'), true);
+        return app.redraw();
+      }
       app.commitTransform(fit?.m ?? scaling(sx, sy, cx, cy), undefined, fit?.done);
     },
     move: (dx, dy) => {

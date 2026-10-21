@@ -1,0 +1,122 @@
+{
+ "Blume": {
+  "sew": "01defd7f",
+  "scaled": "1e37792e"
+ },
+ "Musterkarte Dekor": {
+  "sew": "4f981314",
+  "scaled": "82a5df29"
+ },
+ "Musterkarte Offen": {
+  "sew": "f4600eba",
+  "scaled": "7c706770"
+ },
+ "Linienstiche": {
+  "sew": "93d319e2",
+  "scaled": "8749de87"
+ },
+ "Linien mit Parametern": {
+  "sew": "8efc5292",
+  "scaled": "b08437af"
+ },
+ "Handstiche": {
+  "sew": "9effe844",
+  "scaled": "9983647b"
+ },
+ "Linieneffekte": {
+  "sew": "261c42ab",
+  "scaled": "cc70a670"
+ },
+ "Redwork": {
+  "sew": "78c05f58",
+  "scaled": "9436ae74"
+ },
+ "Satinflächen": {
+  "sew": "4db4051a",
+  "scaled": "273238c3"
+ },
+ "Applikation": {
+  "sew": "d9a8471d",
+  "scaled": "1bd1223b"
+ },
+ "Schriftzug": {
+  "sew": "0243553a",
+  "scaled": "663a483e"
+ },
+ "Aufnäher": {
+  "sew": "25553ea4",
+  "scaled": "547d05cf"
+ },
+ "Handtuch": {
+  "sew": "02b820da",
+  "scaled": "d66668e0"
+ },
+ "cat-60mm.pes": {
+  "sew": "b2884595",
+  "scaled": "f8207cf0"
+ },
+ "demos/confetti.pes": {
+  "sew": "a528fd52",
+  "scaled": "db905315"
+ },
+ "demos/leather-patch.dst": {
+  "sew": "8ed43266",
+  "scaled": "de8b3751"
+ },
+ "demos/letters.pes": {
+  "sew": "b3ce22cb",
+  "scaled": "a81e8e3c"
+ },
+ "demos/overlap.pes": {
+  "sew": "fbb17c30",
+  "scaled": "e51afe67"
+ },
+ "demos/patch.pes": {
+  "sew": "dc6b8ba1",
+  "scaled": "fd0250d6"
+ },
+ "demos/sun.dst": {
+  "sew": "a9cedc4b",
+  "scaled": "18e997f5"
+ },
+ "svg fliegenpilz-quelle": {
+  "sew": "b4a5b991",
+  "scaled": "3fa56d4f"
+ },
+ "svg katze-im-karton": {
+  "sew": "da24169e",
+  "scaled": "7eaa009f"
+ },
+ "svg kirschen": {
+  "sew": "51677d71",
+  "scaled": "0fc01372"
+ },
+ "svg abzeichen": {
+  "sew": "7fa00655",
+  "scaled": "9496be08"
+ },
+ "svg apfel": {
+  "sew": "59f8913c",
+  "scaled": "b5f62941"
+ },
+ "svg blumenzweig": {
+  "sew": "0555b369",
+  "scaled": "44c0ea6e"
+ },
+ "svg brush-yong": {
+  "sew": "1a668741",
+  "scaled": "668e99cf"
+ },
+ "svg shapes-benchmark": {
+  "sew": "58969472",
+  "scaled": "ee396e04"
+ },
+ "svg overlapping-circles": {
+  "sew": "88ae7159",
+  "scaled": "7fae6521"
+ },
+ "svg image-example": {
+  "sew": "472c551a",
+  "scaled": "93070375"
+ }
+}

@@ -1,5 +1,5 @@
 import type { Rgb } from './color';
-import { NONE } from './quantize';
+import { core } from '../wasm/core';
 import type { ExactLabels } from './prepare';
 import type { Form, Mat } from '../shape/path';
 import type { StrokeCap, StrokeJoin } from '../shape/ops';
@@ -82,27 +82,12 @@ export function gradientColor(stops: { offset: number; rgb: Rgb }[]): Rgb | null
 /**
  * Labels from drawings in which the shapes of colors 3p, 3p + 1 and 3p + 2 are pure red, green and
  * blue and all other shapes black (one drawing p per three colors): each pixel gets the color that
- * covers most of it, if shapes cover at least half of it.
+ * covers most of it, if shapes cover at least half of it. Computed by the core (core/src/image/svg.rs).
  */
 export function labelsFromPasses(passes: Uint8ClampedArray[], count: number, size: number): Uint8Array {
-  const labels = new Uint8Array(size).fill(NONE);
-  const best = new Float32Array(size);
-  passes.forEach((d, p) => {
-    for (let c = 0; c < 3; c++) {
-      const label = p * 3 + c;
-      if (label >= count) break;
-      for (let i = 0; i < size; i++) {
-        const a = d[i * 4 + 3];
-        if (a < 128) continue;
-        const v = d[i * 4 + c] * a;
-        if (v > best[i]) {
-          best[i] = v;
-          labels[i] = label;
-        }
-      }
-    }
-  });
-  return labels;
+  const all = new Uint8Array(4 * size * passes.length);
+  passes.forEach((d, p) => all.set(d.subarray(0, 4 * size), 4 * size * p));
+  return core().labelsFromPasses(all, count, size);
 }
 
 // Reading the file in the page ---------------------------------------------------------------

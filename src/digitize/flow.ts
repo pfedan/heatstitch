@@ -1,9 +1,8 @@
 import type { Orientation } from '../image/orientation';
-import { BEAM_PIECES, beamOnGrid, chooseAngle, fillRegion, noteTravel, pathLength, planOnGrid, type Pieces, pointCount, SHARED_TURN, sewUnderlay, TRAVEL_STITCH, TRAVEL_TOLERANCE, TravelGrid, type FillParams, type FillResult } from './fill';
-import { coverage, peakDensity } from './measure';
-import { sample, type Region } from './region';
-import { ringFill } from './rings';
-import { MIN_ROW_STITCH, Path, runStitch, simplify, TOLERANCE } from './run';
+import { core } from '../wasm/core';
+import type { FieldOut } from '../wasm/pkg/heatstitch_core';
+import { coreParams, coreRegions, fillOf, flatOf, type FillParams, type FillResult } from './fill';
+import { regionIn, type Region } from './region';
 import type { Graph, Pt } from './skeleton';
 
 /**
@@ -22,6 +21,9 @@ import type { Graph, Pt } from './skeleton';
  *    under unsewn rows between groups.
  * 4. The rows are measured before they are sewn: where they crowd (more than 2.2 times the nominal
  *    density) or leave gaps, the straight fill is used instead.
+ *
+ * Computed by the Rust core (core/src/digitize/flow.rs); the fields cross as their doubled angles
+ * per cell, the fills as their stitches.
  */
 
 export interface FlowResult extends FillResult {
@@ -32,397 +34,16 @@ export interface FlowResult extends FillResult {
 /** Grid cell (mm); larger regions get coarser cells, so the grid stays near 45 000 cells. */
 const CELL_MIN = 0.2;
 const CELLS = 45000;
-/** The field reaches this far outside the region, so rows end cleanly at its edge (mm). */
-const MARGIN = 0.6;
-/** Weight of the shape's own direction against pronounced image structure (about 1). */
-const SHAPE_WEIGHT = 0.35;
-/** The image's structure counts from this far inside the region (mm). */
-const IMAGE_INSET = 1.2;
-/** Smoothing of the field (mm). */
-const SMOOTH_MM = 1.5;
-/** Mean resultant length of the field above which rows stay straight. */
-const UNIFORM = 0.93;
-/** Below this mean field strength there is no direction to follow. */
-const WEAK = 0.05;
-/**
- * Curved rows denser than this many times the nominal 1 / spacing somewhere are not used (with
- * underlay that stays under the caution limit of the density check).
- */
 const FLOW_PEAK = 2.2;
 const FLOW_COVER = 0.95;
-const STAGGERS = 4;
 
-const dist = (p: Pt, q: Pt) => Math.hypot(p[0] - q[0], p[1] - q[1]);
-
-export class Grid {
+/** The cells of a direction field over a region (made by the core for that region). */
+export interface Grid {
   cell: number;
   gw: number;
   gh: number;
   ox: number;
   oy: number;
-  /** Cells of the field's domain (the region and a margin around it). */
-  dom: Uint8Array;
-  sdf: Float32Array;
-
-  constructor(r: Region) {
-    this.cell = Math.max(CELL_MIN, Math.sqrt((r.w * r.h * r.pxMm * r.pxMm) / CELLS));
-    this.ox = r.x0 * r.pxMm;
-    this.oy = r.y0 * r.pxMm;
-    this.gw = Math.ceil((r.w * r.pxMm) / this.cell);
-    this.gh = Math.ceil((r.h * r.pxMm) / this.cell);
-    this.dom = new Uint8Array(this.gw * this.gh);
-    this.sdf = new Float32Array(this.gw * this.gh);
-    for (let j = 0; j < this.gh; j++) {
-      for (let i = 0; i < this.gw; i++) {
-        const k = j * this.gw + i;
-        this.sdf[k] = sample(r, r.sdf, ...this.center(i, j));
-        if (this.sdf[k] < MARGIN) this.dom[k] = 1;
-      }
-    }
-  }
-
-  center(i: number, j: number): Pt {
-    return [this.ox + (i + 0.5) * this.cell, this.oy + (j + 0.5) * this.cell];
-  }
-
-  index(p: Pt): number {
-    const i = Math.floor((p[0] - this.ox) / this.cell);
-    const j = Math.floor((p[1] - this.oy) / this.cell);
-    return i < 0 || j < 0 || i >= this.gw || j >= this.gh ? -1 : j * this.gw + i;
-  }
-}
-
-/** Box blur of a field over the domain only (three passes, about a Gaussian). */
-function blurDomain(f: Float32Array, g: Grid, r: number): Float32Array {
-  const { gw, gh, dom } = g;
-  let v = Float32Array.from(f, (x, i) => (dom[i] ? x : 0));
-  let wgt = Float32Array.from(dom);
-  const pass = (a: Float32Array) => {
-    const t = new Float32Array(a.length);
-    const o = new Float32Array(a.length);
-    for (let j = 0; j < gh; j++) {
-      let acc = 0;
-      for (let i = -r; i <= r; i++) acc += i >= 0 && i < gw ? a[j * gw + i] : 0;
-      for (let i = 0; i < gw; i++) {
-        t[j * gw + i] = acc;
-        if (i + r + 1 < gw) acc += a[j * gw + i + r + 1];
-        if (i - r >= 0) acc -= a[j * gw + i - r];
-      }
-    }
-    for (let i = 0; i < gw; i++) {
-      let acc = 0;
-      for (let j = -r; j <= r; j++) acc += j >= 0 && j < gh ? t[j * gw + i] : 0;
-      for (let j = 0; j < gh; j++) {
-        o[j * gw + i] = acc;
-        if (j + r + 1 < gh) acc += t[(j + r + 1) * gw + i];
-        if (j - r >= 0) acc -= t[(j - r) * gw + i];
-      }
-    }
-    return o;
-  };
-  for (let p = 0; p < 3; p++) {
-    v = pass(v);
-    wgt = pass(wgt);
-  }
-  return v.map((x, i) => (wgt[i] > 0 ? x / wgt[i] : 0));
-}
-
-/** Direction field as doubled-angle vectors (c, s) per cell. */
-function field(r: Region, g: Grid, graph: Graph | null, orient: Orientation): { c: Float32Array; s: Float32Array } {
-  const n = g.gw * g.gh;
-  const c = new Float32Array(n);
-  const s = new Float32Array(n);
-  // The image's structure inside the region. Near its edge the tensor sees the region's own
-  // outline, which is not structure to follow (the shape's direction below covers the shape), so
-  // it counts only from IMAGE_INSET inside, fully a millimetre further in.
-  for (let j = 0; j < g.gh; j++) {
-    for (let i = 0; i < g.gw; i++) {
-      const k = j * g.gw + i;
-      const w = Math.min(1, Math.max(0, -g.sdf[k] - IMAGE_INSET));
-      if (!g.dom[k] || w <= 0) continue;
-      const [x, y] = g.center(i, j);
-      const px = Math.min(orient.width - 1, Math.max(0, Math.floor(x / r.pxMm)));
-      const py = Math.min(orient.height - 1, Math.max(0, Math.floor(y / r.pxMm)));
-      c[k] = w * orient.c[py * orient.width + px];
-      s[k] = w * orient.s[py * orient.width + px];
-    }
-  }
-  // The shape's direction: the tangent of the nearest centerline, spread out from it.
-  if (graph?.branches.length) {
-    const sc = new Float32Array(n);
-    const ss = new Float32Array(n);
-    const seen = new Uint8Array(n);
-    let queue: number[] = [];
-    for (const b of graph.branches) {
-      // Only a branch that is long against its width says which way the shape runs: none for a
-      // compact shape, fully from three widths on.
-      const width = 2 * (b.r.reduce((x, y) => x + y, 0) / b.r.length);
-      const wgt = Math.min(1, Math.max(0, (pathLength(b.pts) / Math.max(width, 1e-6) - 1) / 2));
-      if (wgt <= 0) continue;
-      for (let q = 0; q < b.pts.length; q++) {
-        const a = b.pts[Math.max(0, q - 3)];
-        const e = b.pts[Math.min(b.pts.length - 1, q + 3)];
-        const t = Math.atan2(e[1] - a[1], e[0] - a[0]);
-        const k = g.index(b.pts[q]);
-        if (k < 0 || !g.dom[k] || seen[k]) continue;
-        seen[k] = 1;
-        sc[k] = wgt * Math.cos(2 * t);
-        ss[k] = wgt * Math.sin(2 * t);
-        queue.push(k);
-      }
-    }
-    while (queue.length) {
-      const next: number[] = [];
-      for (const k of queue) {
-        const i = k % g.gw;
-        for (const q of [i > 0 ? k - 1 : -1, i < g.gw - 1 ? k + 1 : -1, k - g.gw, k + g.gw]) {
-          if (q < 0 || q >= n || seen[q] || !g.dom[q]) continue;
-          seen[q] = 1;
-          sc[q] = sc[k];
-          ss[q] = ss[k];
-          next.push(q);
-        }
-      }
-      queue = next;
-    }
-    for (let k = 0; k < n; k++) {
-      c[k] += SHAPE_WEIGHT * sc[k];
-      s[k] += SHAPE_WEIGHT * ss[k];
-    }
-  }
-  const rad = Math.max(1, Math.round(SMOOTH_MM / g.cell / 1.7));
-  return { c: blurDomain(c, g, rad), s: blurDomain(s, g, rad) };
-}
-
-/** Unit direction of the field at p (bilinear in the doubled angles), or null where it has none. */
-function directionAt(g: Grid, c: Float32Array, s: Float32Array, p: Pt): Pt | null {
-  const fx = (p[0] - g.ox) / g.cell - 0.5;
-  const fy = (p[1] - g.oy) / g.cell - 0.5;
-  const i = Math.max(0, Math.min(g.gw - 2, Math.floor(fx)));
-  const j = Math.max(0, Math.min(g.gh - 2, Math.floor(fy)));
-  const tx = Math.max(0, Math.min(1, fx - i));
-  const ty = Math.max(0, Math.min(1, fy - j));
-  const k = j * g.gw + i;
-  const lerp2 = (f: Float32Array) =>
-    (f[k] * (1 - tx) + f[k + 1] * tx) * (1 - ty) + (f[k + g.gw] * (1 - tx) + f[k + g.gw + 1] * tx) * ty;
-  const cc = lerp2(c);
-  const ss = lerp2(s);
-  if (Math.hypot(cc, ss) < 1e-6) return null;
-  const t = Math.atan2(ss, cc) / 2;
-  return [Math.cos(t), Math.sin(t)];
-}
-
-/** Points of committed rows in buckets, for the distance tests. */
-class Occupancy {
-  private buckets = new Map<number, Pt[]>();
-  constructor(private size: number) {}
-  private key(x: number, y: number): number {
-    return Math.floor(x / this.size) * 1000003 + Math.floor(y / this.size);
-  }
-  add(p: Pt): void {
-    const k = this.key(p[0], p[1]);
-    const l = this.buckets.get(k);
-    if (l) l.push(p);
-    else this.buckets.set(k, [p]);
-  }
-  /** Whether a point lies within d (at most the bucket size) of p. */
-  near(p: Pt, d: number): boolean {
-    const bx = Math.floor(p[0] / this.size);
-    const by = Math.floor(p[1] / this.size);
-    for (let dx = -1; dx <= 1; dx++) {
-      for (let dy = -1; dy <= 1; dy++) {
-        for (const q of this.buckets.get((bx + dx) * 1000003 + by + dy) ?? []) if (dist(p, q) < d) return true;
-      }
-    }
-    return false;
-  }
-}
-
-/** Integration step along a row (mm). */
-const STEP = 0.1;
-/** Below this length a traced row is not kept (mm). */
-const MIN_ROW = 1;
-
-/** Row spacing at a point (mm). */
-type Spacing = (p: Pt) => number;
-
-/**
- * Spacing changing evenly across the shape, as for straight gradient rows (see Frame in fill.ts):
- * `from` on the side across the rows (at right angles to `angle` degrees) where the rows start,
- * `to` on the far side, measured over the region's own pixels.
- */
-function spacingAcross(r: Region, angle: number, from: number, to: number): Spacing {
-  const a = (angle * Math.PI) / 180;
-  const n: Pt = [-Math.sin(a), Math.cos(a)];
-  let lo = Infinity;
-  let hi = -Infinity;
-  for (let y = 0; y < r.h; y++) {
-    for (let x = 0; x < r.w; x++) {
-      if (!r.mask[y * r.w + x]) continue;
-      const v = (x + r.x0 + 0.5) * r.pxMm * n[0] + (y + r.y0 + 0.5) * r.pxMm * n[1];
-      lo = Math.min(lo, v);
-      hi = Math.max(hi, v);
-    }
-  }
-  if (!Number.isFinite(lo)) return () => from;
-  const span = Math.max(1e-6, hi - lo);
-  return (p) => from + (to - from) * Math.max(0, Math.min(1, (p[0] * n[0] + p[1] * n[1] - lo) / span));
-}
-
-/**
- * Evenly spaced streamlines of the field over the region, one row spacing apart (see above). With a
- * spacing that changes over the region, rows lie as far apart as the spacing where they are
- * (Jobard & Lefer's streamlines of varying density).
- */
-function streamlines(r: Region, g: Grid, c: Float32Array, s: Float32Array, spacing: number, at: Spacing = () => spacing, widest = spacing): Pt[][] {
-  const occ = new Occupancy(widest);
-  const inside = (p: Pt) => sample(r, r.sdf, p[0], p[1]) < 0;
-  const maxSteps = Math.ceil((4 * Math.hypot(r.w, r.h) * r.pxMm) / STEP);
-
-  /** One direction from the seed; own points count once they are three spacings behind. */
-  const trace = (seed: Pt, d0: Pt): Pt[] => {
-    const pts: Pt[] = [seed];
-    const own = new Occupancy(widest);
-    const lag = Math.ceil((3 * at(seed)) / STEP);
-    let p = seed;
-    let prev = d0;
-    for (let n = 0; n < maxSteps; n++) {
-      let d = directionAt(g, c, s, p) ?? prev;
-      if (d[0] * prev[0] + d[1] * prev[1] < 0) d = [-d[0], -d[1]];
-      const mid: Pt = [p[0] + (d[0] * STEP) / 2, p[1] + (d[1] * STEP) / 2];
-      let d2 = directionAt(g, c, s, mid) ?? d;
-      if (d2[0] * d[0] + d2[1] * d[1] < 0) d2 = [-d2[0], -d2[1]];
-      const q: Pt = [p[0] + d2[0] * STEP, p[1] + d2[1] * STEP];
-      const fq = sample(r, r.sdf, q[0], q[1]);
-      if (fq >= 0) {
-        // Ends at the edge of the region, at the crossing.
-        const fp = sample(r, r.sdf, p[0], p[1]);
-        const t = fp / (fp - fq);
-        pts.push([p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t]);
-        break;
-      }
-      const dTest = 0.5 * at(q);
-      if (occ.near(q, dTest) || own.near(q, dTest)) break;
-      pts.push(q);
-      if (pts.length > lag) own.add(pts[pts.length - 1 - lag]);
-      p = q;
-      prev = d2;
-    }
-    return pts;
-  };
-
-  const lines: Pt[][] = [];
-  const commit = (line: Pt[]) => {
-    lines.push(line);
-    for (const p of line) occ.add(p);
-  };
-  /** The row through a seed, traced both ways; null if too short. */
-  const through = (seed: Pt): Pt[] | null => {
-    if (!inside(seed) || occ.near(seed, at(seed) * 0.99)) return null;
-    const d = directionAt(g, c, s, seed) ?? [1, 0];
-    const fwd = trace(seed, d);
-    const back = trace(seed, [-d[0], -d[1]]);
-    const line = [...back.reverse(), ...fwd.slice(1)];
-    return pathLength(line) >= MIN_ROW ? line : null;
-  };
-  const grow = (queue: Pt[][]) => {
-    while (queue.length) {
-      const line = queue.shift()!;
-      let acc = 0;
-      for (let i = 1; i < line.length; i++) {
-        acc += dist(line[i - 1], line[i]);
-        if (acc < at(line[i]) / 2) continue;
-        acc = 0;
-        const a = line[Math.max(0, i - 2)];
-        const b = line[Math.min(line.length - 1, i + 2)];
-        const l = dist(a, b) || 1;
-        const nrm: Pt = [-(b[1] - a[1]) / l, (b[0] - a[0]) / l];
-        for (const side of [1, -1]) {
-          // The spacing halfway to the new row, so a row beside a denser one is not seeded too close.
-          const half = at(line[i]) / 2;
-          const d = at([line[i][0] + nrm[0] * half * side, line[i][1] + nrm[1] * half * side]);
-          const seed: Pt = [line[i][0] + nrm[0] * d * side, line[i][1] + nrm[1] * d * side];
-          const next = through(seed);
-          if (next) {
-            commit(next);
-            queue.push(next);
-          }
-        }
-      }
-    }
-  };
-  // Start at the deepest point, then fill whatever the rows did not reach (other lobes of the shape).
-  let deepest = 0;
-  for (let i = 1; i < r.inside.length; i++) if (r.inside[i] > r.inside[deepest]) deepest = i;
-  const first = through([(deepest % r.w + r.x0 + 0.5) * r.pxMm, (Math.floor(deepest / r.w) + r.y0 + 0.5) * r.pxMm]);
-  if (first) {
-    commit(first);
-    grow([first]);
-  }
-  for (let j = 0; j < g.gh; j++) {
-    for (let i = 0; i < g.gw; i++) {
-      if (g.sdf[j * g.gw + i] > -at(g.center(i, j)) / 2) continue;
-      const line = through(g.center(i, j));
-      if (!line) continue;
-      commit(line);
-      grow([line]);
-    }
-  }
-  return lines;
-}
-
-interface Piece {
-  /** Position in sewing order, for the stagger. */
-  k: number;
-  pts: Pt[];
-}
-
-/** Lengthens a row at both ends along its direction (pull compensation). */
-function lengthen(pts: Pt[], d: number): Pt[] {
-  if (d <= 0 || pts.length < 2) return pts;
-  const ext = (a: Pt, b: Pt): Pt => {
-    const l = dist(a, b) || 1;
-    return [a[0] + ((a[0] - b[0]) / l) * d, a[1] + ((a[1] - b[1]) / l) * d];
-  };
-  return [ext(pts[0], pts[Math.min(2, pts.length - 1)]), ...pts.slice(1, -1), ext(pts[pts.length - 1], pts[Math.max(0, pts.length - 3)])];
-}
-
-/**
- * Stitches along a row: needle points every `len` of arc length, shifted by a quarter stitch from
- * level to level (stagger). Where the row bends between two of them by more than `tol`, a straight
- * stitch would cut the curve, so that stretch is divided into shorter stitches until each keeps
- * within `tol` (not shorter than MIN_ROW_STITCH).
- */
-function rowStitches(p: Piece, len: number, tol: number): Pt[] {
-  const path = new Path(p.pts);
-  const total = path.total;
-  const phase = ((((p.k % STAGGERS) + STAGGERS) % STAGGERS) / STAGGERS) * len;
-  const margin = Math.min(0.6, len / 4);
-  const marks = [0];
-  for (let s = phase; s < total - margin; s += len) if (s >= margin) marks.push(s);
-  marks.push(total);
-  const out: Pt[] = [p.pts[0]];
-  for (let m = 1; m < marks.length; m++) {
-    const s0 = marks[m - 1];
-    const s1 = marks[m];
-    const fits = (n: number) => {
-      for (let q = 1; q <= n; q++) if (path.deviation(s0 + ((s1 - s0) * (q - 1)) / n, s0 + ((s1 - s0) * q) / n) > tol) return false;
-      return true;
-    };
-    let parts = 1;
-    while (!fits(parts) && (s1 - s0) / (parts + 1) >= MIN_ROW_STITCH) parts++;
-    for (let q = 1; q <= parts; q++) out.push(path.at(s0 + ((s1 - s0) * q) / parts));
-  }
-  return out;
-}
-
-/**
- * Fill following the image's direction; null when the region has no direction to follow (the
- * caller fills it straight at the usual angle) or curved rows fail the checks.
- */
-export function flowFill(r: Region, graph: Graph | null, orient: Orientation, p: FillParams, start: Pt): FlowResult | null {
-  const g = new Grid(r);
-  return fieldFill(r, g, field(r, g, graph, orient), p, start);
 }
 
 /** A direction field over a region, as doubled-angle vectors per cell of its grid. */
@@ -432,69 +53,42 @@ export interface DirField {
   s: Float32Array;
 }
 
+/** A field the core made. */
+export function fieldOf(o: FieldOut): DirField {
+  const f = { g: { cell: o.cell, gw: o.gw, gh: o.gh, ox: o.ox, oy: o.oy }, c: o.takeC(), s: o.takeS() };
+  o.free();
+  return f;
+}
+
+/**
+ * Fill following the image's direction; null when the region has no direction to follow (the
+ * caller fills it straight at the usual angle) or curved rows fail the checks.
+ */
+export function flowFill(r: Region, graph: Graph | null, orient: Orientation, p: FillParams, start: Pt): FlowResult | null {
+  // Only the image window the region's grid looks at crosses (see Grid in flow.rs).
+  const { width, height } = orient;
+  const cell = Math.max(CELL_MIN, Math.sqrt((r.w * r.h * r.pxMm * r.pxMm) / CELLS));
+  const pad = Math.ceil(cell / r.pxMm) + 2;
+  const cx0 = Math.min(width - 1, Math.max(0, r.x0));
+  const cy0 = Math.min(height - 1, Math.max(0, r.y0));
+  const cx1 = Math.max(cx0 + 1, Math.min(width, r.x0 + r.w + pad));
+  const cy1 = Math.max(cy0 + 1, Math.min(height, r.y0 + r.h + pad));
+  const cw = cx1 - cx0;
+  const c = new Float32Array(cw * (cy1 - cy0));
+  const s = new Float32Array(c.length);
+  for (let y = cy0; y < cy1; y++) {
+    c.set(orient.c.subarray(y * width + cx0, y * width + cx1), (y - cy0) * cw);
+    s.set(orient.s.subarray(y * width + cx0, y * width + cx1), (y - cy0) * cw);
+  }
+  const res = core().flowFill(regionIn(r), graph, c, s, cx0, cy0, cw, width, height, coreParams(p), start[0], start[1], ...coreRegions(r, p));
+  return fillOf(res, true) as FlowResult | null;
+}
+
 /**
  * Field of rows that run along the outline (contour fill): at every cell the direction across the
  * gradient of the distance to the edge, so rows form rings inside the shape.
  */
-export function contourField(r: Region): DirField {
-  const g = new Grid(r);
-  const n = g.gw * g.gh;
-  const c = new Float32Array(n);
-  const s = new Float32Array(n);
-  for (let j = 1; j < g.gh - 1; j++) {
-    for (let i = 1; i < g.gw - 1; i++) {
-      const k = j * g.gw + i;
-      if (!g.dom[k]) continue;
-      const dx = g.sdf[k + 1] - g.sdf[k - 1];
-      const dy = g.sdf[k + g.gw] - g.sdf[k - g.gw];
-      const l = Math.hypot(dx, dy);
-      if (l < 1e-6) continue;
-      // Along the edge: the gradient turned by 90 degrees, which flips the doubled angle.
-      const ca = dx / l;
-      const sa = dy / l;
-      c[k] = -(ca * ca - sa * sa);
-      s[k] = -(2 * ca * sa);
-    }
-  }
-  const rad = Math.max(1, Math.round(0.6 / g.cell));
-  return { g, c: blurDomain(c, g, rad), s: blurDomain(s, g, rad) };
-}
-
-/**
- * Field of the directions of given stitches (rows as sewn), spread over the whole region: keeps
- * the look of curved rows when they are sewn anew at another spacing.
- */
-export function stitchField(r: Region, lines: [Pt, Pt][]): DirField {
-  const g = new Grid(r);
-  const n = g.gw * g.gh;
-  const c = new Float32Array(n);
-  const s = new Float32Array(n);
-  const w = new Float32Array(n);
-  for (const [a, b] of lines) {
-    const l = dist(a, b);
-    if (l < 1e-6) continue;
-    const t = Math.atan2(b[1] - a[1], b[0] - a[0]);
-    const cc = Math.cos(2 * t);
-    const ss = Math.sin(2 * t);
-    const steps = Math.max(1, Math.ceil(l / (g.cell / 2)));
-    for (let q = 0; q <= steps; q++) {
-      const k = g.index([a[0] + ((b[0] - a[0]) * q) / steps, a[1] + ((b[1] - a[1]) * q) / steps]);
-      if (k < 0 || !g.dom[k]) continue;
-      c[k] += cc;
-      s[k] += ss;
-      w[k] += 1;
-    }
-  }
-  const rad = Math.max(1, Math.round(SMOOTH_MM / g.cell / 1.7));
-  const bc = blurDomain(c, g, rad);
-  const bs = blurDomain(s, g, rad);
-  const bw = blurDomain(w, g, rad);
-  for (let k = 0; k < n; k++) {
-    bc[k] = bw[k] > 1e-6 ? bc[k] / bw[k] : 0;
-    bs[k] = bw[k] > 1e-6 ? bs[k] / bw[k] : 0;
-  }
-  return { g, c: bc, s: bs };
-}
+export const contourField = (r: Region): DirField => fieldOf(core().contourField(regionIn(r)));
 
 /**
  * Field of guide lines drawn on a fill (Ink/Stitch's guided fill): every cell takes the direction
@@ -502,59 +96,20 @@ export function stitchField(r: Region, lines: [Pt, Pt][]): DirField {
  * gives rows parallel to it and several guides blend from one to the next.
  */
 export function guideField(r: Region, guides: Pt[][]): DirField {
-  const g = new Grid(r);
-  const n = g.gw * g.gh;
-  const c = new Float32Array(n);
-  const s = new Float32Array(n);
-  const segs: { a: Pt; b: Pt; cc: number; ss: number; guide: number }[] = [];
-  guides.forEach((line, k) => {
-    for (let i = 1; i < line.length; i++) {
-      const a = line[i - 1];
-      const b = line[i];
-      if (dist(a, b) < 1e-6) continue;
-      const t = Math.atan2(b[1] - a[1], b[0] - a[0]);
-      segs.push({ a, b, cc: Math.cos(2 * t), ss: Math.sin(2 * t), guide: k });
-    }
-  });
-  if (!segs.length) return { g, c, s };
-  const near = new Float64Array(guides.length);
-  const nc = new Float64Array(guides.length);
-  const ns = new Float64Array(guides.length);
-  for (let k = 0; k < n; k++) {
-    if (!g.dom[k]) continue;
-    const p = g.center(k % g.gw, Math.floor(k / g.gw));
-    near.fill(Infinity);
-    for (const sg of segs) {
-      const dx = sg.b[0] - sg.a[0];
-      const dy = sg.b[1] - sg.a[1];
-      const t = Math.max(0, Math.min(1, ((p[0] - sg.a[0]) * dx + (p[1] - sg.a[1]) * dy) / (dx * dx + dy * dy)));
-      const d = Math.hypot(sg.a[0] + dx * t - p[0], sg.a[1] + dy * t - p[1]);
-      if (d < near[sg.guide]) {
-        near[sg.guide] = d;
-        nc[sg.guide] = sg.cc;
-        ns[sg.guide] = sg.ss;
-      }
-    }
-    for (let q = 0; q < guides.length; q++) {
-      if (!Number.isFinite(near[q])) continue;
-      const w = 1 / (near[q] * near[q] + 0.25);
-      c[k] += w * nc[q];
-      s[k] += w * ns[q];
-    }
-    const l = Math.hypot(c[k], s[k]);
-    if (l > 1e-12) {
-      c[k] /= l;
-      s[k] /= l;
-    }
+  const flat = new Float64Array(2 * guides.reduce((n, l) => n + l.length, 0));
+  let i = 0;
+  for (const l of guides) {
+    flat.set(flatOf(l), i);
+    i += 2 * l.length;
   }
-  const rad = Math.max(1, Math.round(0.6 / g.cell));
-  return { g, c: blurDomain(c, g, rad), s: blurDomain(s, g, rad) };
+  return fieldOf(core().guideField(regionIn(r), flat, Uint32Array.from(guides, (l) => l.length)));
 }
 
 /**
  * Fill along a direction field: straight tatami rows when the field has nearly one direction
  * (unless `curvedOnly`), else curved rows; null when there is no direction or the rows fail the
- * checks. `peak` is the highest density allowed anywhere, in times the nominal 1 / spacing.
+ * checks. `peak` is the highest density allowed anywhere, in times the nominal 1 / spacing. The
+ * field must have been made for `r` (its grid `g` is the region's).
  */
 export function fieldFill(
   r: Region,
@@ -566,171 +121,9 @@ export function fieldFill(
   peak = FLOW_PEAK,
   cover = FLOW_COVER,
 ): FlowResult | null {
-  const { c, s } = f;
-  let sc = 0;
-  let ss = 0;
-  let sm = 0;
-  let cells = 0;
-  for (let k = 0; k < c.length; k++) {
-    if (!g.dom[k] || g.sdf[k] >= 0) continue;
-    sc += c[k];
-    ss += s[k];
-    sm += Math.hypot(c[k], s[k]);
-    cells++;
-  }
-  if (!cells || sm / cells < WEAK) return null;
-  const mean = (Math.atan2(ss, sc) / 2) * (180 / Math.PI);
-  if (!curvedOnly && Math.hypot(sc, ss) / sm > UNIFORM) {
-    const res = fillRegion(r, { ...p, angle: mean }, start);
-    return res && { ...res, curved: false };
-  }
-
-  // Curved rows; with spacingEnd as a gradient across the shape, at right angles to the mean direction.
-  const end = p.spacingEnd ?? p.spacing;
-  const graded = Math.abs(end - p.spacing) >= 1e-3;
-  const at = graded ? spacingAcross(r, mean, p.spacing, end) : undefined;
-  const [dense, open] = [Math.min(p.spacing, end), Math.max(p.spacing, end)];
-  const rows = streamlines(r, g, c, s, p.spacing, at, open).map((line) => lengthen(simplify(line, 0.02), p.pull));
-  if (!rows.length) return null;
-  // The rows must not crowd or leave gaps; checked before anything is sewn.
-  if (peakDensity(rows) > peak / dense || coverage(r, rows, open * 0.75) < cover) return null;
-
-  return sewRows(r, rows, p, start, mean, open);
-}
-
-/**
- * Curved rows (each a line through the area) sewn one after the other: underlay at `mean` degrees
- * first when asked, then the rows joined into chains (rowChains: rows whose ends lie close by,
- * within `widest` rows with the step inside the area, are joined straight), the chains in the order
- * planned on the travel grid as sections of straight rows are (beamOnGrid, planOnGrid): the next is
- * the one reached by the shortest way hidden under rows still to come, so the needle does not run
- * back along the outline on top of sewn rows. Between chains travel runs under rows not sewn yet,
- * else the needle jumps. `stitched` rows are needle
- * points already (else they are cut into stitches here).
- */
-export function sewRows(r: Region, rows: Pt[][], p: FillParams, start: Pt, mean: number, widest = p.spacing, stitched = false): FlowResult {
-  const runs: Pt[][] = [];
-  const grid = new TravelGrid(p.travel ?? r, p.offRowEnds);
-  grid.walks = !!p.saveTrims;
-  let pos = p.underlay ? sewUnderlay(r, mean, p, start, grid, runs) : start;
-  const under = pointCount(runs);
-  let cur: Pt[] | null = runs.length ? runs[runs.length - 1] : null;
-  const reach = 2.5 * widest + 0.3;
-  const half = p.spacing / 2;
-  const trail: [number, number][] = [];
-  // A row starting this close is joined straight, while the step stays inside the area.
-  const straight = (a: Pt, b: Pt) => {
-    const d = dist(a, b);
-    return d <= 1 || (d < reach && sample(r, r.sdf, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2) < half);
-  };
-  const chains = rowChains(rows, straight, reach);
-  const ends = (c: Pt[][]): [Pt, Pt] => [c[0][0], c[c.length - 1][c[c.length - 1].length - 1]];
-  const pieces: Pieces<Pt[][], { p: Pt; rev: boolean }> = {
-    ways: (c) => [
-      { p: ends(c)[0], rev: false },
-      { p: ends(c)[1], rev: true },
-    ],
-    exit: (c, w) => ends(c)[w.rev ? 0 : 1],
-    prints: (c) => c.flatMap((row) => row.slice(1).map((q, i) => grid.footprint(row[i], q, half))),
-    straight,
-  };
-  for (const row of rows) for (let i = 1; i < row.length; i++) grid.expect(row[i - 1], row[i], half);
-  const { order } = chains.length <= BEAM_PIECES ? beamOnGrid(pieces, chains, pos, grid) : planOnGrid(pieces, chains, pos, grid);
-  let count = 0;
-  for (const { s: chain, e } of order) {
-    const lines = e.rev ? chain.slice().reverse().map((row) => row.slice().reverse()) : chain;
-    const pts: Pt[] = [];
-    for (const line of lines) {
-      const row = stitched ? line : rowStitches({ k: count++, pts: line }, p.stitch, p.tolerance ?? TOLERANCE);
-      // Rows this close share the hole where they turn, as tatami rows do (see SHARED_TURN).
-      const last = pts[pts.length - 1];
-      pts.push(...(last && row.length > 1 && dist(last, row[0]) <= SHARED_TURN + 1e-3 ? row.slice(1) : row));
-    }
-    const bd = dist(pos, pts[0]);
-    let travel: Pt[] | null = null;
-    if (cur && straight(pos, pts[0])) travel = [pos, pts[0]];
-    else if (cur) {
-      const path = grid.path(pos, pts[0], true);
-      if (path && pathLength(path) < grid.way(bd)) travel = runStitch(path, TRAVEL_STITCH, TRAVEL_TOLERANCE);
-    }
-    if (cur && travel && travel.length > 2) noteTravel(trail, runs, travel.length);
-    if (cur && travel) cur.push(...travel.slice(1), ...pts.slice(1));
-    else {
-      cur = pts;
-      runs.push(cur);
-    }
-    for (const row of chain) for (let i = 1; i < row.length; i++) grid.cover(row[i - 1], row[i], half);
-    pos = pts[pts.length - 1];
-  }
-
-  return { runs, angle: mean, curved: true, under, travel: trail };
-}
-
-/**
- * The rows joined into chains sewn back and forth in one go, independent of where sewing starts:
- * row ends close enough to step straight (see `straight`) are paired, shortest step first, each end
- * at most once and never into a loop (a path cover by greedy matching, as Kruskal builds a tree).
- * `straight` holds only for ends less than `reach` (or 1 mm) apart.
- * Each chain lists its rows in sewing order, each turned to start where the one before ends.
- */
-export function rowChains(rows: Pt[][], straight: (a: Pt, b: Pt) => boolean, reach: number): Pt[][][] {
-  const n = rows.length;
-  const endOf = (e: number): Pt => (e % 2 ? rows[e >> 1][rows[e >> 1].length - 1] : rows[e >> 1][0]);
-  const links: { a: number; b: number; d: number }[] = [];
-  // Ends on a grid of cells `reach` wide, so only ends near each other are compared.
-  const cell = Math.max(reach, 1);
-  const grid = new Map<string, number[]>();
-  for (let e = 0; e < 2 * n; e++) {
-    const q = endOf(e);
-    const k = `${Math.floor(q[0] / cell)},${Math.floor(q[1] / cell)}`;
-    (grid.get(k) ?? grid.set(k, []).get(k)!).push(e);
-  }
-  for (let e = 0; e < 2 * n; e++) {
-    const q = endOf(e);
-    const ci = Math.floor(q[0] / cell);
-    const cj = Math.floor(q[1] / cell);
-    for (let dj = -1; dj <= 1; dj++) {
-      for (let di = -1; di <= 1; di++) {
-        for (const f of grid.get(`${ci + di},${cj + dj}`) ?? []) {
-          if (f <= e || f >> 1 === e >> 1) continue;
-          const o = endOf(f);
-          if (straight(q, o)) links.push({ a: e, b: f, d: dist(q, o) });
-        }
-      }
-    }
-  }
-  links.sort((x, y) => x.d - y.d);
-  const mate = new Int32Array(2 * n).fill(-1);
-  const root = Int32Array.from({ length: n }, (_, i) => i);
-  const find = (i: number): number => (root[i] === i ? i : (root[i] = find(root[i])));
-  for (const { a, b } of links) {
-    if (mate[a] >= 0 || mate[b] >= 0) continue;
-    const ra = find(a >> 1);
-    const rb = find(b >> 1);
-    if (ra === rb) continue;
-    mate[a] = b;
-    mate[b] = a;
-    root[ra] = rb;
-  }
-  const chains: Pt[][][] = [];
-  const seen = new Uint8Array(n);
-  for (let i = 0; i < n; i++) {
-    if (seen[i]) continue;
-    // Walk to one end of the chain, then along it.
-    let e = 2 * i;
-    while (mate[e] >= 0) e = mate[e] ^ 1;
-    const chain: Pt[][] = [];
-    for (;;) {
-      const r = e >> 1;
-      seen[r] = 1;
-      chain.push(e % 2 ? rows[r].slice().reverse() : rows[r]);
-      const out = e ^ 1;
-      if (mate[out] < 0) break;
-      e = mate[out];
-    }
-    chains.push(chain);
-  }
-  return chains;
+  void g;
+  const res = core().fieldFill(regionIn(r), f.c, f.s, coreParams(p), start[0], start[1], curvedOnly, peak, cover, ...coreRegions(r, p));
+  return fillOf(res, true) as FlowResult | null;
 }
 
 /**
@@ -741,5 +134,5 @@ export function rowChains(rows: Pt[][], straight: (a: Pt, b: Pt) => boolean, rea
  * Each ring passes on to the next over a few millimetres, without a step (see rings.ts).
  */
 export function contourFill(r: Region, p: FillParams, start: Pt): FillResult | null {
-  return ringFill(r, p, start, 'contour', chooseAngle(r, p.spacing, []));
+  return fillOf(core().contourFill(regionIn(r), coreParams(p), start[0], start[1], ...coreRegions(r, p)));
 }

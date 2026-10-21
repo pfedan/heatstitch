@@ -46,15 +46,13 @@ export function partSteps(part: Rails[], s: SatinSettings, trimMm: number): Part
   const sewn: SewnStep[] = [];
   const runs = satinRuns(part, s, sewn);
   if (!sewn.length) return [];
-  const shown = sewn.length > 1 ? shownAmong(part) : null;
   // Only between columns of a part sewn as whole columns: its columns can be put in chains.
   const chainable = part.every((r) => r.chain !== undefined || sectionsOf(r).length < 2);
-  const later = new Uint8Array(part.length);
   const ends = (a: [Pt[], Pt[]], end: boolean): Pt => {
     const [l, r] = end ? [a[0][a[0].length - 1], a[1][a[1].length - 1]] : [a[0][0], a[1][0]];
     return [(l[0] + r[0]) / 2, (l[1] + r[1]) / 2];
   };
-  return sewn.map((x, i) => {
+  const steps: PartStep[] = sewn.map((x, i) => {
     const r = part[x.col];
     const plan = x.step !== undefined ? sectionPlan(r, s) : null;
     const mirror = plan ? !!plan[x.step!]?.mirror : !!r.mirror;
@@ -73,17 +71,19 @@ export function partSteps(part: Rails[], s: SatinSettings, trimMm: number): Part
       join = trimBefore.has(runs[x.run]) || d > trimMm ? 'trim' : d <= 1 ? 'way' : 'jump';
       way = [a, b];
     }
-    let shows = 0;
-    if (join !== 'trim' && shown) {
-      // Hidden under what is still to come of the part: this piece's column and those after it.
-      later.fill(0, 0, x.col).fill(1, x.col);
-      const v = shown(way, later);
-      shows = v.bare + v.over;
-    }
     // Sections of one column take a trim between them; between columns the part may become chains.
     const cuttable = prev.col === x.col ? x.step !== undefined : chainable;
-    return { ...base, join, way, shows, cuttable };
+    return { ...base, join, way, shows: 0, cuttable };
   });
+  // How much of each way shows, all asked at once: hidden under what is still to come of the part
+  // (this piece's column and those after it).
+  const asked = steps.filter((x, i) => i && x.join !== 'trim');
+  const shown = shownAmong(
+    part,
+    asked.map((x) => ({ way: x.way, later: new Uint8Array(part.length).fill(1, x.col) })),
+  );
+  asked.forEach((x, k) => (x.shows = shown[k].bare + shown[k].over));
+  return steps;
 }
 
 /** The part with step `i` turned round: its satin from the other end. */

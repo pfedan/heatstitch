@@ -70,13 +70,10 @@ import { satinOf as lineSatinOf } from '../../src/model/along';
 import { partSteps, type PartStep } from '../../src/model/satinOrder';
 import { clickControl, dragNumber } from './satinView';
 import type { Pt } from '../../src/digitize/skeleton';
-import { areaOfForm, bandForm, gapAt, intersectForms, loadOps, subtractForm, withCrossingNodes } from '../../src/shape/ops';
+import { areaOfForm, bandForm, gapAt, intersectForms, subtractForm, withCrossingNodes } from '../../src/shape/ops';
 import { gapPlace, obstaclesOf } from '../../src/model/gapFill';
 import { joinEnd, joinOpenPaths, splitPathAt, JOIN_SNAP_MM, type Joined } from '../../src/shape/join';
 import { areaOf, fillArea, fits, formKey, geoOf, geoUse, guessArea, guessGeo, guessLine, lineGeoOf, openOf, withGeo } from '../../src/model/geo';
-
-// Joining and cutting run on the curves (paper.js), loaded once.
-await loadOps();
 
 /**
  * The torture test: random chains of the operations the app offers on objects (add, duplicate (also

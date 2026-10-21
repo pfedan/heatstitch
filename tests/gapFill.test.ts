@@ -1,5 +1,5 @@
-import { beforeAll, describe, expect, it } from 'vitest';
-import { areaOfForm, gapAt, loadOps, type Obstacle } from '../src/shape/ops';
+import { describe, expect, it } from 'vitest';
+import { areaOfForm, gapAt, type Obstacle } from '../src/shape/ops';
 import { flatten, type Form } from '../src/shape/path';
 import { ellipsePath, parsePath } from '../src/shape/svgPath';
 
@@ -15,8 +15,6 @@ const box = (f: Form) => {
   const ys = pts.map((q) => q[1]);
   return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)].map((v) => Math.round(v * 100) / 100);
 };
-
-beforeAll(() => loadOps());
 
 describe('gapAt (Flächen-Werkzeug)', () => {
   // A frame: a square with a square hole.

@@ -14,6 +14,7 @@ import { de as swatch } from './areas/swatch';
 import { de as measure } from './areas/measure';
 import { de as applique } from './areas/applique';
 import { de as library } from './areas/library';
+import { de as boot } from './areas/boot';
 
 export const deBase = {
   'app.docs': 'Anleitung',
@@ -1538,4 +1539,4 @@ export const deBase = {
 } as const;
 
 /** All German texts: the base plus one block per area of the new interface (src/i18n/areas). */
-export const de = { ...deBase, ...shell, ...files, ...objects, ...shapes, ...stitches, ...check, ...image, ...design, ...ready, ...ampel, ...responsive, ...fabrics, ...swatch, ...measure, ...applique, ...library } as const;
+export const de = { ...deBase, ...shell, ...files, ...objects, ...shapes, ...stitches, ...check, ...image, ...design, ...ready, ...ampel, ...responsive, ...fabrics, ...swatch, ...measure, ...applique, ...library, ...boot } as const;

@@ -60,11 +60,10 @@ jobs:
             exit 1
           fi
 
-      - uses: actions/setup-node@v4
+      # One job alone: it builds the core itself.
+      - uses: ./.github/actions/setup
         with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
+          core: build
       - run: npm run build
         env:
           CHANNEL: ${{ github.event.release.prerelease && 'beta' || 'release' }}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { crossCells, crossFill, crossPasses, embossPoints, onGrid, gridFill, motifInside, mazeFill, meanderFill, motifCrossings, regionBox, type OpenParams } from '../src/digitize/deco';
+import { crossCells, crossFill, onGrid, gridFill, mazeFill, meanderFill, regionBox, type OpenParams } from '../src/digitize/deco';
 import { digitizeDefaults } from '../src/digitize/digitize';
 import { fillRegion } from '../src/digitize/fill';
 import { buildRegion, sample, type Region } from '../src/digitize/region';
@@ -59,39 +59,6 @@ function cross(a: Pt, b: Pt, c: Pt, d: Pt): boolean {
 }
 
 describe('embossing', () => {
-  it('puts a needle point on every crossing of a motif line and keeps stitches short', () => {
-    const row = { o: [0, 7.3] as Pt, e: [1, 0] as Pt };
-    const cr = motifCrossings('diamonds', 10, row, 0, 40);
-    expect(cr.length).toBeGreaterThan(4);
-    const regular = Array.from({ length: 11 }, (_, i) => i * 4);
-    const pts = embossPoints(cr, regular, 4, 0, 40);
-    for (const c of cr) expect(pts.some((u) => Math.abs(u - c) < 1e-9 || Math.abs(u - c) < 0.6)).toBe(true);
-    const all = [0, ...pts, 40];
-    for (let i = 1; i < all.length; i++) expect(all[i] - all[i - 1]).toBeLessThanOrEqual(4 * 1.4 + 1e-9);
-    for (let i = 1; i < pts.length; i++) expect(pts[i]).toBeGreaterThan(pts[i - 1]);
-  });
-
-  it('keeps the motifs upright in the design, whatever the row direction', () => {
-    // A row at 0 and one at 180 degrees through the same line cross the motif at the same points.
-    const a = motifCrossings('stars', 8, { o: [0, 5], e: [1, 0] }, 0, 40);
-    const b = motifCrossings('stars', 8, { o: [40, 5], e: [-1, 0] }, 0, 40).map((u) => 40 - u).reverse();
-    expect(a.length).toBeGreaterThan(2);
-    a.forEach((u, i) => expect(b[i]).toBeCloseTo(u, 6));
-  });
-
-  it('knows what lies inside a motif', () => {
-    // Size 10: a diamond per 10 x 18.8 mm tile, stars and hearts at a quarter and three quarters.
-    expect(motifInside('diamonds', 10, [5, 9.4])).toBe(true);
-    expect(motifInside('diamonds', 10, [1, 1])).toBe(false);
-    expect(motifInside('diamonds', 10, [25, 9.4 + 18.8])).toBe(true);
-    expect(motifInside('stars', 10, [2.5, 4.75])).toBe(true);
-    expect(motifInside('stars', 10, [7.5, 4.75])).toBe(false);
-    expect(motifInside('hearts', 10, [7.5, 14.25])).toBe(true);
-    expect(motifInside('waves', 10, [5, 3])).toBe(true);
-    expect(motifInside('waves', 10, [0, 3])).toBe(false);
-    expect(motifInside('waves', 10, [-5, 3])).toBe(true);
-  });
-
   it('sews shorter stitches inside the motif when it should show clearly', () => {
     const r = disc();
     const kinds = (strong: boolean) => {
@@ -238,7 +205,7 @@ describe('open patterns', () => {
       const { uses, off } = halves(res);
       expect(off).toEqual([]);
       const want = new Map<string, number>();
-      for (const [i, j] of cells) for (const q of ['lt', 'rt', 'lb', 'rb']) want.set(`${i},${j},${q}`, crossPasses(2.5));
+      for (const [i, j] of cells) for (const q of ['lt', 'rt', 'lb', 'rb']) want.set(`${i},${j},${q}`, 2);
       expect(new Map([...uses].sort())).toEqual(new Map([...want].sort()));
       // Each cell is in when the disk covers at least half of it: the crosses reach beyond the edge
       // by less than half a cell, and leave out less than half of one inside.
@@ -305,8 +272,6 @@ describe('open patterns', () => {
     });
 
     it('lays coarse crosses twice as often', () => {
-      expect(crossPasses(2.3)).toBe(2);
-      expect(crossPasses(3)).toBe(4);
       const g = { size: 3, angle: 0, origin: [0, 0] as Pt };
       const { uses, off } = halves(crossFill(square, { ...open, ...g }, 'full', [5, 5])!, g);
       expect(off).toEqual([]);

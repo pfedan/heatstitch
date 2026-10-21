@@ -470,9 +470,6 @@ export function entryOf(p: Pattern, first: number, last: number): Entry | undefi
   return undefined;
 }
 
-/** The entry with id `id` in `p`. */
-export const entryById = (p: Pattern, id: number): Entry | undefined => tableOf(p).entries.find((e) => e.id === id);
-
 /**
  * Sets what the object from record `first` to `last` knows (its stitches become one object when
  * they were not). A memory that names another object's id takes that id along when no other

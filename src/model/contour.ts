@@ -16,7 +16,7 @@ import type { PathStitch } from './along';
  * "Kontur drumherum": a line around objects at a distance, as an object of its own (proposal
  * "Vektorwerkzeuge" 3.3). What it goes round is what the objects cover as curves (areas, lines with
  * the width they are sewn in, satins between their rails); the contour is that grown by the distance
- * (Clipper2, curves fitted again, see offsetForm). Afterwards it is a line like any other.
+ * (polygons offset, curves fitted again, see offsetForm). Afterwards it is a line like any other.
  */
 
 /** Distance a new contour gets (mm). */
@@ -135,7 +135,7 @@ export interface Contoured {
 /**
  * A contour `d` mm around the objects `which` (one for all of them), sewn as running stitch in the
  * thread of the first, right after the last of them. Null when there is nothing to go round, or
- * nothing left at that distance. Needs `loadOps()`.
+ * nothing left at that distance.
  */
 export function addContour(p: Pattern, which: number[], d: number, options: { trimMm: number; tolerance?: number }): Contoured | null {
   const sel = [...new Set(which)].sort((a, b) => a - b);

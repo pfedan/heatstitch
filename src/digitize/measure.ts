@@ -1,3 +1,5 @@
+import { flatLines } from '../shape/cdt';
+import { core } from '../wasm/core';
 import type { Region } from './region';
 import type { Pt } from './skeleton';
 
@@ -46,34 +48,7 @@ export function peakCell(runs: Pt[][], skip?: (x: number, y: number) => boolean)
  * junction, which a triangle or a blot would get.
  */
 export function coverage(r: Region, runs: Pt[][], radMm = 0.2): number {
-  const hit = new Uint8Array(r.mask.length);
-  const rad = Math.max(1, Math.round(radMm / r.pxMm));
-  const step = r.pxMm / 2;
-  for (const run of runs) {
-    for (let i = 1; i < run.length; i++) {
-      const [x0, y0] = run[i - 1];
-      const [x1, y1] = run[i];
-      const n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / step));
-      for (let k = 0; k <= n; k++) {
-        const cx = Math.floor((x0 + ((x1 - x0) * k) / n) / r.pxMm) - r.x0;
-        const cy = Math.floor((y0 + ((y1 - y0) * k) / n) / r.pxMm) - r.y0;
-        for (let dy = -rad; dy <= rad; dy++) {
-          const y = cy + dy;
-          if (y < 0 || y >= r.h) continue;
-          for (let dx = -rad; dx <= rad; dx++) {
-            const x = cx + dx;
-            if (x >= 0 && x < r.w) hit[y * r.w + x] = 1;
-          }
-        }
-      }
-    }
-  }
-  let inside = 0;
-  let covered = 0;
-  for (let i = 0; i < r.mask.length; i++) {
-    if (!r.mask[i]) continue;
-    inside++;
-    covered += hit[i];
-  }
-  return inside ? covered / inside : 1;
+  // One call per object: the stamping is the costly part, done by the core (core/src/digitize/measure.rs).
+  const { flat, lens } = flatLines(runs);
+  return core().coverage(r.mask, r.w, r.h, r.x0, r.y0, r.pxMm, flat, lens, radMm);
 }

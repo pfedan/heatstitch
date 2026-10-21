@@ -1,0 +1,19 @@
+name: Build the core
+description: The compute core (core/) built to WebAssembly into src/wasm/pkg (npm run wasm).
+
+runs:
+  using: composite
+  steps:
+    # Rust comes with the runner; rustup picks the version, clippy and the WebAssembly target from
+    # rust-toolchain.toml. The compiled crates are kept per Cargo.lock, so a run only builds the core.
+    - run: rustup show active-toolchain
+      shell: bash
+    - uses: Swatinem/rust-cache@v2
+      with:
+        workspaces: core
+    - uses: taiki-e/install-action@v2
+      with:
+        # Pinned, so the cached module in deploy.yml (keyed on this file) is rebuilt when it changes.
+        tool: wasm-pack@0.15.0
+    - run: npm run wasm
+      shell: bash

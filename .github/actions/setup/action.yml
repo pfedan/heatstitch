@@ -1,0 +1,28 @@
+name: Set up
+description: Node with the app's packages and the compute core (src/wasm/pkg), from the run's wasm job or built here.
+
+inputs:
+  core:
+    description: "artifact: the core the wasm job of this run built (the job needs: wasm). build: compile it here, for a workflow without that job."
+    default: artifact
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+        cache: npm
+    - run: npm ci
+      shell: bash
+    - if: inputs.core == 'artifact'
+      uses: actions/download-artifact@v4
+      with:
+        name: core
+        path: src/wasm/pkg
+    # npm test, build and typecheck would build the core again first (scripts/wasm.mjs); here it is in place.
+    - if: inputs.core == 'artifact'
+      run: echo CORE_PREBUILT=1 >> "$GITHUB_ENV"
+      shell: bash
+    - if: inputs.core == 'build'
+      uses: ./.github/actions/core

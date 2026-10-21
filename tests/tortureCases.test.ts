@@ -13,7 +13,6 @@ import { isRedwork } from '../src/model/along';
 import { currentSettings } from '../src/correct/plan';
 import { deleteObjects, duplicateObject, duplicateObjects, mirrorMatrix, recolorObjects, subtractTop } from '../src/model/shapeOps';
 import { ellipsePath, parsePath, rectPath } from '../src/shape/svgPath';
-import { loadOps } from '../src/shape/ops';
 import { contourAt, gapReader } from '../src/model/contour';
 import { flatten, type Form } from '../src/shape/path';
 import { ID, options, T, COLORS, empty, knowledge, Doc, shapes, transform, boxOf, saveAndOpen, checkWellFormed, checkAllKnown, checkPartsFit, checkBorders, checkObjectList, checkKeys, checkKnockouts, checkAreas, checkCrosshatch, checkExport, checkSewDesign, checkFollowers, checkEchoes, checkRedwork, chain, borderedSquare, borderOf, restitchFill, squareOf, took, type Version } from './helpers/torture';
@@ -42,7 +41,6 @@ describe('found by the torture test', () => {
   }, 120_000);
 
   it('cutting out of a fill takes its border in a thread of its own along', async () => {
-    await loadOps();
     const d = borderedSquare();
     // A disc over the square's edge, in the square's thread and in the border's.
     for (const color of [COLORS[0], COLORS[1]]) {
@@ -56,7 +54,6 @@ describe('found by the torture test', () => {
   // Seed 211: the cutter's shadow, sewn before the cut fill, went with the cutter, and the cut fill
   // was named by an index off by one. Here the border of a covered fill does the same.
   it('cutting out names the cut fill, also when parts of what goes lie before it', async () => {
-    await loadOps();
     const d = borderedSquare();
     // A fill after the square's border, and on top a fill covering the square and part of it.
     let p = addShape(d.cur.p, { form: parsePath(rectPath(30, 30, 20, 10, 0, 0), ID), kind: 'fill' }, COLORS[2], null, options)!.pattern;
@@ -187,7 +184,6 @@ describe('found by the torture test', () => {
   });
 
   it('a contour around a jagged outline keeps its distance all along', async () => {
-    await loadOps();
     // The outline of a lettering read from its stitches, cut down (seed 251): on the 0.1 mm grid,
     // its offset has no corner over a long way and the fit splits it many times, mostly near an end.
     const pts: Pt[] = [
@@ -245,7 +241,6 @@ describe('a crosshatch fill', () => {
       .map((f) => `${f!.deco?.size ?? '-'}@${Math.round(f!.angle)}`);
 
   it('keeps it through duplicate, mirror, knockout, undo, redo, save and open, and is read back from the file', async () => {
-    await loadOps();
     const d = new Doc();
     shapes(d, addShape(empty, { form: parsePath(rectPath(0, 0, 30, 20, 0, 0), ID), kind: 'fill' }, COLORS[0], null, options)!.pattern);
     const fill = remembered(d.cur.p, d.objects[0])!.fill!;
@@ -365,7 +360,6 @@ describe('a line as redwork', () => {
   const trims = (d: { cur: Version }) => sewObjects(d.cur.p).map((o) => d.cur.p.cmd.slice(o.first, o.last).filter((c) => c === TRIM).length);
 
   it('keeps it through duplicate, mirror, knockout, undo, redo and save and open', async () => {
-    await loadOps();
     const d = new Doc();
     // A star of three strokes and a ring through them, apart from each other only where they cross.
     const form = parsePath(`M0 0 L30 30 M0 30 L30 0 M15 0 L15 30 ${ellipsePath(15, 15, 8, 8)}`, ID);
@@ -436,7 +430,6 @@ describe('a narrow drawn area sewn as satin', () => {
   };
 
   it('leaves out what lies on top, through duplicate, mirror, undo, redo and save and open', async () => {
-    await loadOps();
     const d = new Doc();
     // A strip 5 mm high: narrow enough that the drawn area is sewn as one satin column.
     shapes(d, addShape(empty, { form: parsePath(rectPath(0, 20, 60, 5, 0, 0), ID), kind: 'fill' }, COLORS[0], null, options)!.pattern);

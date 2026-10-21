@@ -23,7 +23,7 @@ import { isRigid, stitchesBefore, transformObject } from '../model/transform';
 import { LiveResew, type LiveResult } from '../resew/client';
 import { syncBorders } from '../model/border';
 import { canSplit, splitFill } from '../model/splitFill';
-import { gapFinder, loadOps, opsReady, type GapMode, type GapResult } from '../shape/ops';
+import { gapFinder, type GapMode, type GapResult } from '../shape/ops';
 import { gapPlace, obstaclesOf } from '../model/gapFill';
 import type { Obstacle } from '../shape/ops';
 import { t, formatNumber } from '../i18n';
@@ -97,10 +97,6 @@ export function bindDrawing(app: DrawingApp) {
   function gapLook(x: number, y: number): GapLook | null {
     const p = app.files.active?.pattern;
     if (!p) return null;
-    if (!opsReady()) {
-      void loadOps().then(() => drawTool.lookAt(x, y) && app.redraw());
-      return null;
-    }
     const obstacles = shownObstacles(p);
     const d = drawTool.gapMm;
     const mode = drawTool.gapMode;
@@ -161,7 +157,6 @@ export function bindDrawing(app: DrawingApp) {
    * with its own row direction, the parts selected after it (so a next cut can go on).
    */
   function cutSelected(line: Pt[]): void {
-    if (!opsReady()) return void loadOps().then(() => cutSelected(line));
     const f = app.files.active;
     const p = f?.pattern;
     if (!f || !p) return;
@@ -457,7 +452,14 @@ export function bindDrawing(app: DrawingApp) {
     }
     const kept = ui.selectedObjects;
     // The objects stay as many as they were.
-    const r = done ?? transformObjects(p, sel, m, app.settings.trimMm, app.seq);
+    // A core call that failed (out of memory on a huge design) loses this transform only.
+    let r: TransformedAll | null;
+    try {
+      r = done ?? transformObjects(p, sel, m, app.settings.trimMm, app.seq);
+    } catch (e) {
+      console.error(e);
+      r = null;
+    }
     if (!r) {
       app.layers.say(t('frame.failed'), true);
       app.redraw();

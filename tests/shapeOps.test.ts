@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { digitizeDefaults } from '../src/digitize/digitize';
 import { addShape } from '../src/model/addShape';
 import { wholeArea } from '../src/model/knockout';
@@ -18,13 +18,11 @@ import type { Mat } from '../src/shape/path';
 import { ellipsePath, parsePath, rectPath } from '../src/shape/svgPath';
 import { DEFAULT_PROFILE } from '../src/validation/profiles';
 import { guessArea } from '../src/model/geo';
-import { areaOfForm, loadOps } from '../src/shape/ops';
+import { areaOfForm } from '../src/shape/ops';
 import { reverseObjects } from '../src/model/reverse';
 import { parsePattern } from '../src/parsers';
 import { fromStored } from '../src/storage/fileStore';
 import { decodeProject } from '../src/storage/project';
-
-beforeAll(loadOps);
 
 const ID: Mat = [1, 0, 0, 1, 0, 0];
 const options = digitizeDefaults(DEFAULT_PROFILE);

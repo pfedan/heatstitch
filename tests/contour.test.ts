@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { digitizeDefaults } from '../src/digitize/digitize';
 import type { Pt } from '../src/digitize/skeleton';
 import { addShape } from '../src/model/addShape';
@@ -8,13 +8,11 @@ import { geoUse } from '../src/model/geo';
 import { sewObjects } from '../src/model/objects';
 import type { Pattern } from '../src/model/pattern';
 import { remembered } from '../src/model/restitch';
-import { loadOps } from '../src/shape/ops';
 import { flatten, type Form, type Mat } from '../src/shape/path';
 import { ellipsePath, parsePath, rectPath } from '../src/shape/svgPath';
 import { DEFAULT_PROFILE } from '../src/validation/profiles';
 
 const ID: Mat = [1, 0, 0, 1, 0, 0];
-beforeAll(loadOps);
 const options = digitizeDefaults(DEFAULT_PROFILE);
 const green = { r: 60, g: 170, b: 70 };
 const red = { r: 200, g: 30, b: 30 };
