@@ -58,13 +58,19 @@ export interface KeysApp {
 
 /** Keyboard shortcuts on the whole page (not while typing in a field). */
 export function bindKeys(app: KeysApp) {
+  // Fields with text typed and not yet taken over: Ctrl+Z there undoes the typing, in any other field
+  // (a size just entered with Enter, a switch) it undoes the last step of the design.
+  const typing = new WeakSet<EventTarget>();
+  document.addEventListener('input', (e) => e.target && typing.add(e.target), true);
+  document.addEventListener('change', (e) => e.target && typing.delete(e.target), true);
   window.addEventListener('keydown', (e) => {
+    const mod = e.ctrlKey || e.metaKey;
+    const step = mod && !e.altKey && ['z', 'Z', 'y'].includes(e.key);
     // Space passes a clicked switch (checkbox, radio) to reach the player below, like a button.
     const field = (e.target as HTMLElement).closest<HTMLElement>('input, select, textarea, [contenteditable]');
     const toggle = field instanceof HTMLInputElement && (field.type === 'checkbox' || field.type === 'radio');
-    if (field && !(toggle && e.key === ' ')) return;
-    const mod = e.ctrlKey || e.metaKey;
-    if (mod && !e.altKey && ['z', 'Z', 'y'].includes(e.key)) {
+    if (field && !(toggle && e.key === ' ') && !(step && !typing.has(e.target!))) return;
+    if (step) {
       e.preventDefault();
       app.history(e.key === 'y' || e.shiftKey ? 'redo' : 'undo');
       return;
