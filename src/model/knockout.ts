@@ -1,4 +1,5 @@
 import { expandRegion, type Region } from '../digitize/region';
+import { regionOf } from '../shape/rasterize';
 import { syncBorders } from './border';
 import { storeForm, type Form } from '../shape/path';
 import { coversOver, cutAway, SATIN_SHARE, type Cover } from './covers';
@@ -256,6 +257,37 @@ export function isCovered(p: Pattern, objs: SewObject[], o: SewObject): boolean 
   // What lies under a thin strip only is not covered: the part still sewn, grown by THIN_MM, reaches over it.
   const near = left && expandRegion(left, THIN_MM);
   return !near || outside(whole, near) * whole.pxMm * whole.pxMm >= NOTABLE_MM2;
+}
+
+/**
+ * What leaving out would take from the shape of `o`: the part that fills and satins sewn later
+ * cover, beyond the overlap it keeps under them (sewn twice while it is sewn whole). Null when nothing.
+ */
+export function coveredPart(p: Pattern, objs: SewObject[], o: SewObject): Region | null {
+  const known = remembered(p, o);
+  const form = areaOf(known);
+  const whole = form && wholeArea(form, known?.region?.pxMm ?? 0.1, growOf(known));
+  if (!whole) return null;
+  const left = cutAway(whole, coversOver(p, objs, o, whole.pxMm, known?.overlapShare ?? SATIN_SHARE));
+  if (left === whole) return null;
+  const mask = new Uint8Array(whole.w * whole.h);
+  let any = false;
+  for (let j = 0; j < whole.h; j++) {
+    for (let i = 0; i < whole.w; i++) {
+      const k = j * whole.w + i;
+      if (!whole.mask[k] || (left && covers(left, i + whole.x0, j + whole.y0))) continue;
+      mask[k] = 1;
+      any = true;
+    }
+  }
+  return any ? regionOf(mask, whole.x0, whole.y0, whole.w, whole.h, whole.pxMm) : null;
+}
+
+/** Whether region `r` holds the world pixel `x`, `y`. */
+function covers(r: Region, x: number, y: number): boolean {
+  const i = x - r.x0;
+  const j = y - r.y0;
+  return i >= 0 && j >= 0 && i < r.w && j < r.h && !!r.mask[j * r.w + i];
 }
 
 /** Pixels of `a` that `b` does not cover. */

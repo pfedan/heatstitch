@@ -9,6 +9,7 @@ import type { PlanPreview } from './types';
 import type { Highlight, StitchInfo } from '../ui/stitchPanel';
 import type { RestitchResult } from '../model/restitch';
 import type { Zone } from '../validation/validate';
+import type { OverlapMarks } from '../render/flow';
 
 /**
  * State several parts of the app read and change: selection, hover, the views on the stage and what
@@ -90,6 +91,8 @@ export const ui = {
   highlight: null as Highlight | null,
   /** The restitch behind `flowPreview` (it knows where the new underlay ends). */
   previewResult: null as RestitchResult | null,
+  /** Where fills of design `p` are sewn twice, marked while the card that offers leaving them out is shown. */
+  overlapMarks: null as (OverlapMarks & { p: Pattern }) | null,
   /** The color under the pointer in the layer list: shown alone while the pointer stays. */
   hoverBlock: null as number | null,
 };

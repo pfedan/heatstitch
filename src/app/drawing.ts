@@ -15,7 +15,9 @@ import { DrawTool, type DrawKind, type GapLook } from '../ui/drawTool';
 import { FrameTool, type ContourGrip, type SnapTargets } from '../ui/frameTool';
 import { digitizeDefaults, type Digitized, digitizeShapes } from '../digitize/digitize';
 import { nearestThread } from '../image/prepare';
-import { overlapsIn, setKnockout } from '../model/knockout';
+import { coveredPart, overlapsIn, setKnockout } from '../model/knockout';
+import { outline } from '../digitize/region';
+import { unionOf } from '../shape/rasterize';
 import { rememberedIn, objectKey } from '../model/restitch';
 import { rgbToLab } from '../image/color';
 import { scaleBlocked, transformObjects, type TransformedAll } from '../model/reshape';
@@ -238,7 +240,7 @@ export function bindDrawing(app: DrawingApp) {
   }
 
   // The card that offers leaving out what lies on top, when shapes overlap (never done unasked).
-  let overlapCache: { p: Pattern; list: number[] } | null = null;
+  let overlapCache: { p: Pattern; list: number[]; lines?: Pt[][] } | null = null;
   /** Files whose overlaps the user chose to keep as they are. */
   const overlapKept = new WeakSet<object>();
 
@@ -247,6 +249,21 @@ export function bindDrawing(app: DrawingApp) {
     return overlapCache.list;
   }
 
+  /** Where the fills of the card are sewn twice (mm): what leaving out would take away. */
+  function overlapLines(p: Pattern): Pt[][] {
+    const c = overlapCache!;
+    if (!c.lines) {
+      const objs = app.seq(p).objects;
+      // As one area: where several fills lie under the same one, their parts overlap.
+      const all = unionOf(c.list.map((i) => coveredPart(p, objs, objs[i])).filter((r) => !!r));
+      c.lines = all ? outline(all) : [];
+    }
+    return c.lines;
+  }
+
+  /** The pointer is on the card, or the focus is in it: the overlaps are shown clearly. */
+  let cardHot = { pointer: false, focus: false };
+
   function updateOverlapCard(): void {
     const f = app.files.active;
     const p = f?.pattern;
@@ -254,7 +271,26 @@ export function bindDrawing(app: DrawingApp) {
     const card = $('overlap-card');
     card.hidden = !list.length;
     if (list.length) $('overlap-text').textContent = t(list.length === 1 ? 'knockout.card.one' : 'knockout.card', { n: formatNumber(list.length) });
+    const lines = list.length ? overlapLines(p!) : null;
+    const was = ui.overlapMarks;
+    ui.overlapMarks = lines ? { p: p!, lines, strong: cardHot.pointer || cardHot.focus } : null;
+    // The card is brought up to date after the canvas is drawn: drawn again when its marks changed.
+    if ((was?.lines ?? null) !== lines) app.redraw();
   }
+
+  /** Marks the overlaps clearly or calmly as the card is pointed at, and draws them so. */
+  function heatCard(what: keyof typeof cardHot, on: boolean): void {
+    if (cardHot[what] === on) return;
+    cardHot = { ...cardHot, [what]: on };
+    if (!ui.overlapMarks) return;
+    ui.overlapMarks = { ...ui.overlapMarks, strong: cardHot.pointer || cardHot.focus };
+    app.redraw();
+  }
+  const overlapCard = $('overlap-card');
+  overlapCard.addEventListener('pointerenter', (e) => e.pointerType !== 'touch' && heatCard('pointer', true));
+  overlapCard.addEventListener('pointerleave', () => heatCard('pointer', false));
+  overlapCard.addEventListener('focusin', () => heatCard('focus', true));
+  overlapCard.addEventListener('focusout', (e) => !overlapCard.contains(e.relatedTarget as Node | null) && heatCard('focus', false));
 
   $('overlap-cut').addEventListener('click', () => {
     const p = app.files.active?.pattern;

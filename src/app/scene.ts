@@ -361,6 +361,8 @@ export function bindScene(app: SceneApp) {
       // The areas as recognized on the file itself, also while a change is previewed (not while
       // their shape is edited or the object is dragged: those show their own outline).
       outlines: app.files.active?.pattern && ui.selectedObjects.size && !app.shapeTool.active && app.frameTool.dragging === null ? app.stitchInfo(app.files.active.pattern, seq(app.files.active.pattern)).outlines : undefined,
+      // Not while a change is previewed or the frame dragged: they are where the design is now.
+      overlaps: !ui.flowPreview && app.frameTool.dragging === null && ui.overlapMarks?.p === p ? ui.overlapMarks : null,
       // Drawn over the stitches for the underlay and the border; echo copies and a shadow show as they are sewn.
       under: ui.hoverObject === null && (ui.highlight === 'under' || ui.highlight === 'border') ? underMask(p) : null,
       contour: ui.hoverObject === null && ui.highlight === 'border' && app.settings.autoHighlight ? contourLines(p) : null,
