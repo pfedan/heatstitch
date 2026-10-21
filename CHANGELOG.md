@@ -16,6 +16,8 @@ How it is kept (see [CONTRIBUTING.md](CONTRIBUTING.md#releases)):
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-21
+
 ### Deutsch
 
 - **Strg+D ohne Fäden über dem Satin:** Ein Satin aus mehreren verketteten Säulen, mit Strg+D an Ort und Stelle dupliziert oder rückwärts gestickt, legt die Wege zwischen seinen Säulen jetzt unter die Säulen, die danach kommen. Bisher liefen sie als sichtbare Laufstiche über den schon gestickten Satin.
