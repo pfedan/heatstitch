@@ -6,7 +6,7 @@ describe('the frame standing off the outline (level Form)', () => {
   const tool = (pad: number) => {
     const maps: Mat[] = [];
     const t = new FrameTool({ change: (m) => void maps.push(m), pad: () => pad });
-    t.open({ minX: 0, minY: 0, maxX: 20, maxY: 10 }, true);
+    t.open({ minX: 0, minY: 0, maxX: 20, maxY: 10 });
     return { t, maps };
   };
 

@@ -18,6 +18,7 @@ export interface Committed {
   pattern: Pattern;
   hand: number;
   restitched: boolean;
+  stretched: number;
   moved: number[] | null;
 }
 
@@ -115,7 +116,7 @@ export class LiveResew {
     if (c) {
       this.commits.delete(r.id);
       const d = r.done as ShippedTransform | null;
-      c.done(d ? { from: c.from, pattern: unship(d.pattern, c.from), hand: d.hand, restitched: d.restitched, moved: d.moved } : null);
+      c.done(d ? { from: c.from, pattern: unship(d.pattern, c.from), hand: d.hand, restitched: d.restitched, stretched: d.stretched, moved: d.moved } : null);
       return;
     }
     const b = this.busy;

@@ -30,7 +30,7 @@ export interface ObjectInfo {
   /** Its outline is being edited: nodes, and whether the selected one is round (null: none selected). */
   shaping: { nodes: number; smooth: boolean | null; picked?: number; line?: { closed: boolean }; kind?: 'band' } | null;
   /** The frame is on the one selected object; whether it can be scaled. */
-  frame: { canScale: boolean } | null;
+  frame: boolean;
   /** Why the selected objects cannot be sewn as one (several selected), or null. */
   mergeBlocked: Key | null;
   /** Some of the selected objects can be sewn from the other side (satins and fills). */
@@ -105,7 +105,7 @@ export class ObjectPanel {
 
   update(info: ObjectInfo | null, lang: string): void {
     this.info = info;
-    const key = [info?.objects, info?.selected.join(), info?.hand.join(), info?.editing?.selection ?? -1, info?.shapeable, info?.shaping?.nodes ?? -1, info?.shaping?.smooth, info?.shaping?.picked, info?.shaping?.line?.closed, info?.shaping?.kind, info?.frame?.canScale, !!info?.frame, info?.blend, info?.mergeBlocked, info?.reversible, info?.contour, lang];
+    const key = [info?.objects, info?.selected.join(), info?.hand.join(), info?.editing?.selection ?? -1, info?.shapeable, info?.shaping?.nodes ?? -1, info?.shaping?.smooth, info?.shaping?.picked, info?.shaping?.line?.closed, info?.shaping?.kind, info?.frame, info?.blend, info?.mergeBlocked, info?.reversible, info?.contour, lang];
     if (key.every((k, i) => k === this.key[i])) return;
     this.key = key;
     this.msg.hidden = true;
@@ -180,7 +180,6 @@ export class ObjectPanel {
    */
   private geometry(info: ObjectInfo, sel: SewObject[]): HTMLElement {
     const b = box(sel);
-    const hint = info.frame && !info.frame.canScale ? `${t('objects.geom.hint')}\n${t('objects.geom.mixed')}` : t('objects.geom.hint');
     const field = (v: number, label: string, onset: (v: number) => void, opts: { min?: number; disabled?: boolean } = {}) => {
       // Text, not a number field: the value reads with the decimal comma in German, and a comma or a point can be typed.
       const shown = formatNumber(v, 1);
@@ -206,8 +205,7 @@ export class ObjectPanel {
       });
       return i;
     };
-    const editable = !!info.frame;
-    const canScale = !!info.frame?.canScale;
+    const editable = info.frame;
     const typed = (which: 'w' | 'h', v: number) => {
       const old = which === 'w' ? b.w : b.h;
       if (!(v >= 1 && v <= 1000) || old <= 0.05 || Math.abs(v - old) < 0.05) return;
@@ -222,7 +220,7 @@ export class ObjectPanel {
       if (Math.abs(d) < 0.05 || Math.abs(v) > 1000) return;
       this.hooks.move(which === 'x' ? d : 0, which === 'y' ? d : 0);
     };
-    const lock = h('button', { type: 'button', class: 'icon size-lock', title: t('object.size.lock'), 'aria-label': t('object.size.lock'), 'aria-pressed': String(this.keepRatio), disabled: !canScale }, icon('obj-link'));
+    const lock = h('button', { type: 'button', class: 'icon size-lock', title: t('object.size.lock'), 'aria-label': t('object.size.lock'), 'aria-pressed': String(this.keepRatio), disabled: !editable }, icon('obj-link'));
     lock.addEventListener('click', () => {
       this.keepRatio = !this.keepRatio;
       lock.setAttribute('aria-pressed', String(this.keepRatio));
@@ -232,8 +230,8 @@ export class ObjectPanel {
     return h(
       'div',
       { class: `obj-geom${editable ? '' : ' readonly'}` },
-      h('span', { class: 'obj-geom-label', title: hint }, t('objects.size')),
-      h('span', { class: 'obj-geom-fields' }, field(b.w, t('object.size.w'), (v) => typed('w', v), { min: 1, disabled: !canScale }), times(), field(b.h, t('object.size.h'), (v) => typed('h', v), { min: 1, disabled: !canScale }), unit(), lock),
+      h('span', { class: 'obj-geom-label', title: t('objects.geom.hint') }, t('objects.size')),
+      h('span', { class: 'obj-geom-fields' }, field(b.w, t('object.size.w'), (v) => typed('w', v), { min: 1, disabled: !editable }), times(), field(b.h, t('object.size.h'), (v) => typed('h', v), { min: 1, disabled: !editable }), unit(), lock),
       h('span', { class: 'obj-geom-label', title: t('objects.pos.hint') }, t('objects.pos')),
       h('span', { class: 'obj-geom-fields' }, field(b.cx, t('objects.pos.x'), (v) => moved('x', v), { disabled: !editable }), h('span', { class: 'obj-x', 'aria-hidden': 'true' }, ' '), field(b.cy, t('objects.pos.y'), (v) => moved('y', v), { disabled: !editable }), unit(), h('span', { class: 'obj-lock-space' })),
       ...(info.contour != null ? this.gapRow(info.contour, unit) : []),

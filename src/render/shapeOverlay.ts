@@ -273,7 +273,7 @@ export function drawFrame(ctx: CanvasRenderingContext2D, vp: Viewport, f: FrameV
     ctx.fill();
     ctx.stroke();
   };
-  if (f.canScale) pts.forEach(([x, y], k) => handle(x, y, false, f.hover === k || f.dragging === k));
+  pts.forEach(([x, y], k) => handle(x, y, false, f.hover === k || f.dragging === k));
   // The turn handle on a short stem above the middle of the top side.
   const [tx, ty] = [(pts[0][0] + pts[1][0]) / 2, (pts[0][1] + pts[1][1]) / 2];
   const len = Math.hypot(pts[1][0] - pts[0][0], pts[1][1] - pts[0][1]) || 1;

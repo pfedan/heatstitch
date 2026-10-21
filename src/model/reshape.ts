@@ -414,12 +414,10 @@ export function inChainOrder(columns: Rails[], satin: SatinSettings): Rails[] {
   return out;
 }
 
-/** Why an object cannot be scaled (its parts would need different settings), or null. */
-export function scaleBlocked(p: Pattern, o: SewObject, kinds: Uint8Array): 'mixed' | null {
+/** Whether the parts of an object were sewn in fill and satin both, so no one set of settings sews it anew. */
+export function mixedParts(p: Pattern, o: SewObject, kinds: Uint8Array): boolean {
   const an = analyze(p, o, kinds);
-  const fill = an.parts.some((pt) => pt.kind === 'fill');
-  const satin = an.parts.some((pt) => pt.kind === 'satin');
-  return fill && satin ? 'mixed' : null;
+  return an.parts.some((pt) => pt.kind === 'fill') && an.parts.some((pt) => pt.kind === 'satin');
 }
 
 /** The settings an object is sewn with: what it remembers, else measured from its stitches. */
@@ -441,6 +439,8 @@ export interface Transformed {
   last: number;
   /** New stitches were made (scaled), so the density has to be measured again. */
   restitched: boolean;
+  /** Scaled with its stitches as they are, not sewn anew (fill and satin in one object, from a file). */
+  stretched?: boolean;
 }
 
 /**
@@ -488,6 +488,13 @@ export function transformSewObject(p: Pattern, objs: SewObject[], o: SewObject, 
     const next = sewList(p, list, trimMm);
     const now = sewObjects(next).find((x) => x.id === o.id);
     return now ? { pattern: next, first: now.first, last: now.last, restitched: true } : null;
+  }
+  // Fill and satin in one object from a file: one set of settings would sew it all as one kind
+  // (the satin edges of a fill sewn as fill), so its stitches are scaled as they are, the way they
+  // look, rather than holding back the objects scaled with it.
+  if (mixedParts(p, o, kinds)) {
+    const r = stitchesAlong(p, o, m, trimMm);
+    return r && { ...r, stretched: true };
   }
   // Nothing to sew it anew from (a satin made too narrow for rails is one line there and back, its
   // shape unknown and none to read from its stitches): its stitches are scaled as they are, rather
@@ -547,6 +554,8 @@ export interface TransformedAll {
   pattern: Pattern;
   hand: number;
   restitched: boolean;
+  /** How many of them were scaled with their stitches as they are (see Transformed.stretched). */
+  stretched: number;
 }
 
 /** The objects `sel` (in sewing order) transformed by `m`, the last first so the ones before keep their records. */
@@ -554,6 +563,7 @@ export function transformObjects(p: Pattern, sel: number[], m: Mat, trimMm: numb
   let cur = p;
   let hand = 0;
   let restitched = false;
+  let stretched = 0;
   for (const o of [...sel].reverse()) {
     const q = seq(cur);
     const obj = q.objects[o];
@@ -562,9 +572,10 @@ export function transformObjects(p: Pattern, sel: number[], m: Mat, trimMm: numb
     const r = transformSewObject(cur, q.objects, obj, q.kinds, m, trimMm);
     if (!r) return null;
     restitched ||= r.restitched;
+    if (r.stretched) stretched++;
     cur = r.pattern;
   }
-  return { pattern: cur, hand, restitched };
+  return { pattern: cur, hand, restitched, stretched };
 }
 
 /**

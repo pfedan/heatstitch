@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { sample } from '../src/digitize/region';
 import { sewObjects, type SewObject } from '../src/model/objects';
 import { STITCH, type Pattern } from '../src/model/pattern';
-import { reshapeFill, scaleBlocked, transformObjects, transformSewObject } from '../src/model/reshape';
+import { mixedParts, reshapeFill, transformObjects, transformSewObject } from '../src/model/reshape';
 import { analyze, measureFill, remember, remembered, rememberedIn, restoreRemembered } from '../src/model/restitch';
 import { stitchKinds } from '../src/model/sequence';
 import { parsePattern } from '../src/parsers';
@@ -40,7 +40,7 @@ const center = (p: Pattern, o: { first: number; last: number }) => {
   return [x / n, y / n];
 };
 
-const fillOf = (p: Pattern, objs: SewObject[], kinds: Uint8Array) => objs.find((o) => o.kind === 'fill' && scaleBlocked(p, o, kinds) === null && analyze(p, o, kinds).fill)!;
+const fillOf = (p: Pattern, objs: SewObject[], kinds: Uint8Array) => objs.find((o) => o.kind === 'fill' && !mixedParts(p, o, kinds) && analyze(p, o, kinds).fill)!;
 
 describe('moving, turning and scaling objects', () => {
   it('moves an object with its stitches as they are, and the object stays one', () => {
@@ -130,6 +130,28 @@ describe('scaling a satin too narrow for rails', () => {
     expect(center(r!.pattern, now)[1]).toBeCloseTo(10, 5);
     // The fill beside it was sewn anew, twice as wide.
     expect((after[0].maxX - after[0].minX) / 10).toBeGreaterThan(19);
+  });
+});
+
+describe('scaling objects of fill and satin at once', () => {
+  // The cat from a file: a few of its objects are fill and satin between the same two trims.
+  it('scales the whole cat, those objects with their stitches as they are and the rest sewn anew', () => {
+    const { p, kinds, objs } = setup('cat-60mm.pes');
+    const mixed = objs.filter((o) => mixedParts(p, o, kinds));
+    expect(mixed.length).toBeGreaterThan(0);
+    const r = transformObjects(p, objs.map((o) => o.index), scaling(1.25, 1.25, 0, 0), 3);
+    expect(r, 'the scaling goes through').toBeTruthy();
+    expect(r!.restitched).toBe(true);
+    expect(r!.stretched).toBeGreaterThan(0);
+    const after = sewObjects(r!.pattern);
+    expect(after.length).toBe(objs.length);
+    // Each one stretched keeps its stitches, a quarter larger: its satin edges stay satin.
+    const kept = mixed.flatMap((o) => after.filter((x) => x.id === o.id).map((now) => ({ o, now })));
+    expect(kept.length).toBe(r!.stretched);
+    for (const { o, now } of kept) {
+      expect(stitches(r!.pattern, now.first, now.last)).toBe(stitches(p, o.first, o.last));
+      expect((now.maxX - now.minX) / (o.maxX - o.minX)).toBeCloseTo(1.25, 1);
+    }
   });
 });
 

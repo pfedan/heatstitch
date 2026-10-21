@@ -21,7 +21,6 @@ export interface FrameView {
   shown(scale: number): Box;
   /** The map while dragging (identity otherwise). */
   m: Mat;
-  canScale: boolean;
   hover: FramePart | null;
   /** What is being dragged, for the label. */
   dragging: FramePart | null;
@@ -103,7 +102,6 @@ export class FrameTool implements FrameView {
   active = false;
   box: Box = { minX: 0, minY: 0, maxX: 0, maxY: 0 };
   m: Mat = IDENTITY;
-  canScale = true;
   hover: FramePart | null = null;
   dragging: FramePart | null = null;
   turn = 0;
@@ -120,10 +118,9 @@ export class FrameTool implements FrameView {
 
   constructor(private hooks: FrameHooks) {}
 
-  open(box: Box, canScale: boolean, targets: SnapTargets | null = null): void {
+  open(box: Box, targets: SnapTargets | null = null): void {
     this.active = true;
     this.box = box;
-    this.canScale = canScale;
     this.targets = targets;
     if (!this.dragging) this.m = IDENTITY;
   }
@@ -151,10 +148,8 @@ export class FrameTool implements FrameView {
     if (this.gap && Math.hypot(x - this.gap.at[0], y - this.gap.at[1]) < r) return 'gap';
     const cx = (b.minX + b.maxX) / 2;
     if (Math.hypot(x - cx, y - (b.minY - TURN_PX / scale)) < r) return 'turn';
-    if (this.canScale) {
-      const k = corners(b).findIndex(([px, py]) => Math.hypot(x - px, y - py) < r);
-      if (k >= 0) return k as 0 | 1 | 2 | 3;
-    }
+    const k = corners(b).findIndex(([px, py]) => Math.hypot(x - px, y - py) < r);
+    if (k >= 0) return k as 0 | 1 | 2 | 3;
     const m = 4 / scale;
     if (x >= b.minX - m && x <= b.maxX + m && y >= b.minY - m && y <= b.maxY + m) return 'move';
     return null;

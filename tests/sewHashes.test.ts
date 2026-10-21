@@ -10,7 +10,8 @@ import { designs, hashOf } from './helpers/exampleDesigns';
  * Whole designs sewn anew from their objects, as they are and scaled to 110 %, give the stitches
  * recorded in tests/fixtures/sew-hashes.json (recorded with the TypeScript before the sewing moved
  * to the Rust core, unchanged since but for svg fliegenpilz-quelle at 110 %: its 265 mm area,
- * grown past MAX_AREA_PX, is rastered in coarser pixels). A change that moves stitches on purpose
+ * grown past MAX_AREA_PX, is rastered in coarser pixels; and cat-60mm.pes at 110 %: its objects of
+ * fill and satin at once are stretched with their stitches, no longer sewn anew as fill). A change that moves stitches on purpose
  * records them anew: SEW_HASHES_ALL=1 SEW_HASHES_OUT=<file> writes every design's hashes and times there. By default
  * a quick share of the designs; SEW_HASHES_ALL=1 takes all of public/examples (about two minutes).
  *
