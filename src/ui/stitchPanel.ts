@@ -45,7 +45,7 @@ const ROW_END_CHOICES: RowEndChoice[] = ['standard', 'edge'];
 type BorderChoice = 'off' | BorderType;
 /** What hovering a group of settings shows on the canvas. */
 /** What the canvas shows while its settings are pointed at: the underlay, the border, a line's echo copies (all or copy n), its shadow. */
-export type Highlight = 'under' | 'border' | 'copies' | `copy${number}` | 'shadow';
+export type Highlight = 'under' | 'border' | 'copies' | `copy${number}` | 'shadow' | 'knockout';
 /** Kinds of stitch along a line, as buttons: a triple stitch is a running stitch sewn more often. */
 const BORDERS: BorderChoice[] = ['off', 'run', 'satin', 'zigzag', 'e', 'motif'];
 /** How often each stitch of a running stitch is sewn. */
@@ -2149,7 +2149,9 @@ export class StitchPanel {
   private knockoutSwitch(k: NonNullable<StitchInfo['knockout']>): HTMLElement {
     const i = h('input', { type: 'checkbox', checked: k.on === true, indeterminate: k.on === 'mixed' });
     i.addEventListener('change', () => this.hooks.knockout(i.checked));
-    const wrap = h('div', { class: 'knockout' }, h('label', { class: 'check', title: t('knockout.switch.hint') + (k.covered ? '' : ` ${t('knockout.nothingOnTop')}`) }, i, h('span', null, t('knockout.switch'))));
+    // Pointed at: where the selected fills are sewn twice (what leaving out takes away) is marked.
+    const wrap = this.lights(h('div', { class: 'knockout' }), 'knockout');
+    wrap.append(h('label', { class: 'check', title: t('knockout.switch.hint') + (k.covered ? '' : ` ${t('knockout.nothingOnTop')}`) }, i, h('span', null, t('knockout.switch'))));
     if (k.on) {
       const share = { v: k.share };
       wrap.append(
