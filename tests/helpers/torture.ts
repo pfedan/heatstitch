@@ -11,7 +11,7 @@ import { ECHO_SIDES } from '../../src/digitize/echo';
 import { HAND_STITCHES, HAND_WIDTH, LINE_MOTIFS } from '../../src/digitize/motif';
 import { partOf, type LinePart } from '../../src/model/shadow';
 import { fillToLine, lineStitches, lineToFill, resewLine } from '../../src/model/line';
-import { overlapsIn, refreshKnockouts, setKnockout } from '../../src/model/knockout';
+import { overlapsIn, refreshKnockouts, setCoverMode, setKnockout, type CoverMode } from '../../src/model/knockout';
 import { rememberObjects, sewObjects, tableOf, type SewObject } from '../../src/model/objects';
 import { COLOR_CHANGE, END, STITCH, TRIM, type Pattern, type ThreadColor } from '../../src/model/pattern';
 import { sameColor } from '../../src/model/recolor';
@@ -889,7 +889,9 @@ export const OPS: Op[] = [
       const fills = d.objects.filter((o) => areaOf(remembered(d.cur.p, o)) && !remembered(d.cur.p, o)?.free);
       if (!fills.length) return false;
       const o = pick(r, fills);
-      const k = setKnockout(d.cur.p, [o.index], !remembered(d.cur.p, o)!.knockout, T);
+      // As the choice under later objects: leaving out on, or off to sewing all or without underlay there.
+      const mode: CoverMode = remembered(d.cur.p, o)!.knockout ? (o.index % 2 ? 'under' : 'all') : 'out';
+      const k = setCoverMode(d.cur.p, [o.index], mode, T);
       if (!k) return false;
       d.commit(k.pattern);
       return true;
@@ -2571,6 +2573,9 @@ export function checkCopiedChains(p: Pattern, copies: number[]): void {
 /** What leaves out the shapes on top fits the shapes on top now. */
 export function checkKnockouts(p: Pattern): void {
   expect(refreshKnockouts(p, T)?.changed ?? [], 'fills whose left-out parts are out of date').toEqual([]);
+  // A fill that leaves out sews nothing under what lies on top, so it keeps no underlay setting there.
+  const both = sewObjects(p).filter((o) => remembered(p, o)?.knockout && remembered(p, o)?.fill?.underCover);
+  expect(both.map((o) => o.index), 'fills leaving out with an underlay setting under later objects').toEqual([]);
 }
 
 /**

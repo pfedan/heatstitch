@@ -16,6 +16,7 @@ import { TOLERANCE } from '../digitize/run';
 import type { ThreadColor } from '../model/pattern';
 import { newLink } from '../model/border';
 import { SATIN_SHARE } from '../model/covers';
+import type { CoverMode } from '../model/knockout';
 import { autoUnder, coverOf, E_SPACING, hasPhase, isCord, isRedwork, isRunType, layersOf, passesOf, REPEAT, spacingOf, timesOf, ZIGZAG_SPACING, type PathStitch } from '../model/along';
 import { CORD_STEP, CORD_STEP_RANGE, HAND_WIDTH, isHandStitch, LINE_MOTIFS, MOTIF_PERIOD, MOTIF_STITCH, MOTIF_WIDTH, motifMaxSize, SIDED_MOTIFS, type LineMotif } from '../digitize/motif';
 import { ECHO_COUNT, ECHO_DEFAULT, ECHO_GAP, ECHO_PHASE, ECHO_SIDES, type EchoSide } from '../digitize/echo';
@@ -173,6 +174,8 @@ export interface StitchHooks {
   points: (action: 'tool' | 'off') => void;
   /** Leaving out what later fills cover, on or off for the selected fills. */
   knockout: (on: boolean) => void;
+  /** What the selected fills do under later objects (see CoverMode), in one step. */
+  coverMode: (mode: CoverMode) => void;
   /** How far the selected fills reach under a satin on top (share of its width). */
   overlapShare: (share: number) => void;
   /**
@@ -742,7 +745,7 @@ export class StitchPanel {
     if (POINTED.includes(s.pattern)) tools.push(this.pointRow(s, info.points));
     // A fill along a line becomes satin by its line, not by rungs drawn across it.
     if (!info.asLine && info.draw) tools.push(this.toolRow('stitch.direction', 'stitches.tool.toSatin', 'stitch.draw.hint', !!info.draw.tool, info.draw.single ? null : t('stitch.direction.single')));
-    if (info.knockout) tools.push(this.knockoutSwitch(info.knockout));
+    tools.push(this.coverChoice(s, info.knockout));
     tools.push(this.handRow(), this.lockSwitch(info.lock), info.free?.can ? this.looseRow() : null, this.originalRow(info));
     return [
       this.sec('kind', 'stitches.sec.kind', [this.kindSwitch(info), this.patterns(s)], t(`stitch.pattern.${s.pattern}` as Key)),
@@ -877,7 +880,6 @@ export class StitchPanel {
     if (s.underlay) {
       out.push(
         this.under(this.check('stitch.underEdge', 'stitch.underEdge.hint', () => !!s.underEdge, (v) => (v ? (s.underEdge = true) : delete s.underEdge))),
-        this.under(this.check('stitch.underCover', 'stitch.underCover.hint', () => !!s.underCover, (v) => (v ? (s.underCover = true) : delete s.underCover))),
         this.under(
           this.choice<'mm' | 'share'>(
             'stitch.underInsetBy',
@@ -2145,14 +2147,34 @@ export class StitchPanel {
     return box;
   }
 
-  /** Leaving out what lies on top: a switch, taken over at once (the shape itself stays). */
-  private knockoutSwitch(k: NonNullable<StitchInfo['knockout']>): HTMLElement {
-    const i = h('input', { type: 'checkbox', checked: k.on === true, indeterminate: k.on === 'mixed' });
-    i.addEventListener('change', () => this.hooks.knockout(i.checked));
-    // Pointed at: where the selected fills are sewn twice (what leaving out takes away) is marked.
+  /**
+   * What a fill does under objects sewn later, as one choice: all sewn, no underlay there, or left
+   * out (only with a drawn area; the shape itself stays). Leaving out is taken over at once with
+   * its own hook, in one step with the underlay setting; the rest is a setting like the others.
+   * Pointed at, where the selected fills lie under later objects is marked on the canvas.
+   */
+  private coverChoice(s: FillSettings, k: StitchInfo['knockout']): HTMLElement | null {
+    const modes: CoverMode[] = ['all', ...(s.underlay || s.underCover ? (['under'] as const) : []), ...(k ? (['out'] as const) : [])];
+    if (modes.length < 2) return null;
+    const now: CoverMode | null = k?.on === 'mixed' ? null : k?.on ? 'out' : s.underCover ? 'under' : 'all';
+    const row = h('div', { class: 'segmented choice-row', role: 'radiogroup', 'aria-label': t('stitch.cover') });
+    for (const v of modes) {
+      const hint = t(`stitch.cover.${v}.hint`) + (v === 'out' && !k?.covered ? ` ${t('knockout.nothingOnTop')}` : '');
+      const b = h('button', { type: 'button', class: v === now ? 'active' : '', role: 'radio', 'aria-checked': String(v === now), title: hint }, t(`stitch.cover.${v}`));
+      b.addEventListener('click', () => {
+        if (v === now) return;
+        // Leaving out comes or goes: sewn anew by its own hook, the underlay setting with it.
+        if (v === 'out' || (k && k.on !== false)) return this.hooks.coverMode(v);
+        if (v === 'under') s.underCover = true;
+        else delete s.underCover;
+        this.render();
+        this.changed(true);
+      });
+      row.append(b);
+    }
     const wrap = this.lights(h('div', { class: 'knockout' }), 'knockout');
-    wrap.append(h('label', { class: 'check', title: t('knockout.switch.hint') + (k.covered ? '' : ` ${t('knockout.nothingOnTop')}`) }, i, h('span', null, t('knockout.switch'))));
-    if (k.on) {
+    wrap.append(h('div', { class: 'field stitch-field' }, h('span', { class: 'label', title: t('stitch.cover.hint') }, t('stitch.cover')), row));
+    if (k?.on) {
       const share = { v: k.share };
       wrap.append(
         this.slider({
