@@ -505,16 +505,14 @@ export function drawOutlines(ctx: CanvasRenderingContext2D, vp: Viewport, shapes
   ctx.restore();
 }
 
-/** Where fills are sewn twice (closed lines in mm), and whether they are pointed at. */
+/** Where fills are sewn twice (closed lines in mm). */
 export interface OverlapMarks {
   lines: [number, number][][];
-  strong: boolean;
 }
 
 /**
- * The parts of fills sewn twice, under what is sewn on top (what "Aussparen" takes away): hatched
- * in white with a dark rim, so they read on any thread. Calm while the card that offers leaving
- * them out is shown; clear while it is pointed at or has the focus.
+ * The parts of fills sewn twice, under what is sewn on top (what "Aussparen" takes away): darkened
+ * and hatched in white with a dark rim, so they read on any thread.
  */
 export function drawOverlaps(ctx: CanvasRenderingContext2D, vp: Viewport, marks: OverlapMarks): void {
   const s = vp.scale;
@@ -541,31 +539,26 @@ export function drawOverlaps(ctx: CanvasRenderingContext2D, vp: Viewport, marks:
   ctx.lineJoin = 'round';
   ctx.save();
   ctx.clip(path, 'evenodd');
-  if (marks.strong) {
-    ctx.fillStyle = 'rgba(13, 11, 16, 0.45)';
-    ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
-  }
+  ctx.fillStyle = 'rgba(13, 11, 16, 0.45)';
+  ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
   // Diagonal hatching, fixed to the design so it moves with it.
-  const gap = marks.strong ? 5 : 8;
+  const gap = 5;
   const from = Math.floor((x0 + y0 - vp.offsetX - vp.offsetY) / gap) * gap + vp.offsetX + vp.offsetY;
   ctx.beginPath();
   for (let c = from; c <= x1 + y1; c += gap) {
     ctx.moveTo(c - y0, y0);
     ctx.lineTo(c - y1, y1);
   }
-  if (marks.strong) {
-    ctx.strokeStyle = 'rgba(13, 11, 16, 0.6)';
-    ctx.lineWidth = 3;
-    ctx.stroke();
-  }
-  ctx.strokeStyle = marks.strong ? '#ffffff' : 'rgba(255, 255, 255, 0.55)';
-  ctx.lineWidth = marks.strong ? 1.2 : 1;
+  ctx.strokeStyle = 'rgba(13, 11, 16, 0.6)';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 1.2;
   ctx.stroke();
   ctx.restore();
   ctx.strokeStyle = 'rgba(13, 11, 16, 0.75)';
   ctx.lineWidth = 3.5;
   ctx.stroke(path);
-  if (!marks.strong) ctx.setLineDash([5, 4]);
   ctx.strokeStyle = '#ffffff';
   ctx.lineWidth = 1.5;
   ctx.stroke(path);

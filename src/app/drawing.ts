@@ -261,7 +261,7 @@ export function bindDrawing(app: DrawingApp) {
     return c.lines;
   }
 
-  /** The pointer is on the card, or the focus is in it: the overlaps are shown clearly. */
+  /** The pointer is on the card (or it was tapped), or the focus is in it: the overlaps are marked. */
   let cardHot = { pointer: false, focus: false };
 
   function updateOverlapCard(): void {
@@ -271,24 +271,25 @@ export function bindDrawing(app: DrawingApp) {
     const card = $('overlap-card');
     card.hidden = !list.length;
     if (list.length) $('overlap-text').textContent = t(list.length === 1 ? 'knockout.card.one' : 'knockout.card', { n: formatNumber(list.length) });
-    const lines = list.length ? overlapLines(p!) : null;
+    if (!list.length) cardHot = { pointer: false, focus: false };
+    const lines = list.length && (cardHot.pointer || cardHot.focus) ? overlapLines(p!) : null;
     const was = ui.overlapMarks;
-    ui.overlapMarks = lines ? { p: p!, lines, strong: cardHot.pointer || cardHot.focus } : null;
+    ui.overlapMarks = lines ? { p: p!, lines } : null;
     // The card is brought up to date after the canvas is drawn: drawn again when its marks changed.
     if ((was?.lines ?? null) !== lines) app.redraw();
   }
 
-  /** Marks the overlaps clearly or calmly as the card is pointed at, and draws them so. */
+  /** Marks the overlaps on the canvas or takes the marks away as the card is pointed at. */
   function heatCard(what: keyof typeof cardHot, on: boolean): void {
     if (cardHot[what] === on) return;
     cardHot = { ...cardHot, [what]: on };
-    if (!ui.overlapMarks) return;
-    ui.overlapMarks = { ...ui.overlapMarks, strong: cardHot.pointer || cardHot.focus };
-    app.redraw();
+    updateOverlapCard();
   }
   const overlapCard = $('overlap-card');
   overlapCard.addEventListener('pointerenter', (e) => e.pointerType !== 'touch' && heatCard('pointer', true));
-  overlapCard.addEventListener('pointerleave', () => heatCard('pointer', false));
+  overlapCard.addEventListener('pointerleave', (e) => e.pointerType !== 'touch' && heatCard('pointer', false));
+  // On touch there is no pointing: tapping the text shows the overlaps, tapping again hides them.
+  $('overlap-text').addEventListener('pointerup', (e) => e.pointerType === 'touch' && heatCard('pointer', !cardHot.pointer));
   overlapCard.addEventListener('focusin', () => heatCard('focus', true));
   overlapCard.addEventListener('focusout', (e) => !overlapCard.contains(e.relatedTarget as Node | null) && heatCard('focus', false));
 

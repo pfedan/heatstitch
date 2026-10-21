@@ -44,7 +44,7 @@ export interface FlowScene {
   needle: number;
   /** Fill areas of the selected objects. */
   outlines?: ShapeOutline[];
-  /** Where fills are sewn twice, while the card that offers leaving them out is shown. */
+  /** Where fills are sewn twice, while the card that offers leaving them out is pointed at. */
   overlaps?: OverlapMarks | null;
   /** Underlay of the selected objects, shown while its settings are pointed at (per record). */
   under?: Uint8Array | null;
