@@ -94,7 +94,9 @@ src/wasm/pkg/          Built by `npm run wasm` (wasm-pack), ignored by version c
 (`scripts/wasm.mjs`): `npm run build` as released, the others with the `fast` profile, which
 skips link-time optimisation and builds incrementally, so a change is rebuilt in seconds and runs
 just as fast. CI builds it once per run (`.github/actions/core`) and hands it to the other
-jobs (`CORE_PREBUILT`), and runs `cargo fmt`, `cargo clippy` and `cargo test` on the crate. How the
+jobs (`CORE_PREBUILT`), and runs `cargo fmt`, `cargo clippy` and `cargo test` on the crate. CI also
+keeps the release core in R2 per state of `core/` (`scripts/coreCache.mjs`); a cloud session takes it
+from there in a second instead of compiling it, unless its `core/` has changes of its own. How the
 TypeScript was moved over, stage by stage, is in [docs/rust-core.md](docs/rust-core.md).
 
 ## Repository layout
