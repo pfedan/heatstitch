@@ -18,7 +18,7 @@ import { nearestThread } from '../image/prepare';
 import { overlapsIn, setKnockout } from '../model/knockout';
 import { rememberedIn, objectKey } from '../model/restitch';
 import { rgbToLab } from '../image/color';
-import { scaleBlocked, transformObjects, type TransformedAll } from '../model/reshape';
+import { transformObjects, type TransformedAll } from '../model/reshape';
 import { isRigid, stitchesBefore, transformObject } from '../model/transform';
 import { LiveResew, type LiveResult } from '../resew/client';
 import { syncBorders } from '../model/border';
@@ -368,7 +368,7 @@ export function bindDrawing(app: DrawingApp) {
       maxX: Math.max(...objs.map((o) => o.maxX)) / 10,
       maxY: Math.max(...objs.map((o) => o.maxY)) / 10,
     };
-    frameTool.open(box, objs.every((o) => scaleBlocked(p, o, q.kinds) === null), snapTargets(q.objects.filter((o) => !ui.selectedObjects.has(o.index))));
+    frameTool.open(box, snapTargets(q.objects.filter((o) => !ui.selectedObjects.has(o.index))));
     const grip = sel.length === 1 ? app.contourGrip(p, q, sel[0]) : null;
     frameTool.gap = grip;
     if (grip) frameTool.gapValue = grip.d;
@@ -465,17 +465,17 @@ export function bindDrawing(app: DrawingApp) {
       app.redraw();
       return false;
     }
-    const { pattern: cur, hand, restitched } = r;
+    const { pattern: cur, hand, restitched, stretched } = r;
     // Borders in a thread of their own go along (sewn anew on the moved area).
     const keys = new Set(sel.map((o) => objectKey(cur, app.seq(cur).objects[o])));
     const synced = syncBorders(cur, app.settings.trimMm);
     const moved = synced !== cur ? app.seq(synced).objects.flatMap((o, i) => (keys.has(objectKey(synced, o)) ? [i] : [])) : null;
-    applyTransformed(f, p, sel, kept, !!objs, { pattern: synced, hand, restitched, moved });
+    applyTransformed(f, p, sel, kept, !!objs, { pattern: synced, hand, restitched, stretched, moved });
     return true;
   }
 
   /** A transform of the objects `sel` of `p` worked out (`r`, borders along) taken over as one undo step. */
-  function applyTransformed(f: NonNullable<typeof app.files.active>, p: Pattern, sel: number[], kept: ReadonlySet<number>, keep: boolean, r: { pattern: Pattern; hand: number; restitched: boolean; moved: number[] | null }): void {
+  function applyTransformed(f: NonNullable<typeof app.files.active>, p: Pattern, sel: number[], kept: ReadonlySet<number>, keep: boolean, r: { pattern: Pattern; hand: number; restitched: boolean; stretched: number; moved: number[] | null }): void {
     const synced = r.pattern;
     app.applyEdit(synced);
     const nq = app.seq(synced);
@@ -485,6 +485,7 @@ export function bindDrawing(app: DrawingApp) {
     else ui.selectedObjects = r.moved ? new Set(r.moved) : same ? new Set(sel) : new Set();
     ui.selectionKey++;
     if (r.restitched && r.hand) app.layers.say(t('shape.handReplaced', { n: formatNumber(r.hand) }));
+    else if (r.stretched) app.layers.say(t(r.stretched === 1 ? 'frame.stretched.one' : 'frame.stretched', { n: formatNumber(r.stretched) }));
     app.followKnockouts();
     app.redraw();
   }

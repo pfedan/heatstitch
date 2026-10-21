@@ -20,7 +20,6 @@ import { exportPng } from './ui/export';
 import { FileList, type LoadedFile } from './ui/fileList';
 import { bindHoop } from './ui/hoopPanel';
 import { scaling } from './shape/path';
-import { scaleBlocked } from './model/reshape';
 import { legendSpec } from './ui/legendSpec';
 import { bindProfile } from './ui/profilePanel';
 import { bindSwatch } from './ui/swatchPanel';
@@ -867,7 +866,7 @@ function objectInfo(p: Pattern, q: Sequence) {
     editing: editor.active && ui.editObject !== null && selected.length === 1 && selected[0] === ui.editObject ? { selection: editor.selection.size } : null,
     shapeable: selected.length === 1 && (stitchInfo(p, q).free?.on ? !!shapeTarget(p, q, selected[0]) : !!stitchInfo(p, q).measured.fill || !!stitchInfo(p, q).measured.satin || (!!q.objects[selected[0]] && isLineObject(p, q.objects[selected[0]]))),
     shaping: shapeTool.active && selected.length === 1 && selected[0] === ui.shapeObject ? { nodes: shapeTool.count, smooth: shapeTool.selectedSmooth, picked: shapeTool.selCount, ...(shapeTool.band !== null ? { kind: 'band' as const } : {}), ...(q.objects[selected[0]] && isLineObject(p, q.objects[selected[0]]) ? { line: { closed: shapeTool.closed } } : {}) } : null,
-    frame: frameTool.active ? { canScale: frameTool.canScale } : null,
+    frame: frameTool.active,
     mergeBlocked: selected.length > 1 ? mergeBlocked(selected.map((o) => q.objects[o])) : null,
     reversible: selected.some((o) => (reversible(q.objects[o]) && !remembered(p, q.objects[o])?.applique) || sewnAlong(p, q.objects[o])),
     applique: selected.length === 1 && !!q.objects[selected[0]] && !!remembered(p, q.objects[selected[0]])?.applique,
@@ -1523,10 +1522,7 @@ function fitToHoop(): void {
   const h = (b.maxY - b.minY) / 10;
   const s = Math.floor(Math.min((hoop.w - 2 * HOOP_FIT_MARGIN) / w, (hoop.h - 2 * HOOP_FIT_MARGIN) / h) * 1000) / 1000;
   if (!(s > 0 && s < 1)) return;
-  const q = seq(p);
-  // Objects of a file that are fill and satin at once cannot be scaled as one.
-  if (q.objects.some((o) => scaleBlocked(p, o, q.kinds))) return layers.say(t('hoop.fit.blocked'), true);
-  const all = q.objects.map((o) => o.index);
+  const all = seq(p).objects.map((o) => o.index);
   if (!commitTransform(scaling(s, s, (b.minX + b.maxX) / 20, (b.minY + b.maxY) / 20), all)) return;
   layers.say(t('hoop.fitted', { pct: formatNumber(Math.round(s * 100)) }) + ' ' + t('object.undo'));
   fitView();

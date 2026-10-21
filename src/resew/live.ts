@@ -86,6 +86,7 @@ export interface ShippedTransform {
   pattern: Shipped;
   hand: number;
   restitched: boolean;
+  stretched: number;
   /** The objects that were moved, in the design with its borders along; null when borders changed nothing. */
   moved: number[] | null;
 }
@@ -103,5 +104,5 @@ export function transformShipped(p: Pattern, sel: number[], m: Mat, trimMm: numb
   const keys = new Set(sel.map((o) => objectKey(cur, objs[o])));
   const synced = syncBorders(cur, trimMm);
   const moved = synced !== cur ? sewObjects(synced).flatMap((o, i) => (keys.has(objectKey(synced, o)) ? [i] : [])) : null;
-  return { pattern: ship(synced), hand: r.hand, restitched: r.restitched, moved };
+  return { pattern: ship(synced), hand: r.hand, restitched: r.restitched, stretched: r.stretched, moved };
 }

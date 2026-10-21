@@ -82,7 +82,6 @@ export const de = {
   'objects.pos.y': 'Mitte Y in mm',
   'objects.pos.hint': 'Mitte der Auswahl, gemessen von der Mitte des Stickrahmens',
   'objects.geom.hint': 'Rahmen ziehen: verschieben · Ecke: Größe · Kreis: drehen · Pfeiltasten: schieben',
-  'objects.geom.mixed': 'Füllung und Satin zusammen lassen sich noch nicht skalieren.',
   'objects.row.more': 'Aktionen für dieses Objekt',
   'objects.recolored': 'Garn gewechselt.',
 } as const;
@@ -169,7 +168,6 @@ export const en: Record<keyof typeof de, string> = {
   'objects.pos.y': 'Center Y in mm',
   'objects.pos.hint': 'Center of the selection, measured from the center of the hoop',
   'objects.geom.hint': 'Drag the frame: move · Corner: size · Circle: turn · Arrow keys: nudge',
-  'objects.geom.mixed': 'Fill and satin together cannot be scaled yet.',
   'objects.row.more': 'Actions for this object',
   'objects.recolored': 'Thread changed.',
 };
