@@ -14,7 +14,7 @@ a design are TypeScript; the computing is a Rust crate built to WebAssembly (`co
 plain DOM and canvas, built by small modules.
 
 ```mermaid
-flowchart LR
+flowchart TB
   picture[Picture] --> image
   svg[SVG] --> shape
   image --> digitize
@@ -179,7 +179,7 @@ The model keeps **known** and **guessed** structure apart:
 When settings or a form change, the object is sewn anew from what it remembers:
 
 ```mermaid
-flowchart LR
+flowchart TB
   R[Remembered] --> S["model/sew.ts<br/>Spec: line, fill, satin, ..."] --> D["digitize/*"] --> St[stitches]
   St --> V["new Pattern version<br/>with the stitches put in place"]
 ```
@@ -256,7 +256,7 @@ whose objects remember what they were made as.
 ## Checking and correcting
 
 ```mermaid
-flowchart LR
+flowchart TB
   P[Pattern] --> DW[density worker] --> G[grid] --> H[render/heatmap.ts]
   P --> M["measure<br/>(worker, independent of the material)"]
   M --> C["classify<br/>(main thread, per profile)"] --> Z["zones, findings"] --> K[correct]
