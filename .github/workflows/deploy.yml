@@ -47,6 +47,17 @@ jobs:
           name: core
           path: src/wasm/pkg
           if-no-files-found: error
+      # Kept in R2 per state of the core as well, for cloud sessions to take instead of compiling it
+      # (scripts/coreCache.mjs). Skipped where the R2 secrets are missing, as on a fork's pull request.
+      # A failed upload only costs the sessions a build, it does not stop the run.
+      - if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+        continue-on-error: true
+        run: node scripts/coreCache.mjs upload
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
 
   build:
     if: github.event.action != 'closed'
