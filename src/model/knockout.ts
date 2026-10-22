@@ -1,8 +1,9 @@
 import { expandRegion, type Region } from '../digitize/region';
+import { regionOf } from '../shape/rasterize';
 import { syncBorders } from './border';
 import { storeForm, type Form } from '../shape/path';
 import { coversOver, cutAway, SATIN_SHARE, type Cover } from './covers';
-import { rememberObjects, sewObjects, type SewObject } from './objects';
+import { relearn, rememberObjects, sewObjects, type SewObject } from './objects';
 import type { Pattern } from './pattern';
 import { knownKind, remember, remembered, rememberRange, type Remembered, type RestitchResult } from './restitch';
 import { reshapeFill, reshapeSatin } from './reshape';
@@ -156,7 +157,8 @@ function sewCut(p: Pattern, index: number, trimMm: number): Pattern | null {
 
 /**
  * Turns leaving out on or off for the objects `which` (indices in sewing order); only objects with
- * a drawn area take part (fills, and satins made from a drawn area). Null when nothing changed.
+ * a drawn area take part (fills, and satins made from a drawn area). Turned on, they forget leaving
+ * out only the underlay there (see CoverMode). Null when nothing changed.
  */
 export function setKnockout(p: Pattern, which: number[], on: boolean, trimMm: number): { pattern: Pattern; changed: number } | null {
   let cur = p;
@@ -166,6 +168,8 @@ export function setKnockout(p: Pattern, which: number[], on: boolean, trimMm: nu
     const o = objs[index];
     const known = o && remembered(cur, o);
     if (!known || !areaOf(known) || known.free || !!known.knockout === on) continue;
+    // Nothing is sewn under what lies on top any more: no underlay setting of its own there either (CoverMode).
+    if (on && known.fill?.underCover) cur = relearn(cur, (v) => remember(v, o, { ...known, fill: { ...known.fill!, underCover: undefined } }));
     const next = sewAgain(cur, index, on, trimMm);
     if (!next) continue;
     cur = next;
@@ -174,6 +178,48 @@ export function setKnockout(p: Pattern, which: number[], on: boolean, trimMm: nu
   }
   // Its border and blend in a thread of their own follow the area it is sewn on now, in the same step.
   return changed ? { pattern: syncBorders(cur, trimMm), changed } : null;
+}
+
+/** What a fill does under objects sewn later: everything sewn, the underlay left out there, or all of it left out. */
+export type CoverMode = 'all' | 'under' | 'out';
+
+/** The mode of a fill (see CoverMode) from what it remembers. */
+export function coverModeOf(m: Remembered | null | undefined): CoverMode {
+  return m?.knockout ? 'out' : m?.fill?.underCover ? 'under' : 'all';
+}
+
+/**
+ * Sets what the objects `which` with a drawn area do under objects sewn later (see CoverMode), in
+ * one step: leaving out on or off and the underlay there, sewn anew where that changed. A fill that
+ * leaves out keeps no underlay setting of its own there (nothing is sewn there). Null when nothing
+ * changed.
+ */
+export function setCoverMode(p: Pattern, which: number[], mode: CoverMode, trimMm: number): { pattern: Pattern; changed: number } | null {
+  const want = mode === 'under' || undefined;
+  const objs = sewObjects(p);
+  const shaped = which.filter((i) => {
+    const m = objs[i] && remembered(p, objs[i]);
+    return !!m && !!areaOf(m) && !m.free && coverModeOf(m) !== mode;
+  });
+  if (!shaped.length) return null;
+  // The underlay setting first, so the fills are sewn anew with it.
+  let cur = relearn(p, (v) => {
+    for (const i of shaped) {
+      const m = remembered(v, objs[i])!;
+      if (m.fill && !!m.fill.underCover !== !!want) remember(v, objs[i], { ...m, fill: { ...m.fill, underCover: want } });
+    }
+  });
+  const out = mode === 'out';
+  const flip = shaped.filter((i) => !!remembered(p, objs[i])!.knockout !== out);
+  const r = flip.length ? setKnockout(cur, flip, out, trimMm) : null;
+  if (r) cur = r.pattern;
+  // Only the underlay under later objects changed: sewn anew whole, as before.
+  for (const i of shaped) {
+    if (flip.includes(i)) continue;
+    const next = sewAgain(cur, i, false, trimMm);
+    if (next) cur = next;
+  }
+  return { pattern: syncBorders(cur, trimMm), changed: shaped.length };
 }
 
 /**
@@ -256,6 +302,37 @@ export function isCovered(p: Pattern, objs: SewObject[], o: SewObject): boolean 
   // What lies under a thin strip only is not covered: the part still sewn, grown by THIN_MM, reaches over it.
   const near = left && expandRegion(left, THIN_MM);
   return !near || outside(whole, near) * whole.pxMm * whole.pxMm >= NOTABLE_MM2;
+}
+
+/**
+ * What leaving out would take from the shape of `o`: the part that fills and satins sewn later
+ * cover, beyond the overlap it keeps under them (sewn twice while it is sewn whole). Null when nothing.
+ */
+export function coveredPart(p: Pattern, objs: SewObject[], o: SewObject): Region | null {
+  const known = remembered(p, o);
+  const form = areaOf(known);
+  const whole = form && wholeArea(form, known?.region?.pxMm ?? 0.1, growOf(known));
+  if (!whole) return null;
+  const left = cutAway(whole, coversOver(p, objs, o, whole.pxMm, known?.overlapShare ?? SATIN_SHARE));
+  if (left === whole) return null;
+  const mask = new Uint8Array(whole.w * whole.h);
+  let any = false;
+  for (let j = 0; j < whole.h; j++) {
+    for (let i = 0; i < whole.w; i++) {
+      const k = j * whole.w + i;
+      if (!whole.mask[k] || (left && covers(left, i + whole.x0, j + whole.y0))) continue;
+      mask[k] = 1;
+      any = true;
+    }
+  }
+  return any ? regionOf(mask, whole.x0, whole.y0, whole.w, whole.h, whole.pxMm) : null;
+}
+
+/** Whether region `r` holds the world pixel `x`, `y`. */
+function covers(r: Region, x: number, y: number): boolean {
+  const i = x - r.x0;
+  const j = y - r.y0;
+  return i >= 0 && j >= 0 && i < r.w && j < r.h && !!r.mask[j * r.w + i];
 }
 
 /** Pixels of `a` that `b` does not cover. */
