@@ -45,7 +45,7 @@ import { fromStored, storedVersion, toStored } from '../../src/storage/fileStore
 import { decodeProject, encodeProject, projectSettings } from '../../src/storage/project';
 import { DEFAULTS } from '../../src/settings';
 import { DEFAULT_PROFILE } from '../../src/validation/profiles';
-import { tagShortStitches, TIE } from '../../src/validation/shortStitches';
+import { tagShortStitches, TIE, TIE_MAX } from '../../src/validation/shortStitches';
 import { thinByHand } from '../../src/correct/thinHand';
 import { keepObjects } from '../../src/model/handEdit';
 import { Editor } from '../../src/ui/editor';
@@ -96,17 +96,27 @@ import { areaOf, fillArea, fits, formKey, geoOf, geoUse, guessArea, guessGeo, gu
 export const ownFrom = (p: Pattern, o: SewObject) => {
   const travel = remembered(p, o)?.travel ?? 0;
   if (!travel) return o.first + o.tieIn;
+  // After travel the short stitches of a lock do not read as a tie (no jump leads to them): up to
+  // TIE_MAX short stitches there are its tie-in, as sewList takes them (sew.ts).
   const tags = tagShortStitches(p);
   let i = o.first + travel;
-  while (i + 1 <= o.last && tags[i + 1] === TIE) i++;
+  while (i + 1 <= o.last && i < o.first + travel + TIE_MAX && tags[i + 1]) i++;
   return i;
 };
-/** How many stitches object `o` has of its own (without the hidden travel to it). */
-export const ownCount = (p: Pattern, o: SewObject) => o.stitches - (remembered(p, o)?.travel ?? 0);
-
+/**
+ * The stitches object `o` sews itself: without the travel to it, its tie-in and its tie-off (they
+ * follow its neighbours). Before hidden travel a tie-off does not read as one, and with a trim
+ * after it the short stitches before it may read as part of it: short stitches at the end go.
+ */
 export const ownStitches = (p: Pattern, o: SewObject) => {
   const out: string[] = [];
-  for (let i = ownFrom(p, o); i <= o.last; i++) if (p.cmd[i] === STITCH) out.push(`${p.x[i]},${p.y[i]}`);
+  // From the stitch after where it starts: the first point, or the end of a tie-in (which lies on
+  // the way to the next one).
+  const from = ownFrom(p, o) + 1;
+  const tags = tagShortStitches(p);
+  let to = o.last - o.tieOff;
+  while (to > from && tags[to]) to--;
+  for (let i = from; i <= to; i++) if (p.cmd[i] === STITCH) out.push(`${p.x[i]},${p.y[i]}`);
   return out.join(' ');
 };
 
@@ -527,8 +537,10 @@ export const OPS: Op[] = [
       for (const k of g!.which) {
         expect(head(now[k].block), 'gathered into one color block').toBe(head(now[g!.which[0]].block));
         expect(sameColor(now[k].color, d.objects[lead].color), 'in the lead\'s thread').toBe(true);
-        expect(ownCount(g!.pattern, now[k]), 'a gathered object keeps its stitches').toBe(ownCount(p, was.get(now[k].id)!));
-        const ownly = (m: Remembered | undefined) => m && withTravel(m, 0);
+        // (Its ties follow its new neighbours.)
+        expect(ownStitches(g!.pattern, now[k]), 'a gathered object keeps its stitches').toBe(ownStitches(p, was.get(now[k].id)!));
+        // (Its parts count the ties it has now.)
+        const ownly = (m: Remembered | undefined) => m && { ...withTravel(m, 0), parts: m.parts?.map((pt) => ({ ...pt, end: 0 })) };
         expect(ownly(remembered(g!.pattern, now[k])), 'a gathered object keeps what it knows').toEqual(ownly(remembered(p, was.get(now[k].id)!)));
       }
       // The others keep their order and thread.
