@@ -16,6 +16,18 @@ How it is kept (see [CONTRIBUTING.md](CONTRIBUTING.md#releases)):
 
 ## [Unreleased]
 
+### Deutsch
+
+- **Strg+Z gleich nach dem Tippen:** Hast du in der Karte *Objekt* eine Größe oder Lage eingetippt und mit Enter übernommen, nimmt Strg+Z sie jetzt sofort zurück, auch wenn der Cursor noch im Feld steht. Solange du noch tippst, macht Strg+Z weiter nur das Getippte rückgängig.
+- **Ganzes Stickmuster aus einer Datei skalieren:** Ein Stickmuster, in dem einzelne Objekte als Füllung und Satin zugleich erkannt sind (zum Beispiel die Katze), lässt sich jetzt als Ganzes skalieren und in den Stickrahmen einpassen. Diese Objekte werden nur gestreckt, ein Hinweis zählt sie, und *Prüfen* zeigt, ob ihre Dichte noch passt. Bisher fehlten die Eckgriffe und die Größenfelder waren ausgegraut.
+- **Objekte behalten beim Skalieren ihre Identität:** Objekte aus einer Stickdatei bleiben nach dem Skalieren dieselben Objekte, mit allem, was sie sich gemerkt haben. Bisher galten die meisten danach als neu.
+
+### English
+
+- **Ctrl+Z right after typing:** After you typed a size or position in the *Object* card and took it over with Enter, Ctrl+Z now undoes it at once, even while the cursor is still in the field. While you are still typing, Ctrl+Z keeps undoing only the typed text.
+- **Scale a whole design from a file:** A design in which some objects are recognized as fill and satin at once (the cat, for example) can now be scaled as a whole and fitted into the hoop. Those objects are only stretched, a hint counts them, and *Check* shows whether their density still fits. Until now the corner handles were missing and the size fields were greyed out.
+- **Objects keep their identity when scaled:** Objects from an embroidery file stay the same objects after scaling, with everything they remember. Until now most of them counted as new afterwards.
+
 ## [1.2.0] - 2026-10-21
 
 ### Deutsch
