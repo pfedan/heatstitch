@@ -235,7 +235,7 @@ export function bindLettering(app: LetteringApp) {
     } else {
       // No text: the letters go once the text field is left empty (and come back with undo).
       if (!final) return app.redraw();
-      next = withoutObjects(p, old);
+      next = withoutObjects(p, old, app.settings.trimMm);
     }
     if (!next) return app.redraw();
     ui.hoverZone = ui.selectedZone = null;
