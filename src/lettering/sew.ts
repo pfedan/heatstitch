@@ -65,6 +65,8 @@ export interface Sewn {
   letters: number[];
   stitches: number;
   layout: Layout;
+  /** The trim length it was sewn with (mm). */
+  trimMm: number;
 }
 
 /**
@@ -80,7 +82,7 @@ export function sewLettering(font: Font, l: Lettering, trimMm: number): Sewn {
     const cmd = o.takeCmd();
     const recs: Rec[] = new Array(cmd.length);
     for (let i = 0; i < cmd.length; i++) recs[i] = { x: x[i], y: y[i], cmd: cmd[i] };
-    return { recs, starts: Array.from(o.takeStarts()), letters: Array.from(o.takeLetters()), stitches: o.stitches, layout: layoutFrom(font, o.layout) };
+    return { recs, starts: Array.from(o.takeStarts()), letters: Array.from(o.takeLetters()), stitches: o.stitches, layout: layoutFrom(font, o.layout), trimMm };
   } finally {
     o.free();
   }

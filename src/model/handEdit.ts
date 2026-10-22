@@ -4,6 +4,7 @@ import { carryOver, keepShape, remember, remembered, type Remembered } from './r
 import { partOf } from './shadow';
 import { recordOfStitch, stitchKinds, stitchNumbers } from './sequence';
 import { geoOf } from './geo';
+import { keepShownTravel, travelOf } from './travel';
 
 /** What a hand edit did, so the objects it touched can keep what they remember. */
 export type HandChange = { moved: number[] } | { removed: number[] } | { inserted: number; count?: number };
@@ -79,7 +80,10 @@ export function keepObjects(p: Pattern, next: Pattern, change: HandChange, view:
       ?.map((pt) => ({ ...pt, end: map(s0 + pt.end) - map(s0) }))
       .filter((pt, k, all) => pt.end > (k ? all[k - 1].end : 0));
     const mem = { ...r, ...(parts ? { parts } : {}), hand: (r.hand ?? 0) + n, ...(loosable(own) ? { free: true } : {}) };
-    return { o, r: mem, range };
+    // Edited by hand for the first time it hides no travel any more (see hidingOf), nor does
+    // travel into it lead as it was planned once its stitches change.
+    const unhides = !own?.hand && !own?.free;
+    return { o, r: mem, range, unhides: unhides || !!travelOf(own) };
   });
   const nq = view(next);
   const out = new Map<number, number>();
@@ -88,5 +92,6 @@ export function keepObjects(p: Pattern, next: Pattern, change: HandChange, view:
     if (o >= 0) remember(next, nq.objects[o], k.r);
     out.set(k.o, o);
   }
+  if (kept.some((k) => k.unhides)) keepShownTravel(next);
   return out;
 }
