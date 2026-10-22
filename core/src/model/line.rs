@@ -337,6 +337,41 @@ mod tests {
     }
 
     #[test]
+    fn a_satin_as_wide_as_its_loop_sews_inside_its_reach() {
+        // A loop 10.5 × 6.1 mm with a satin 5.9 mm wide and mitered corners: the inner side of each
+        // corner shrinks to a point (found by the torture test, it panicked there).
+        let form = Form {
+            paths: vec![Path {
+                nodes: vec![
+                    node(7.6, 15.7),
+                    node(18.1, 15.7),
+                    node(18.1, 21.8),
+                    node(7.6, 21.8),
+                ],
+                closed: true,
+            }],
+            nonzero: false,
+        };
+        let mut st = PathStitch::run(2.5);
+        st.kind = crate::model::along::BorderType::Satin;
+        st.width = 5.9;
+        st.tolerance = Some(0.15);
+        st.corner = Some(crate::digitize::satin_joins::SatinCorner::Miter);
+        st.ends = Some(crate::digitize::satin_joins::SatinEnd::Flat);
+        let runs = line_stitches(&form, &st, false, None);
+        let pts: Vec<Pt> = runs.iter().flat_map(|r| r.pts.iter().copied()).collect();
+        assert!(pts.len() > 20);
+        // Within half the width (and the miter's reach) of the loop.
+        for p in pts {
+            assert!(p[0].is_finite() && p[1].is_finite());
+            assert!(
+                p[0] > 7.6 - 5.0 && p[0] < 18.1 + 5.0 && p[1] > 15.7 - 5.0 && p[1] < 21.8 + 5.0,
+                "{p:?}"
+            );
+        }
+    }
+
+    #[test]
     fn paths_follow_on_from_the_nearer_end() {
         let form = Form {
             paths: vec![

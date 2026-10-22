@@ -380,9 +380,13 @@ export function sewList(p: Pattern, list: Entry[], trimMm: number, opts: ListOpt
   const cutBefore = (o: SewObject) => !tiesIn || o.index === 0 || trimmedBetween(p, all[o.index - 1], o);
   // Before hidden travel an object has its tie-off, though it does not read as one (no jump follows it).
   const cutAfter = (o: SewObject) => !tiesOff || o.index === all.length - 1 || trimmedBetween(p, o, all[o.index + 1]) || !!travelOf(remembered(p, all[o.index + 1]));
-  // Kept objects that got a tie-in or tie-off of their own (too small to have one).
-  const grown = new Set<number>();
-  let tied = false;
+  // Kept objects that got a tie-in or tie-off of their own (too small to have one): how many stitches each.
+  const grown = new Map<number, { tieIn: number; tieOff: number }>();
+  const grow = (k: number, tieIn: number, tieOff: number) => {
+    const g = grown.get(k) ?? { tieIn: 0, tieOff: 0 };
+    grown.set(k, { tieIn: g.tieIn + tieIn, tieOff: g.tieOff + tieOff });
+  };
+  let tied = 0;
   /** A tie-off for kept object `o` (entry `k`), sewn as part of it. */
   const tiedOff = (k: number, o: SewObject) => {
     const recs = tieOff(p, o.last).map((r) => mapped(k, r));
@@ -391,7 +395,7 @@ export function sewList(p: Pattern, list: Entry[], trimMm: number, opts: ListOpt
     placed[k].last += n;
     stitches += n;
     counted = out.length;
-    grown.add(k);
+    grow(k, 0, n);
   };
   // What hides travel sewn before each entry (see travel.ts), worked out when asked.
   const hides: (Hiding | null | undefined)[] = [];
@@ -420,6 +424,7 @@ export function sewList(p: Pattern, list: Entry[], trimMm: number, opts: ListOpt
   const tagsOf = () => (tags ??= tagShortStitches(p));
   list = list.slice();
   list.forEach((e, k) => {
+    tied = 0;
     let o = e.obj;
     const prev = list[k - 1]?.obj;
     const spec = specs[k];
@@ -541,7 +546,6 @@ export function sewList(p: Pattern, list: Entry[], trimMm: number, opts: ListOpt
       // The new memory gives the same stitches the same way.
       if (memory !== m) keepSewn(memory, wayKey(spec, way), sewn);
     } else {
-      tied = false;
       // Kept as it is: after its neighbour in `p` with the jumps that led to it there, else
       // jumped to (and tied in after a trim, or as a new first object), or come to by travel.
       let lead = o.first;
@@ -554,8 +558,9 @@ export function sewList(p: Pattern, list: Entry[], trimMm: number, opts: ListOpt
       if (lead < o.first) copy(lead, o.first);
       copyOwn(k, o.first, o.first + 1);
       if ((cut || (!prev && !led)) && !o.tieIn && !cutBefore(o)) {
-        out.push(...tieIn(p, o.first).map((r) => mapped(k, r)));
-        tied = true;
+        const recs = tieIn(p, o.first).map((r) => mapped(k, r));
+        out.push(...recs);
+        tied = recs.filter((r) => r.cmd === STITCH).length;
       }
       copyOwn(k, o.first + 1, o.last + 1);
       count(sewnFrom);
@@ -568,7 +573,7 @@ export function sewList(p: Pattern, list: Entry[], trimMm: number, opts: ListOpt
     const id = used.has(o.id) ? nextId++ : o.id;
     used.add(id);
     placed.push({ id, first, last: stitches - 1, key: '', at: [0, 0], ...(memory ? { memory: memory.id === id ? memory : { ...memory, id } } : {}) });
-    if (tied) grown.add(placed.length - 1);
+    if (tied) grow(placed.length - 1, tied, 0);
   });
   // Cut at the end, as every design made here is; a file from elsewhere that ends without a cut
   // (the machine or the hand cuts there anyway) ends so whatever comes last.
@@ -589,14 +594,14 @@ export function sewList(p: Pattern, list: Entry[], trimMm: number, opts: ListOpt
     e.at = [q.x[records[e.first]], q.y[records[e.first]]];
   }
   setObjects(q, placed, nextId);
-  // A tie-off or tie-in added to a kept object gives it more stitches: the parts it was sewn in no
-  // longer fit, and the next edit tells them apart anew.
+  // A tie-off or tie-in added to a kept object gives it more stitches: its parts count them, the
+  // tie-in (after its first stitch) in the first, the tie-off in the last.
   if (grown.size) {
     const objs = sewObjects(q);
-    for (const k of grown) {
+    for (const [k, g] of grown) {
       const o = objs.find((x) => x.id === placed[k].id);
       const m = o && remembered(q, o);
-      if (o && m?.parts) remember(q, o, { ...m, parts: undefined });
+      if (o && m?.parts?.length) remember(q, o, { ...m, parts: m.parts.map((pt, j, all) => ({ ...pt, end: pt.end + g.tieIn + (j === all.length - 1 ? g.tieOff : 0) })) });
     }
   }
   return q;

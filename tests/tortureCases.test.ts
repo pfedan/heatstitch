@@ -26,6 +26,24 @@ import { writePattern } from '../src/writers';
 // and open; the regular chains are in torture.test.ts and tortureChains.test.ts. A file of its own so
 // it runs beside the chains instead of after them.
 describe('found by the torture test', () => {
+  // Lines combined into a loop 6.1 mm high with a satin 5.9 mm wide and mitered corners: the inner
+  // side of each corner shrank to a point, and the core stopped with an error there.
+  it('a satin as wide as its loop is sewn', async () => {
+    await chain(325, undefined, { knit: true, motif: true });
+  }, 120_000);
+
+  // Objects of several threads gathered into one: an object that came to stand between trims got a
+  // tie-in and tie-off of its own and forgot the parts it was sewn in instead of counting them.
+  it('an object tied anew keeps its parts', async () => {
+    await chain(223, undefined, { knit: true, motif: true });
+  }, 120_000);
+
+  // The last letter deleted: the one before it ends the thread now and gets a tie-off, which is no
+  // change of its stitches.
+  it('a tie-off for a new neighbour is no change of an object', async () => {
+    await chain(217, undefined, { knit: true, motif: true });
+  }, 120_000);
+
   // Pasted into a design over a fill fading into a second thread and leaving out what lies on
   // top: what was left of its area gave the second thread nothing to sew, and it stayed where the
   // area had been.
