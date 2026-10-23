@@ -65,7 +65,8 @@ export function hidingOf(m: Remembered | null | undefined): Hiding | null {
   }
   const f = m?.fill;
   if (!m || !f || m.read || m.hand || m.free || m.applique || m.lettering || m.satin || (m.outline && m.border)) return null;
-  if (isOpenPattern(f.pattern) || !HIDING.has(f.pattern)) return null;
+  // A fill that fades leaves rows ever further apart, down to none: what lies under it shows.
+  if (isOpenPattern(f.pattern) || !HIDING.has(f.pattern) || f.deco?.fade) return null;
   if (m.parts?.some((pt) => pt.kind !== 'fill' && !pt.border)) return null;
   const gradient = f.pattern === 'gradient' || !!f.gradient;
   if (Math.max(f.spacing, gradient ? f.spacingEnd : 0) > HIDING_SPACING) return null;
@@ -403,6 +404,29 @@ export function settleTravel(p: Pattern, trimMm: number): Pattern {
   const now = sewObjects(q);
   const kept = pairs.filter((k) => travelOf(remembered(q, now[k])));
   return kept.length === pairs.length ? q : sewn(kept);
+}
+
+/**
+ * After an edit by hand (handEdit.ts): travel in `p` that no longer leads hidden from the object
+ * before (what hid it was edited by hand, or its own stitches were) is kept as the first stitches
+ * of the object it leads to, sewn as they are. Its records stay where they are, so the editor's
+ * points do not move; sewn from its shape again, the object finds its way anew. Changes what the
+ * objects of `p` remember in place.
+ */
+export function keepShownTravel(p: Pattern): void {
+  const objs = sewObjects(p);
+  const mem = objs.map((o) => remembered(p, o));
+  if (!mem.some((m) => travelOf(m))) return;
+  const hides = mem.map((m) => hidingOf(m));
+  for (let k = 1; k < objs.length; k++) {
+    const n = travelOf(mem[k]);
+    if (!n) continue;
+    const pts = travelPoints(p, objs[k - 1], objs[k], n);
+    if (pts && hiddenAlong(pts, hidingAfter(k, hides))) continue;
+    // Counted in its parts and underlay from its first stitch already: only it is no longer travel.
+    const { travel: _t, ...rest } = mem[k]!;
+    remember(p, objs[k], rest);
+  }
 }
 
 /** The point of `area`'s edge nearest to `q`. */

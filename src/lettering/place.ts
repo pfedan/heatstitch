@@ -3,6 +3,7 @@ import { tidy, withRecords } from '../model/edit';
 import { rememberObjects, sewObjects, type SewObject } from '../model/objects';
 import { COLOR_CHANGE, computeBounds, END, JUMP, nextVersion, STITCH, TRIM, type Pattern } from '../model/pattern';
 import { remember, remembered } from '../model/restitch';
+import { settleTravel } from '../model/travel';
 import type { Lettering } from './layout';
 import type { Rec, Sewn } from './sew';
 
@@ -23,8 +24,11 @@ function span(p: Pattern, o: SewObject): [number, number] {
   return [a, b];
 }
 
-/** The pattern without the objects `old` (their jumps and trims too); null when nothing would be left. */
-export function withoutObjects(p: Pattern, old: SewObject[]): Pattern | null {
+/**
+ * The pattern without the objects `old` (their jumps and trims too), the hidden travel around them
+ * settled anew (see settleTravel); null when nothing would be left.
+ */
+export function withoutObjects(p: Pattern, old: SewObject[], trimMm: number): Pattern | null {
   if (!old.length) return null;
   const x = Array.from(p.x);
   const y = Array.from(p.y);
@@ -35,7 +39,7 @@ export function withoutObjects(p: Pattern, old: SewObject[]): Pattern | null {
     cmd.splice(a, b - a);
   }
   if (!cmd.includes(STITCH)) return null;
-  return tidy(withRecords(p, Int32Array.from(x), Int32Array.from(y), Uint8Array.from(cmd), p.colors.map((c) => ({ ...c }))));
+  return settleTravel(tidy(withRecords(p, Int32Array.from(x), Int32Array.from(y), Uint8Array.from(cmd), p.colors.map((c) => ({ ...c })))), trimMm);
 }
 
 export interface Placed {
@@ -47,7 +51,8 @@ export interface Placed {
 /**
  * The pattern with the lettering's stitches put in: where its old objects were (they go), else
  * at the end, or as a new design when there is none. It gets its own color block when its
- * thread differs from the one it is sewn in; the objects remember the lettering.
+ * thread differs from the one it is sewn in; the objects remember the lettering. Hidden travel
+ * that led to or from the old objects is settled anew (see settleTravel).
  */
 export function placeLettering(p: Pattern | null, old: SewObject[], sewn: Sewn, l: Lettering, name = 'lettering'): Placed | null {
   if (!sewn.recs.length) return null;
@@ -128,7 +133,11 @@ export function placeLettering(p: Pattern | null, old: SewObject[], sewn: Sewn, 
   }
   const mine = objs.filter((o) => number[o.first] >= first && number[o.first] < first + sewn.stitches);
   for (const o of mine) remember(next, o, { region: null, lettering: l });
-  return { pattern: next, objects: mine };
+  if (!p) return { pattern: next, objects: mine };
+  // The objects stay as many and in their order: the lettering's are found where they were.
+  const settled = settleTravel(next, sewn.trimMm);
+  const now = sewObjects(settled);
+  return { pattern: settled, objects: mine.map((o) => now[o.index]) };
 }
 
 /**

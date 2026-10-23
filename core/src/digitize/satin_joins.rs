@@ -149,7 +149,7 @@ fn corners_of(pts: &[Pt], closed: bool, arm: f64) -> Vec<Corner> {
     chosen
 }
 
-/// The point at length `s` along points with lengths `cum`, between i-1 and i.
+/// The point at length `s` along points with lengths `cum`, between i-1 and i (two points or more).
 fn lerp_at(cum: &[f64], s: f64) -> (usize, f64) {
     let mut i = 1;
     while i < cum.len() - 1 && cum[i] < s {
@@ -169,6 +169,10 @@ fn lp(u: Pt, v: Pt, t: f64) -> Pt {
 
 /// The pairs of `r` whose middle lies from `from` to `len - to` along the middle (mm), cut exactly there.
 fn trimmed(r: &Rails, from: f64, to: f64) -> Rails {
+    // One pair or none has no length to cut.
+    if r.left.len() < 2 {
+        return r.clone();
+    }
     let c: Vec<Pt> = r
         .left
         .iter()
@@ -203,8 +207,14 @@ fn trimmed(r: &Rails, from: f64, to: f64) -> Rails {
     out
 }
 
-/// Points along a polyline at shares 0..1 (by length).
+/// Points along a polyline at shares 0..1 (by length). A line of one point (an inner side shrunk
+/// to a point, where the band is as wide as the shape) is that point at every share.
 fn along(line: &[Pt], shares: &[f64]) -> Vec<Pt> {
+    if line.len() < 2 {
+        return line
+            .first()
+            .map_or_else(Vec::new, |&p| vec![p; shares.len()]);
+    }
     let cum = cumulative(line);
     let len = cum[cum.len() - 1];
     shares

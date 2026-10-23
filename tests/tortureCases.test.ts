@@ -26,6 +26,47 @@ import { writePattern } from '../src/writers';
 // and open; the regular chains are in torture.test.ts and tortureChains.test.ts. A file of its own so
 // it runs beside the chains instead of after them.
 describe('found by the torture test', () => {
+  // A line sewn anew on its own (resewOnce): the hidden travel to it stayed in what it remembered,
+  // though its old stitches went with it and it is jumped to.
+  it('a line sewn anew forgets the travel to its old stitches', async () => {
+    await chain(171, undefined, { knit: true, motif: true });
+  }, 120_000);
+
+  // Lettering placed anew: the travel hidden under the letters it replaced stayed, with nothing on
+  // top of it any more.
+  it('lettering placed anew settles the travel around it', async () => {
+    await chain(149, undefined, { knit: true, motif: true });
+  }, 120_000);
+
+  // A fill thinned by hand hides nothing any more: the travel under it is kept as the first
+  // stitches of the object it leads to, the editor's points staying where they are.
+  it('travel under a fill thinned by hand is kept as stitches', async () => {
+    await chain(105, undefined, { knit: true, motif: true });
+  }, 120_000);
+
+  // The same for a fill stitched on by hand, where travel to other objects lay under it.
+  it('travel under a fill stitched on by hand is kept as stitches', async () => {
+    await chain(111, undefined, { knit: true, motif: true });
+  }, 120_000);
+
+  // Lines combined into a loop 6.1 mm high with a satin 5.9 mm wide and mitered corners: the inner
+  // side of each corner shrank to a point, and the core stopped with an error there.
+  it('a satin as wide as its loop is sewn', async () => {
+    await chain(325, undefined, { knit: true, motif: true });
+  }, 120_000);
+
+  // Objects of several threads gathered into one: an object that came to stand between trims got a
+  // tie-in and tie-off of its own and forgot the parts it was sewn in instead of counting them.
+  it('an object tied anew keeps its parts', async () => {
+    await chain(223, undefined, { knit: true, motif: true });
+  }, 120_000);
+
+  // The last letter deleted: the one before it ends the thread now and gets a tie-off, which is no
+  // change of its stitches.
+  it('a tie-off for a new neighbour is no change of an object', async () => {
+    await chain(217, undefined, { knit: true, motif: true });
+  }, 120_000);
+
   // Pasted into a design over a fill fading into a second thread and leaving out what lies on
   // top: what was left of its area gave the second thread nothing to sew, and it stayed where the
   // area had been.

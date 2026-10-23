@@ -296,6 +296,9 @@ function resewOnce(p: Pattern, index: number, path: Form, st: PathStitch, trimMm
   delete memory.hand;
   delete memory.free;
   delete memory.columns;
+  // Hidden travel to it went with its old stitches: it is jumped to now.
+  delete memory.travel;
+  delete memory.underFrom;
   remember(next, fresh, memory);
   return { pattern: next, first: fresh.first, last: fresh.last };
 }

@@ -11,7 +11,7 @@ import { ECHO_SIDES } from '../../src/digitize/echo';
 import { HAND_STITCHES, HAND_WIDTH, LINE_MOTIFS } from '../../src/digitize/motif';
 import { partOf, type LinePart } from '../../src/model/shadow';
 import { fillToLine, lineStitches, lineToFill, resewLine } from '../../src/model/line';
-import { overlapsIn, refreshKnockouts, setKnockout } from '../../src/model/knockout';
+import { overlapsIn, refreshKnockouts, setCoverMode, setKnockout, type CoverMode } from '../../src/model/knockout';
 import { rememberObjects, sewObjects, tableOf, type SewObject } from '../../src/model/objects';
 import { COLOR_CHANGE, END, STITCH, TRIM, type Pattern, type ThreadColor } from '../../src/model/pattern';
 import { sameColor } from '../../src/model/recolor';
@@ -45,7 +45,7 @@ import { fromStored, storedVersion, toStored } from '../../src/storage/fileStore
 import { decodeProject, encodeProject, projectSettings } from '../../src/storage/project';
 import { DEFAULTS } from '../../src/settings';
 import { DEFAULT_PROFILE } from '../../src/validation/profiles';
-import { tagShortStitches, TIE } from '../../src/validation/shortStitches';
+import { tagShortStitches, TIE, TIE_MAX } from '../../src/validation/shortStitches';
 import { thinByHand } from '../../src/correct/thinHand';
 import { keepObjects } from '../../src/model/handEdit';
 import { Editor } from '../../src/ui/editor';
@@ -93,20 +93,31 @@ import { areaOf, fillArea, fits, formKey, geoOf, geoUse, guessArea, guessGeo, gu
 
 /** The stitches of object `o` (0.1 mm), its tie-in left out. */
 /** Where the own stitches of object `o` start: after the hidden travel to it (see model/travel.ts) and its tie-in. */
-export const ownFrom = (p: Pattern, o: SewObject) => {
-  const travel = remembered(p, o)?.travel ?? 0;
+export const ownFrom = (p: Pattern, o: SewObject, travel = remembered(p, o)?.travel ?? 0) => {
   if (!travel) return o.first + o.tieIn;
+  // After travel the short stitches of a lock do not read as a tie (no jump leads to them): up to
+  // TIE_MAX short stitches there are its tie-in, as sewList takes them (sew.ts).
   const tags = tagShortStitches(p);
   let i = o.first + travel;
-  while (i + 1 <= o.last && tags[i + 1] === TIE) i++;
+  while (i + 1 <= o.last && i < o.first + travel + TIE_MAX && tags[i + 1]) i++;
   return i;
 };
-/** How many stitches object `o` has of its own (without the hidden travel to it). */
-export const ownCount = (p: Pattern, o: SewObject) => o.stitches - (remembered(p, o)?.travel ?? 0);
-
-export const ownStitches = (p: Pattern, o: SewObject) => {
+/**
+ * The stitches object `o` sews itself: without the travel to it, its tie-in and its tie-off (they
+ * follow its neighbours). Before hidden travel a tie-off does not read as one, and with a trim
+ * after it the short stitches before it may read as part of it: short stitches at the end go.
+ * `travel`: the stitches of travel it starts with, when they are to be left out though it no longer
+ * counts them as travel.
+ */
+export const ownStitches = (p: Pattern, o: SewObject, travel?: number) => {
   const out: string[] = [];
-  for (let i = ownFrom(p, o); i <= o.last; i++) if (p.cmd[i] === STITCH) out.push(`${p.x[i]},${p.y[i]}`);
+  // From the stitch after where it starts: the first point, or the end of a tie-in (which lies on
+  // the way to the next one).
+  const from = ownFrom(p, o, travel) + 1;
+  const tags = tagShortStitches(p);
+  let to = o.last - o.tieOff;
+  while (to > from && tags[to]) to--;
+  for (let i = from; i <= to; i++) if (p.cmd[i] === STITCH) out.push(`${p.x[i]},${p.y[i]}`);
   return out.join(' ');
 };
 
@@ -527,8 +538,10 @@ export const OPS: Op[] = [
       for (const k of g!.which) {
         expect(head(now[k].block), 'gathered into one color block').toBe(head(now[g!.which[0]].block));
         expect(sameColor(now[k].color, d.objects[lead].color), 'in the lead\'s thread').toBe(true);
-        expect(ownCount(g!.pattern, now[k]), 'a gathered object keeps its stitches').toBe(ownCount(p, was.get(now[k].id)!));
-        const ownly = (m: Remembered | undefined) => m && withTravel(m, 0);
+        // (Its ties follow its new neighbours.)
+        expect(ownStitches(g!.pattern, now[k]), 'a gathered object keeps its stitches').toBe(ownStitches(p, was.get(now[k].id)!));
+        // (Its parts count the ties it has now.)
+        const ownly = (m: Remembered | undefined) => m && { ...withTravel(m, 0), parts: m.parts?.map((pt) => ({ ...pt, end: 0 })) };
         expect(ownly(remembered(g!.pattern, now[k])), 'a gathered object keeps what it knows').toEqual(ownly(remembered(p, was.get(now[k].id)!)));
       }
       // The others keep their order and thread.
@@ -676,6 +689,8 @@ export const OPS: Op[] = [
       const o0 = pick(r, before);
       let o = o0.index;
       const others = new Map(before.map((x) => [x.id, ownStitches(d.cur.p, x)]));
+      // Travel no longer hidden is kept as the stitches of the object it leads to (keepShownTravel).
+      const travel = new Map(before.map((x) => [x.id, remembered(d.cur.p, x)?.travel ?? 0]));
       const before0 = d.cur.p;
       const obj = () => sewObjects(d.cur.p)[o];
       const editor = new Editor({
@@ -716,7 +731,7 @@ export const OPS: Op[] = [
       const after = sewObjects(d.cur.p);
       expect(after.map((x) => x.id), 'stitched on: the same objects').toEqual(before.map((x) => x.id));
       expect(after[o].stitches, 'stitched on: one stitch more per click').toBe(o0.stitches + clicks);
-      for (const x of after) if (x.index !== o) expect(ownStitches(d.cur.p, x), 'stitched on: the others stay as they were').toBe(others.get(x.id));
+      for (const x of after) if (x.index !== o) expect(ownStitches(d.cur.p, x, travel.get(x.id)), 'stitched on: the others stay as they were').toBe(others.get(x.id));
       if (fromEnd) {
         // The thread ends at the last click, locked by the tie-off that came along: what is sewn after
         // it stays as close to it as the tie-off was to the old end (each turn may round by 0.1 mm).
@@ -891,7 +906,9 @@ export const OPS: Op[] = [
       const fills = d.objects.filter((o) => areaOf(remembered(d.cur.p, o)) && !remembered(d.cur.p, o)?.free);
       if (!fills.length) return false;
       const o = pick(r, fills);
-      const k = setKnockout(d.cur.p, [o.index], !remembered(d.cur.p, o)!.knockout, T);
+      // As the choice under later objects: leaving out on, or off to sewing all or without underlay there.
+      const mode: CoverMode = remembered(d.cur.p, o)!.knockout ? (o.index % 2 ? 'under' : 'all') : 'out';
+      const k = setCoverMode(d.cur.p, [o.index], mode, T);
       if (!k) return false;
       d.commit(k.pattern);
       return true;
@@ -2573,6 +2590,9 @@ export function checkCopiedChains(p: Pattern, copies: number[]): void {
 /** What leaves out the shapes on top fits the shapes on top now. */
 export function checkKnockouts(p: Pattern): void {
   expect(refreshKnockouts(p, T)?.changed ?? [], 'fills whose left-out parts are out of date').toEqual([]);
+  // A fill that leaves out sews nothing under what lies on top, so it keeps no underlay setting there.
+  const both = sewObjects(p).filter((o) => remembered(p, o)?.knockout && remembered(p, o)?.fill?.underCover);
+  expect(both.map((o) => o.index), 'fills leaving out with an underlay setting under later objects').toEqual([]);
 }
 
 /**
@@ -2864,7 +2884,7 @@ export function checkTravel(p: Pattern): void {
       const satin = m && !m.fill && (m.satin || m.line?.type === 'satin' || m.border?.type === 'satin') ? hidingOf(m) : null;
       if (satin) return [satin.region];
       const f = m?.fill;
-      if (!f || m.read || m.hand || m.free || m.applique || !HIDING_PATTERNS.includes(f.pattern)) return [];
+      if (!f || m.read || m.hand || m.free || m.applique || f.deco?.fade || !HIDING_PATTERNS.includes(f.pattern)) return [];
       if (Math.max(f.spacing, f.pattern === 'gradient' || f.gradient ? f.spacingEnd : 0) > HIDING_SPACING) return [];
       const area = spec?.kind === 'fill' ? spec.area : f.pattern === 'follow' ? m.region : null;
       return area ? [area] : [];

@@ -23,7 +23,9 @@ import { withHiddenJoins } from '../model/travel';
 import { type Pattern, TRIM, COLOR_CHANGE, STITCH, type ThreadColor } from '../model/pattern';
 import { type StitchStyle, stitchColors, stitchAlpha } from '../render/flow';
 import { ui } from './state';
-import { wholeOf } from '../model/knockout';
+import { coveredPart, wholeOf } from '../model/knockout';
+import { outline } from '../digitize/region';
+import { unionOf } from '../shape/rasterize';
 import { guessArea, lineGeoOf, openOf, satinOutline } from '../model/geo';
 
 /** What bindScene needs from the rest of the app. */
@@ -127,7 +129,7 @@ export function bindScene(app: SceneApp) {
 
   /** The underlay or the border of the selected objects, per record (null while it is not shown). */
   function underMask(p: Pattern): Uint8Array | null {
-    if (!ui.highlight || !ui.selectedObjects.size || !app.settings.autoHighlight) return null;
+    if (!ui.highlight || ui.highlight === 'knockout' || !ui.selectedObjects.size || !app.settings.autoHighlight) return null;
     if (underCache?.p === p && underCache.key === ui.selectionKey && underCache.what === ui.highlight) return underCache.mask;
     const q = seq(p);
     const mask = new Uint8Array(p.cmd.length);
@@ -213,6 +215,16 @@ export function bindScene(app: SceneApp) {
         }
       }
     }
+  }
+
+  /** Where the selected fills are sewn twice (mm), while the switch for leaving out is pointed at. */
+  let coveredCache: { p: Pattern; key: number; lines: Pt[][] } | null = null;
+  function coveredLines(p: Pattern): Pt[][] {
+    if (coveredCache?.p === p && coveredCache.key === ui.selectionKey) return coveredCache.lines;
+    const objs = seq(p).objects;
+    const all = unionOf([...ui.selectedObjects].map((o) => objs[o] && coveredPart(p, objs, objs[o])).filter((r) => !!r));
+    coveredCache = { p, key: ui.selectionKey, lines: all ? outline(all) : [] };
+    return coveredCache.lines;
   }
 
   /** The line the border of each selected fill lies on (mm), while the border settings are pointed at. */
@@ -361,6 +373,15 @@ export function bindScene(app: SceneApp) {
       // The areas as recognized on the file itself, also while a change is previewed (not while
       // their shape is edited or the object is dragged: those show their own outline).
       outlines: app.files.active?.pattern && ui.selectedObjects.size && !app.shapeTool.active && app.frameTool.dragging === null ? app.stitchInfo(app.files.active.pattern, seq(app.files.active.pattern)).outlines : undefined,
+      // Not while a change is previewed or the frame dragged: they are where the design is now.
+      overlaps:
+        ui.flowPreview || app.frameTool.dragging !== null
+          ? null
+          : ui.highlight === 'knockout' && ui.hoverObject === null
+            ? { lines: coveredLines(p) }
+            : ui.overlapMarks?.p === p
+              ? ui.overlapMarks
+              : null,
       // Drawn over the stitches for the underlay and the border; echo copies and a shadow show as they are sewn.
       under: ui.hoverObject === null && (ui.highlight === 'under' || ui.highlight === 'border') ? underMask(p) : null,
       contour: ui.hoverObject === null && ui.highlight === 'border' && app.settings.autoHighlight ? contourLines(p) : null,

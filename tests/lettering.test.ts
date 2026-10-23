@@ -260,12 +260,12 @@ describe('placing', () => {
     const p = parsePattern(readFileSync(new URL('../public/examples/cat-60mm.pes', import.meta.url)), 'cat.pes');
     const l = spec({ x: 0, y: 40 });
     const a = placeLettering(p, [], sewLettering(f, l, 3), l)!;
-    const b = withoutObjects(a.pattern, a.objects)!;
+    const b = withoutObjects(a.pattern, a.objects, 3)!;
     expect(stitchCount(b.cmd)).toBe(stitchCount(p.cmd));
     expect(b.colors.length).toBe(p.colors.length);
     // A design of the lettering alone keeps it: nothing would be left.
     const alone = placeLettering(null, [], sewLettering(f, l, 3), l)!;
-    expect(withoutObjects(alone.pattern, alone.objects)).toBeNull();
+    expect(withoutObjects(alone.pattern, alone.objects, 3)).toBeNull();
   });
 
   it('adds a lettering in another color as its own block and replaces it in place', () => {

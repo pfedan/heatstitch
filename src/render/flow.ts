@@ -505,6 +505,66 @@ export function drawOutlines(ctx: CanvasRenderingContext2D, vp: Viewport, shapes
   ctx.restore();
 }
 
+/** Where fills are sewn twice (closed lines in mm). */
+export interface OverlapMarks {
+  lines: [number, number][][];
+}
+
+/**
+ * The parts of fills sewn twice, under what is sewn on top (what "Aussparen" takes away): darkened
+ * and hatched in white with a dark rim, so they read on any thread.
+ */
+export function drawOverlaps(ctx: CanvasRenderingContext2D, vp: Viewport, marks: OverlapMarks): void {
+  const s = vp.scale;
+  const path = new Path2D();
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  for (const line of marks.lines) {
+    line.forEach(([mx, my], i) => {
+      const x = mx * s + vp.offsetX;
+      const y = my * s + vp.offsetY;
+      if (i) path.lineTo(x, y);
+      else path.moveTo(x, y);
+      x0 = Math.min(x0, x);
+      y0 = Math.min(y0, y);
+      x1 = Math.max(x1, x);
+      y1 = Math.max(y1, y);
+    });
+    path.closePath();
+  }
+  if (x0 > x1) return;
+  ctx.save();
+  ctx.lineJoin = 'round';
+  ctx.save();
+  ctx.clip(path, 'evenodd');
+  ctx.fillStyle = 'rgba(13, 11, 16, 0.45)';
+  ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+  // Diagonal hatching, fixed to the design so it moves with it.
+  const gap = 5;
+  const from = Math.floor((x0 + y0 - vp.offsetX - vp.offsetY) / gap) * gap + vp.offsetX + vp.offsetY;
+  ctx.beginPath();
+  for (let c = from; c <= x1 + y1; c += gap) {
+    ctx.moveTo(c - y0, y0);
+    ctx.lineTo(c - y1, y1);
+  }
+  ctx.strokeStyle = 'rgba(13, 11, 16, 0.6)';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+  ctx.restore();
+  ctx.strokeStyle = 'rgba(13, 11, 16, 0.75)';
+  ctx.lineWidth = 3.5;
+  ctx.stroke(path);
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 1.5;
+  ctx.stroke(path);
+  ctx.restore();
+}
+
 /**
  * The underlay of the selected objects on top of everything (records with `under` set, each the
  * end of a stitch): a dark halo and a bright line, so it reads on any thread and background.

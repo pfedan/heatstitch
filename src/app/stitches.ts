@@ -13,7 +13,7 @@ import type { ShapeOutline } from '../render/scene';
 import { hasPart, partOf, withoutPart } from '../model/shadow';
 import { SATIN_SHARE } from '../model/covers';
 import { currentSettings } from '../correct/plan';
-import { isCovered, setOverlapShare } from '../model/knockout';
+import { isCovered, setCoverMode, setOverlapShare } from '../model/knockout';
 import { strokeLike, SATIN_MAX, pullFor, digitizeDefaults, gapOf } from '../digitize/digitize';
 import { fillOfLine, lineGoes, lineSettings, lineToFill } from '../model/line';
 import { outline } from '../digitize/region';
@@ -23,7 +23,7 @@ import { loosable } from '../model/handEdit';
 import { backToOriginal, loadedOriginal, originalOf } from '../model/original';
 import { newLink, shareBorders, syncBorders } from '../model/border';
 import { readBorder } from '../model/readBorder';
-import { t, type Key } from '../i18n';
+import { formatNumber, t, type Key } from '../i18n';
 import { type ShapeTrust, analyze, borderOf, withLine, remembered, measureFill, measureSatin, measureRun, shapeTrust, type Remembered, remember, rememberedIn, restitch, restitchedPieces, type Settings as RestitchSettings, type RestitchResult, objectKey, relearn } from '../model/restitch';
 import { type StitchInfo, StitchPanel } from '../ui/stitchPanel';
 import { LivePreview } from '../resew/client';
@@ -532,6 +532,21 @@ export function bindStitches(app: StitchesApp) {
       app.redraw();
     },
     knockout: (on) => app.knockoutObjects([...ui.selectedObjects].sort((a, b) => a - b), on),
+    coverMode: (mode) => {
+      const f = app.files.active;
+      const p = f?.pattern;
+      if (!f || !p) return;
+      const r = setCoverMode(p, [...ui.selectedObjects].sort((a, b) => a - b), mode, app.settings.trimMm);
+      if (!r) return;
+      const sel = ui.selectedObjects;
+      app.applyEdit(r.pattern);
+      app.files.setObjects(f, rememberedIn(r.pattern, app.seq(r.pattern).objects));
+      ui.selectedObjects = sel;
+      ui.selectionKey++;
+      ui.stitchCache = null;
+      app.layers.say(t(mode === 'out' ? 'knockout.done' : 'knockout.undone', { n: formatNumber(r.changed) }) + ' ' + t('object.undo'));
+      app.redraw();
+    },
     overlapShare: (share) => {
       const f = app.files.active;
       const p = f?.pattern;

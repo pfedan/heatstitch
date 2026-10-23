@@ -12,7 +12,7 @@ import { drawAreas, drawFrame, drawShapeOverlay, type FlatArea } from './shapeOv
 import type { ShapeView } from '../ui/shapeTool';
 import type { FrameView } from '../ui/frameTool';
 import type { Pt } from '../digitize/skeleton';
-import { stitchColors, drawFlatStitches, drawHiddenWays, drawJumps, drawMarkers, drawNeedle, drawOutlines, drawTransition, drawContour, drawUnderlay, type StitchStyle } from './flow';
+import { stitchColors, drawFlatStitches, drawHiddenWays, drawJumps, drawMarkers, drawNeedle, drawOutlines, drawOverlaps, drawTransition, drawContour, drawUnderlay, type OverlapMarks, type StitchStyle } from './flow';
 import { drawHeatmap } from './heatmap';
 import { drawStitches } from './stitches';
 import { drawThreads } from './threads';
@@ -44,6 +44,8 @@ export interface FlowScene {
   needle: number;
   /** Fill areas of the selected objects. */
   outlines?: ShapeOutline[];
+  /** Where fills are sewn twice, while the card that offers leaving them out is pointed at. */
+  overlaps?: OverlapMarks | null;
   /** Underlay of the selected objects, shown while its settings are pointed at (per record). */
   under?: Uint8Array | null;
   /** The lines the borders of the selected fills lie on (mm), shown while their settings are pointed at. */
@@ -139,6 +141,7 @@ export function drawScene(ctx: CanvasRenderingContext2D, w: number, h: number, s
     if (flow.trace) drawTraceFrame(ctx, vp, flow.trace);
     if (flow.hover && flow.hover !== flow.selected) drawTransition(ctx, vp, pattern, flow.hover, false);
     if (flow.selected) drawTransition(ctx, vp, pattern, flow.selected, true);
+    if (flow.overlaps?.lines.length) drawOverlaps(ctx, vp, flow.overlaps);
     if (flow.outlines?.length) drawOutlines(ctx, vp, flow.outlines);
     if (flow.contour) drawContour(ctx, vp, flow.contour);
     if (flow.under) drawUnderlay(ctx, vp, pattern, flow.under);
