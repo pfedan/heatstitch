@@ -108,7 +108,8 @@ with this section when the site starts sending anything new.
 
 - **Objects** recognized from the stitches of any file: order by drag or *Optimize order*, move,
   rotate, scale, duplicate, mirror, delete, context menu, combine and split, cut out, don't sew or
-  keep as guide, knock out under later shapes, own thread per object, **cut apart** a fill into
+  keep as guide, one choice per fill under later objects (sew all, no underlay or knock out; pointing at the
+  choice or at the overlap card hatches the places sewn twice), own thread per object, **cut apart** a fill into
   parts with their own direction (one border around all parts), **contour around** the selection
   at a set distance (a patch edge as satin, a patch ground as fill); between objects of one thread
   the way runs **hidden under a dense fill or a satin from 2 mm sewn later** as running stitch
@@ -122,7 +123,7 @@ with this section when the site starts sending anything new.
   circles strung in rows), echo, cross stitch (only along the slants, on a grid shared by the design, so
   areas on top of each other meet without a gap; sizes of Aida marked), crosshatch), irregular rows for a hand-sewn look,
   spacing (rows on the 0.1 mm grid at 0°, 45°, 90° and similar angles, so they lie evenly), angle, stitch length, edges, expand, underlay
-  (off, across, cross, inset, left out under later objects), **border** (running, triple or satin,
+  (off, across, cross, inset), **border** (running, triple or satin,
   offset, own thread); satin pattern or E stitch, spacing (also by width and per rung), width per
   side (by fabric: free ends also shortened against push), fringe, irregular (width and spacing varying from stitch to stitch, kept by a seed), short stitches in curves, split, underlay kind (the zigzag sewn out and back, crossing), **rungs** for the direction and **sections**
   with cut lines (also on a fill: each part a column of its own; a wide shape such as a star, a block letter or a ring is cut along its medial axis into arms and
