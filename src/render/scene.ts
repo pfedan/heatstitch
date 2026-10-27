@@ -18,7 +18,8 @@ import { drawStitches } from './stitches';
 import { drawThreads } from './threads';
 import { drawFabric } from './fabricGl';
 import { drawWithPieces, hasPieces, underPieces } from './applique';
-import { drawHoop } from './hoop';
+import { drawHoop, hoopCenter } from './hoop';
+import { drawMmGrid } from './mmGrid';
 import { drawValidation, drawZoneHighlight, type Counted } from './validationOverlay';
 import type { Viewport } from './viewport';
 
@@ -116,6 +117,8 @@ export function drawScene(ctx: CanvasRenderingContext2D, w: number, h: number, s
   ctx.fillRect(0, 0, w, h);
   const { pattern, settings: s, vp, flow } = scene;
   if (s.realistic && s.fabricLook) drawFabric(ctx, vp, s.profile.fabric, background);
+  // On the paper, under everything sewn; its middle moves with the hoop's.
+  if (s.mmGrid) drawMmGrid(ctx, vp, w, h, scene.hoopAt ?? (pattern ? hoopCenter(pattern.bounds) : [0, 0]), background);
   if (flow) {
     if (!pattern) return;
     let st = flow.style;

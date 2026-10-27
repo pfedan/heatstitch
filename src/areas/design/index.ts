@@ -170,6 +170,7 @@ export function initDesign(app: DesignApp): { render: () => void } {
       document.querySelector<HTMLElement>('#bg-swatches [aria-pressed="true"], #bg-swatches .bg-own')?.focus();
     },
   });
+  command({ id: 'view.mmGrid', label: 'design.cmd.mmGrid', group: V, keys: ['Shift+G'], when: () => mode() !== 'image', run: click('#mm-grid') });
   command({
     id: 'view.backgroundNext',
     label: 'design.cmd.backgroundNext',
@@ -242,6 +243,7 @@ export function initDesign(app: DesignApp): { render: () => void } {
   const titles = () => {
     $('fit').title = commandTitle(getCommand('view.fit')!);
     $('realistic-check').title = `${t('controls.realistic.hint')} (${keyLabel('Shift+R')})`;
+    $('mm-grid-check').title = `${t('controls.mmGrid.hint')} (${keyLabel('Shift+G')})`;
   };
   onLangChange(titles);
   titles();
