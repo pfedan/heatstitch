@@ -16,6 +16,14 @@ How it is kept (see [CONTRIBUTING.md](CONTRIBUTING.md#releases)):
 
 ## [Unreleased]
 
+### Deutsch
+
+- **Millimeterpapier:** Im Ansicht-Menü unter *Hintergrund* (oder mit Umschalt+G) liegt jetzt auf Wunsch ein Gitter hinter den Stichen: kräftige Linien alle 10 mm, mittlere alle 5 mm, feine jeden Millimeter, mittig im Stickmuster und im Ton der gewählten Hintergrundfarbe.
+
+### English
+
+- **Graph paper:** In the view menu under *Background* (or with Shift+G) a grid can now lie behind the stitches: strong lines every 10 mm, medium ones every 5 mm, fine ones every millimetre, centered on the design and in a shade of the chosen background color.
+
 ## [1.2.0] - 2026-10-21
 
 ### Deutsch

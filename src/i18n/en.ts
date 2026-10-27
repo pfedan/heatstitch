@@ -72,6 +72,8 @@ const enBase: Record<keyof typeof deBase, string> = {
   'bg.navy': 'Navy',
   'bg.red': 'Red',
   'bg.own': 'Custom color',
+  'controls.mmGrid': 'Graph paper',
+  'controls.mmGrid.hint': 'Lines every 1, 5 and 10 mm, centered on the design, in a shade of the background color.',
   'controls.fabric': 'Fabric',
   'controls.fabric.flat': 'Flat (color only)',
   'controls.fabric.hint': 'The fabric of the profile as background, with realistic threads only.',

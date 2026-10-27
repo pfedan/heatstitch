@@ -3057,6 +3057,11 @@ body.sew-busy #canvas {
   margin-top: 4px;
 }
 
+/* Millimetre paper: the paper's own switch, below its colors. */
+#mm-grid-check {
+  margin-top: 8px;
+}
+
 .bg-swatches .bg-sw,
 .bg-swatches .bg-own {
   width: 24px;

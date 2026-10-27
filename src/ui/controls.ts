@@ -52,6 +52,7 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
   const realistic = $<HTMLInputElement>('realistic');
   const shapesView = $<HTMLInputElement>('shapes-view');
   const scaleBar = $<HTMLInputElement>('scale-bar-show');
+  const mmGrid = $<HTMLInputElement>('mm-grid');
   const hoverPreview = $<HTMLInputElement>('hover-preview');
   const wheelZooms = $<HTMLInputElement>('wheel-zooms');
   const threadWidth = $<HTMLInputElement>('thread-width');
@@ -156,6 +157,7 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
     realistic.checked = s.realistic;
     shapesView.checked = s.shapesView;
     scaleBar.checked = s.scaleBar;
+    mmGrid.checked = s.mmGrid;
     hoverPreview.checked = s.hoverPreview;
     wheelZooms.checked = s.wheelZooms;
     // One width for what is shown: the flat lines, or the realistic threads.
@@ -235,6 +237,7 @@ export function bindControls(s: Settings, onChange: (kind: ChangeKind) => void):
   on(realistic, 'change', () => ((s.realistic = realistic.checked), 'render'));
   on(shapesView, 'change', () => ((s.shapesView = shapesView.checked), 'render'));
   on(scaleBar, 'change', () => ((s.scaleBar = scaleBar.checked), 'render'));
+  on(mmGrid, 'change', () => ((s.mmGrid = mmGrid.checked), 'render'));
   on(hoverPreview, 'change', () => ((s.hoverPreview = hoverPreview.checked), 'render'));
   on(wheelZooms, 'change', () => ((s.wheelZooms = wheelZooms.checked), 'render'));
   on(threadWidth, 'input', () => {

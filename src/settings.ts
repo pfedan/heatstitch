@@ -118,6 +118,8 @@ export interface Settings {
   wheelZooms: boolean;
   /** Color behind the stitches (the fabric), as #rrggbb; null follows the light or dark theme. */
   background: string | null;
+  /** Millimetre paper over the background: lines every 1, 5 and 10 mm, centered on the design. */
+  mmGrid: boolean;
   /** In the realistic view the background shows the profile's fabric (weave, knit, leather) in that color. */
   fabricLook: boolean;
   /** Visual thread width of the realistic view in mm; reset to the thread weight's width when the profile thread changes. */
@@ -175,6 +177,7 @@ export const DEFAULTS: Settings = {
   scaleBar: true,
   wheelZooms: false,
   background: null,
+  mmGrid: false,
   fabricLook: true,
   threadMm: threadWidthMm(DEFAULT_PROFILE),
   liveLight: true,
@@ -244,6 +247,7 @@ export function loadSettings(): Settings {
       liveLight: typeof s.liveLight === 'boolean' ? s.liveLight : DEFAULTS.liveLight,
       fabricLook: typeof s.fabricLook === 'boolean' ? s.fabricLook : DEFAULTS.fabricLook,
       scaleBar: typeof s.scaleBar === 'boolean' ? s.scaleBar : DEFAULTS.scaleBar,
+      mmGrid: typeof s.mmGrid === 'boolean' ? s.mmGrid : DEFAULTS.mmGrid,
       wheelZooms: typeof s.wheelZooms === 'boolean' ? s.wheelZooms : DEFAULTS.wheelZooms,
       panels: { side: width(s.panels?.side), inspector: width(s.panels?.inspector) },
       checks: normalizeChecks(s.checks),
