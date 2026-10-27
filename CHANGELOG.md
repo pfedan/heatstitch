@@ -16,12 +16,24 @@ How it is kept (see [CONTRIBUTING.md](CONTRIBUTING.md#releases)):
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-27
+
 ### Deutsch
 
+- **Doppelt gestickte Stellen sehen:** Zeigst du auf den Hinweis, dass Füllungen übereinander liegen, markiert die Bühne genau die Stellen, die doppelt gestickt würden. Auf dem Tablet zeigt ein Tipp auf den Hinweis die Markierung und ein zweiter blendet sie aus. Dasselbe gilt für die Wahl *Unter späteren Objekten* in der Stichart.
+- **Eine Wahl statt zwei Schalter:** Was eine Füllung unter später gestickten Objekten tut, wählst du jetzt an einer Stelle: *Alles sticken*, *Ohne Unterlage* oder *Aussparen*. Bisher waren das zwei Schalter, die sich gegenseitig beeinflussten.
+- **Ganze Stickmuster aus Dateien skalieren:** Enthält eine geöffnete Stickdatei Objekte, die Füllung und Satin zugleich sind, lässt sich das ganze Stickmuster trotzdem mit den Ecken, über Breite und Höhe oder mit *Passend verkleinern* skalieren. Solche Objekte werden mitgestreckt, ein kurzer Hinweis sagt, wie viele es sind und dass *Prüfen* zeigt, ob ihre Dichte noch passt. Beim Skalieren behalten alle Objekte aus der Datei außerdem ihre Identität.
+- **Strg+Z nach einer getippten Größe:** Direkt nach dem Eintippen einer Breite oder Höhe macht Strg+Z die Größenänderung rückgängig. Bisher passierte dann nichts, solange der Cursor noch im Feld stand.
+- **Keine übrig gebliebenen Wege mehr:** Wird eine Linie oder Schrift neu gestickt, eine Füllung von Hand bearbeitet oder mit Verlauf gestickt, bleiben keine versteckten Verbindungen mehr zurück, die nichts mehr verdeckt. Dazu sind einige seltene Fehler bei sehr breitem Satin und bei Vernähstichen behoben.
 - **Millimeterpapier:** Im Ansicht-Menü unter *Hintergrund* (oder mit Umschalt+G) liegt jetzt auf Wunsch ein Gitter hinter den Stichen: kräftige Linien alle 10 mm, mittlere alle 5 mm, feine jeden Millimeter, mittig im Stickmuster und im Ton der gewählten Hintergrundfarbe.
 
 ### English
 
+- **See the places sewn twice:** Point at the hint that fills lie on top of each other and the stage marks exactly the places that would be sewn twice. On a tablet one tap on the hint shows the marks and a second hides them. The same goes for the choice *Under later objects* in the stitch settings.
+- **One choice instead of two switches:** What a fill does under objects sewn later is now chosen in one place: *Sew all*, *No underlay* or *Leave out*. Until now these were two switches that affected each other.
+- **Scale whole designs from files:** When an opened embroidery file holds objects that are fill and satin at once, the whole design can still be scaled by its corners, by width and height or with *Shrink to fit*. Such objects are stretched along, and a short hint says how many there are and that *Check* shows whether their density still fits. All objects from the file also keep their identity when scaled.
+- **Ctrl+Z after a typed size:** Right after typing a width or height, Ctrl+Z undoes the change of size. Until now nothing happened while the cursor was still in the field.
+- **No leftover ways:** When a line or lettering is sewn anew, or a fill is edited by hand or sewn with a fade, no hidden connections stay behind where nothing covers them any more. A few rare faults with very wide satin and with tie stitches are fixed too.
 - **Graph paper:** In the view menu under *Background* (or with Shift+G) a grid can now lie behind the stitches: strong lines every 10 mm, medium ones every 5 mm, fine ones every millimetre, centered on the design and in a shade of the chosen background color.
 
 ## [1.2.0] - 2026-10-21
