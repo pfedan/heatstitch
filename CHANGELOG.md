@@ -16,23 +16,25 @@ How it is kept (see [CONTRIBUTING.md](CONTRIBUTING.md#releases)):
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-27
+
 ### Deutsch
 
-- **Strg+Z gleich nach dem Tippen:** Hast du in der Karte *Objekt* eine Größe oder Lage eingetippt und mit Enter übernommen, nimmt Strg+Z sie jetzt sofort zurück, auch wenn der Cursor noch im Feld steht. Solange du noch tippst, macht Strg+Z weiter nur das Getippte rückgängig.
-- **Ganzes Stickmuster aus einer Datei skalieren:** Ein Stickmuster, in dem einzelne Objekte als Füllung und Satin zugleich erkannt sind (zum Beispiel die Katze), lässt sich jetzt als Ganzes skalieren und in den Stickrahmen einpassen. Diese Objekte werden nur gestreckt, ein Hinweis zählt sie, und *Prüfen* zeigt, ob ihre Dichte noch passt. Bisher fehlten die Eckgriffe und die Größenfelder waren ausgegraut.
-- **Objekte behalten beim Skalieren ihre Identität:** Objekte aus einer Stickdatei bleiben nach dem Skalieren dieselben Objekte, mit allem, was sie sich gemerkt haben. Bisher galten die meisten danach als neu.
-- **Doppelt gestickte Stellen sehen:** Zeigst du auf die Karte "Eine Füllung liegt teilweise unter einer anderen" (am Tablet: tippst auf ihren Text), sind die Stellen, die doppelt gestickt würden, auf der Arbeitsfläche schraffiert, genau das, was *Aussparen* wegnimmt. Unter *Werkzeuge* gibt es für jede Füllung eine Wahl *Unter späteren Objekten*: *Alles sticken*, *Ohne Unterlage* oder *Aussparen*. Sie ersetzt die beiden Schalter *Unter späteren Formen aussparen* und *Unter späteren Objekten weglassen*; zeigst du auf die Wahl, siehst du, wo die Füllung unter späteren Objekten liegt.
-- **Satin so breit wie seine Schleife:** Eine geschlossene Linie als Satin, der breiter ist als die Schlinge selbst, brachte beim Sticken einen Fehler. Jetzt wird sie gestickt. Außerdem behält ein Objekt seine Teile, wenn es Vernähstiche dazubekommt, etwa wenn ein Nachbar wegfällt.
-- **Keine liegen gebliebenen versteckten Verbindungen:** Eine versteckte Verbindung verschwindet jetzt auch dann, wenn nichts sie mehr verdeckt: nach dem Neusticken einer Linie, beim Ersetzen oder Leeren eines Schriftzugs, unter einer von Hand bearbeiteten Füllung und unter einer Füllung, die bis zum Rand ausdünnt.
+- **Doppelt gestickte Stellen sehen:** Zeigst du auf den Hinweis, dass Füllungen übereinander liegen, markiert die Bühne genau die Stellen, die doppelt gestickt würden. Auf dem Tablet zeigt ein Tipp auf den Hinweis die Markierung und ein zweiter blendet sie aus. Dasselbe gilt für die Wahl *Unter späteren Objekten* in der Stichart.
+- **Eine Wahl statt zwei Schalter:** Was eine Füllung unter später gestickten Objekten tut, wählst du jetzt an einer Stelle: *Alles sticken*, *Ohne Unterlage* oder *Aussparen*. Bisher waren das zwei Schalter, die sich gegenseitig beeinflussten.
+- **Ganze Stickmuster aus Dateien skalieren:** Enthält eine geöffnete Stickdatei Objekte, die Füllung und Satin zugleich sind, lässt sich das ganze Stickmuster trotzdem mit den Ecken, über Breite und Höhe oder mit *Passend verkleinern* skalieren. Solche Objekte werden mitgestreckt, ein kurzer Hinweis sagt, wie viele es sind und dass *Prüfen* zeigt, ob ihre Dichte noch passt. Beim Skalieren behalten alle Objekte aus der Datei außerdem ihre Identität.
+- **Strg+Z nach einer getippten Größe:** Direkt nach dem Eintippen einer Breite oder Höhe macht Strg+Z die Größenänderung rückgängig. Bisher passierte dann nichts, solange der Cursor noch im Feld stand.
+- **Keine übrig gebliebenen Wege mehr:** Wird eine Linie oder Schrift neu gestickt, eine Füllung von Hand bearbeitet oder mit Verlauf gestickt, bleiben keine versteckten Verbindungen mehr zurück, die nichts mehr verdeckt. Dazu sind einige seltene Fehler bei sehr breitem Satin und bei Vernähstichen behoben.
+- **Millimeterpapier:** Im Ansicht-Menü unter *Hintergrund* (oder mit Umschalt+G) liegt jetzt auf Wunsch ein Gitter hinter den Stichen: kräftige Linien alle 10 mm, mittlere alle 5 mm, feine jeden Millimeter, mittig im Stickmuster und im Ton der gewählten Hintergrundfarbe.
 
 ### English
 
-- **Ctrl+Z right after typing:** After you typed a size or position in the *Object* card and took it over with Enter, Ctrl+Z now undoes it at once, even while the cursor is still in the field. While you are still typing, Ctrl+Z keeps undoing only the typed text.
-- **Scale a whole design from a file:** A design in which some objects are recognized as fill and satin at once (the cat, for example) can now be scaled as a whole and fitted into the hoop. Those objects are only stretched, a hint counts them, and *Check* shows whether their density still fits. Until now the corner handles were missing and the size fields were greyed out.
-- **Objects keep their identity when scaled:** Objects from an embroidery file stay the same objects after scaling, with everything they remember. Until now most of them counted as new afterwards.
-- **See the places sewn twice:** Point at the card "A fill lies partly under another" (on a tablet: tap its text) and the places that would be sewn twice are hatched on the canvas, exactly what *Leave out* takes away. Under *Tools* every fill has one choice *Under later objects*: *Sew all*, *No underlay* or *Leave out*. It replaces the two switches *Leave out under later shapes* and *Leave out under later objects*; pointing at the choice shows where the fill lies under later objects.
-- **Satin as wide as its loop:** A closed line sewn as a satin wider than the loop itself gave an error while sewing. It is sewn now. An object also keeps its parts when it gets lock stitches added, for example when a neighbour goes away.
-- **No hidden connections left behind:** A hidden connection now goes away when nothing hides it any more: after a line is sewn anew, when a lettering is replaced or emptied, under a fill edited by hand, and under a fill that fades out to its edge.
+- **See the places sewn twice:** Point at the hint that fills lie on top of each other and the stage marks exactly the places that would be sewn twice. On a tablet one tap on the hint shows the marks and a second hides them. The same goes for the choice *Under later objects* in the stitch settings.
+- **One choice instead of two switches:** What a fill does under objects sewn later is now chosen in one place: *Sew all*, *No underlay* or *Leave out*. Until now these were two switches that affected each other.
+- **Scale whole designs from files:** When an opened embroidery file holds objects that are fill and satin at once, the whole design can still be scaled by its corners, by width and height or with *Shrink to fit*. Such objects are stretched along, and a short hint says how many there are and that *Check* shows whether their density still fits. All objects from the file also keep their identity when scaled.
+- **Ctrl+Z after a typed size:** Right after typing a width or height, Ctrl+Z undoes the change of size. Until now nothing happened while the cursor was still in the field.
+- **No leftover ways:** When a line or lettering is sewn anew, or a fill is edited by hand or sewn with a fade, no hidden connections stay behind where nothing covers them any more. A few rare faults with very wide satin and with tie stitches are fixed too.
+- **Graph paper:** In the view menu under *Background* (or with Shift+G) a grid can now lie behind the stitches: strong lines every 10 mm, medium ones every 5 mm, fine ones every millimetre, centered on the design and in a shade of the chosen background color.
 
 ## [1.2.0] - 2026-10-21
 

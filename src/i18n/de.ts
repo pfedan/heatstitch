@@ -70,6 +70,8 @@ export const deBase = {
   'bg.navy': 'Marine',
   'bg.red': 'Rot',
   'bg.own': 'Eigene Farbe',
+  'controls.mmGrid': 'Millimeterpapier',
+  'controls.mmGrid.hint': 'Linien alle 1, 5 und 10 mm, mittig im Stickmuster, in einem Ton der Hintergrundfarbe.',
   'controls.fabric': 'Stoff',
   'controls.fabric.flat': 'Flach (nur Farbe)',
   'controls.fabric.hint': 'Der Stoff des Profils als Hintergrund, nur bei realistischen Fäden.',
