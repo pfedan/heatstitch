@@ -16,6 +16,14 @@ How it is kept (see [CONTRIBUTING.md](CONTRIBUTING.md#releases)):
 
 ## [Unreleased]
 
+### Deutsch
+
+- **Ruhiges Licht in der realistischen Ansicht:** Folgt das Licht der Maus, behalten die Fäden jetzt ihre Farbe. Nur ihr Glanz wandert leicht mit, so wie bei einem gestickten Stück, das man unter der Zimmerlampe dreht. Bisher wurden ganze Flächen fast grau, wenn das Licht entlang der Stichreihen einfiel.
+
+### English
+
+- **Calm light in the realistic view:** When the light follows the mouse, the threads now keep their color. Only their sheen moves a little, as on a sewn-out piece turned under a room lamp. Until now whole areas turned nearly grey when the light fell along the rows of stitches.
+
 ## [1.3.0] - 2026-10-27
 
 ### Deutsch

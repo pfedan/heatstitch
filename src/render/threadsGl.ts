@@ -8,7 +8,11 @@ import type { Viewport } from './viewport';
  * WebGL2 thread renderer for the realistic view. Every stitch is one instanced quad; the fragment shader
  * treats it as a round thread lying on the fabric (a capsule whose ends dive into the needle
  * holes), lights it with a diffuse term and a Kajiya-Kay fiber highlight, and optionally adds
- * the diagonal ridges of a twisted ply. Each stitch is drawn twice in sewing order, first its
+ * the diagonal ridges of a twisted ply. The light is a room, not a spotlight: a soft sky from above
+ * (hemisphere light) carries most of it, and one lamp whose direction the pointer moves adds the rest.
+ * The lamp's share is measured against the flat fabric, so the design keeps its brightness wherever the
+ * lamp stands, and only the sheen of the threads shifts, by about as much as a sewn-out patch turned
+ * in the hand under a room light (see light.ts). Each stitch is drawn twice in sewing order, first its
  * soft shadow and then the thread, so every stitch darkens what was sewn before it.
  */
 
@@ -37,9 +41,11 @@ void main() {
   vec2 u = len > 1e-4 ? d / len : vec2(1.0, 0.0);
   vec2 n = vec2(-u.y, u.x);
   float hw = u_halfw;
-  // The shadow is wider and falls away from the light; both quads get a pixel of room for AA.
+  // The shadow is wider and falls away from the light; both quads get a pixel of room for AA. Only
+  // the lamp's part of it moves (the sky's part lies all round the thread), so it moves by the lamp's
+  // share of the light on the fabric (LAMP / (2 SKY + LAMP) in the fragment shader).
   float pad = pass == 0 ? hw * 1.8 + 1.5 : hw + 1.5;
-  vec2 shift = pass == 0 ? -u_light * hw * 0.55 : vec2(0.0);
+  vec2 shift = pass == 0 ? -u_light * hw * 0.55 * 0.43 : vec2(0.0);
   float along = mix(-pad, len + pad, a_corner.x);
   float across = a_corner.y * pad;
   vec2 pos = p0 + u * along + n * across + shift;
@@ -58,6 +64,11 @@ precision highp float;
 // How deep the shade in a needle hole is (0 none).
 const float DIMPLE = 0.28;
 const float DIVE_SHADE = 0.45;
+// Share of the soft sky and of the lamp in the light, and the lamp's share in the sheen. The lamp
+// gives 0.43 of the light on the flat fabric (the shadow in the vertex shader moves by that much).
+const float SKY = 0.33;
+const float LAMP = 0.5;
+const float LAMP_SHEEN = 0.4;
 in vec2 v_local;
 in float v_len;
 in vec4 v_color;
@@ -155,12 +166,18 @@ void main() {
   float ndl = max(dot(N, L), 0.0);
   // Edges roll into the fabric and the neighbours, so they get less ambient light.
   float occl = mix(0.35, 1.0, smoothstep(0.0, 0.75, N.z));
-  vec3 col = base * (0.3 * occl + 1.0 * ndl) * groove;
+  // Sky (hemisphere light: full on a thread facing up, none on one facing down) and lamp, the lamp
+  // divided by what it gives the flat fabric, so a lower lamp does not darken the whole design.
+  vec3 col = base * (SKY * occl * (0.5 + 0.5 * N.z) * 2.0 + LAMP * ndl / L.z) * groove;
 
+  // Sheen: the sky shines from every side, so its share is the same for every stitch direction and
+  // is taken with the half vector straight up; only the lamp's share depends on the stitch direction.
   float th = dot(T, H);
+  float tz = T.z;
   float sinTH = sqrt(max(1.0 - th * th, 0.0));
-  float spec1 = pow(sinTH, 90.0) * 0.32 * u_gloss;
-  float spec2 = pow(sinTH, 14.0) * 0.12 * mix(1.0, u_gloss, 0.5);
+  float sinTZ = sqrt(max(1.0 - tz * tz, 0.0));
+  float spec1 = mix(pow(sinTZ, 90.0), pow(sinTH, 90.0), LAMP_SHEEN) * 0.32 * u_gloss;
+  float spec2 = mix(pow(sinTZ, 14.0), pow(sinTH, 14.0), LAMP_SHEEN) * 0.12 * mix(1.0, u_gloss, 0.5);
   float specMask = smoothstep(0.0, 0.25, N.z) * groove * mix(1.0, smoothstep(0.25, 0.75, fib) * 1.6, fiberVis);
   col += (mix(base, vec3(1.0), 0.6) * spec1 + base * spec2 * 2.0) * specMask;
 

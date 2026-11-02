@@ -1,17 +1,19 @@
 /**
  * Where the light comes from in the realistic thread view, in screen space (x right, y down): the
- * direction towards the light projected onto the fabric. The length sets how low the light stands;
- * longer means more grazing, which brings out the sheen along the stitches.
+ * direction towards the light projected onto the fabric, over a height of 0.85. The length sets how
+ * low the lamp stands; it never goes below about 50 degrees, as a lamp in a room seldom does.
  *
- * Real embroidery thread shines across its fibers, so satin columns and fill rows light up or go
- * dark depending on where the light is, as when a sewn-out patch is turned in the hand. The light
- * can follow the pointer or the tilt of a phone, and sweep once around the design by itself.
+ * Real embroidery thread shines across its fibers, so satin columns and fill rows catch the light a
+ * little more or less depending on where the lamp is, as when a sewn-out patch is turned in the hand.
+ * Under a room light that is a gentle shift, not a change of color: most light comes from all around
+ * (threadsGl.ts). The light can follow the pointer or the tilt of a phone, and sweep once around the
+ * design by itself.
  */
 
-export const DEFAULT_LIGHT: readonly [number, number] = [-0.55, -0.65];
+export const DEFAULT_LIGHT: readonly [number, number] = [-0.39, -0.46];
 
-/** Longest light vector: a low, grazing light. */
-const MAX = 1.6;
+/** Longest light vector: the lowest lamp, about 50 degrees over the fabric. */
+export const MAX_LIGHT = 0.7;
 
 let light: [number, number] = [...DEFAULT_LIGHT];
 let sweepFrame = 0;
@@ -22,7 +24,7 @@ export function lightDir(): [number, number] {
 
 export function setLight(x: number, y: number): void {
   const l = Math.hypot(x, y);
-  const k = l > MAX ? MAX / l : 1;
+  const k = l > MAX_LIGHT ? MAX_LIGHT / l : 1;
   light = [x * k, y * k];
 }
 
@@ -37,7 +39,7 @@ export function sweeping(): boolean {
 export function lightFromPointer(sx: number, sy: number, w: number, h: number): void {
   if (sweepFrame) return;
   const r = Math.max(1, Math.min(w, h) / 2);
-  setLight(((sx - w / 2) / r) * 1.2, ((sy - h / 2) / r) * 1.2);
+  setLight(((sx - w / 2) / r) * MAX_LIGHT, ((sy - h / 2) / r) * MAX_LIGHT);
 }
 
 /**
@@ -47,7 +49,7 @@ export function lightFromPointer(sx: number, sy: number, w: number, h: number): 
  */
 export function lightFromTilt(beta: number, gamma: number): void {
   if (sweepFrame) return;
-  setLight(-gamma / 35, -(beta - 40) / 35);
+  setLight((-gamma / 35) * MAX_LIGHT, (-(beta - 40) / 35) * MAX_LIGHT);
 }
 
 /**
@@ -65,7 +67,7 @@ export function sweep(frame: () => void, ms = 2600): void {
     // Ease in and out; the light goes low on the way round and comes back up at the end.
     const e = t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2;
     const a = a0 + e * Math.PI * 2;
-    const reach = Math.hypot(hx, hy) + Math.sin(Math.PI * t) * (1.35 - Math.hypot(hx, hy));
+    const reach = Math.hypot(hx, hy) + Math.sin(Math.PI * t) * (MAX_LIGHT - Math.hypot(hx, hy));
     light = [Math.cos(a) * reach, Math.sin(a) * reach];
     frame();
     if (t < 1) sweepFrame = requestAnimationFrame(step);
